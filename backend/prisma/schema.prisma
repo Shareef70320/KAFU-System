@@ -1,0 +1,279 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  firstName String
+  lastName  String
+  role      Role       @default(STAFF)
+  groupId   String?
+  group     Group?     @relation(fields: [groupId], references: [id])
+  employee  Employee?  @relation
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("users")
+}
+
+model Group {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?
+  users       User[]
+  employees   Employee[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("groups")
+}
+
+model Employee {
+  id                String    @id @default(cuid())
+  employeeId        String    @unique // Employee ID/Number
+  firstName         String
+  lastName          String
+  email             String    @unique
+  phone             String?
+  personalEmail     String?
+  dateOfBirth       DateTime?
+  gender            Gender?
+  nationality       String?
+  maritalStatus     MaritalStatus?
+  address           String?
+  city              String?
+  state             String?
+  country           String?
+  postalCode        String?
+  emergencyContact  String?
+  emergencyPhone    String?
+  emergencyRelation String?
+  
+  // Employment Details
+  department        String?
+  position          String?
+  jobTitle          String?
+  employmentType    EmploymentType?
+  employmentStatus  EmploymentStatus @default(ACTIVE)
+  hireDate          DateTime?
+  terminationDate   DateTime?
+  probationEndDate  DateTime?
+  reportingManager  String?
+  workLocation      String?
+  workSchedule      String?
+  
+  // HR Details
+  employeeType      EmployeeType?
+  costCenter        String?
+  payrollId         String?
+  benefitsEligible  Boolean   @default(true)
+  insuranceNumber   String?
+  taxId             String?
+  socialSecurity    String?
+  
+  // Compensation
+  salary            Decimal?
+  currency          String?   @default("USD")
+  payFrequency      PayFrequency?
+  bankAccount       String?
+  bankName          String?
+  
+  // System Fields
+  isActive          Boolean   @default(true)
+  lastLogin         DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  userId            String?   @unique
+  user              User?     @relation(fields: [userId], references: [id])
+  groupId           String?
+  group             Group?    @relation(fields: [groupId], references: [id])
+  competencyAssessments CompetencyAssessment[]
+  
+  @@map("employees")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  SEPARATED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  CONSULTANT
+  TEMPORARY
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+  ON_LEAVE
+  SUSPENDED
+}
+
+enum EmployeeType {
+  REGULAR
+  CONTRACTOR
+  INTERN
+  TEMPORARY
+  CONSULTANT
+}
+
+enum PayFrequency {
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+}
+
+model Competency {
+  id                String    @id @default(cuid())
+  name              String    @unique
+  type              CompetencyType
+  family            String    // e.g., Finance, HR, Technical Services
+  definition        String
+  description       String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  levels            CompetencyLevel[]
+  documents         CompetencyDocument[]
+  assessments       CompetencyAssessment[]
+  
+  @@map("competencies")
+}
+
+model CompetencyLevel {
+  id                String    @id @default(cuid())
+  competencyId      String
+  level             CompetencyLevelType
+  title             String    // e.g., "Basic", "Intermediate", "Advanced", "Mastery"
+  description       String    // Detailed description/indicators for this level
+  indicators        String[]  // Array of specific indicators
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  assessments       CompetencyAssessment[]
+  
+  @@unique([competencyId, level])
+  @@map("competency_levels")
+}
+
+model CompetencyDocument {
+  id                String    @id @default(cuid())
+  competencyId      String
+  title             String
+  description       String?
+  fileName          String
+  originalFileName  String
+  filePath          String
+  fileSize          Int
+  mimeType          String
+  documentType      DocumentType
+  version           String?   @default("1.0")
+  isActive          Boolean   @default(true)
+  uploadedBy        String?   // User ID who uploaded
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  
+  @@map("competency_documents")
+}
+
+model CompetencyAssessment {
+  id                String    @id @default(cuid())
+  employeeId        String
+  competencyId      String
+  levelId           String
+  assessedBy        String?   // User ID who assessed
+  assessmentDate    DateTime  @default(now())
+  status            AssessmentStatus @default(PENDING)
+  notes             String?
+  evidence          String?   // Evidence or proof of competency
+  validUntil        DateTime? // When this assessment expires
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  level             CompetencyLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  
+  @@map("competency_assessments")
+}
+
+enum CompetencyType {
+  TECHNICAL
+  NON_TECHNICAL
+  BEHAVIORAL
+  LEADERSHIP
+  FUNCTIONAL
+}
+
+enum CompetencyLevelType {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  MASTERY
+}
+
+enum DocumentType {
+  SOP
+  MANUAL
+  GUIDELINE
+  PROCEDURE
+  REFERENCE
+  TRAINING_MATERIAL
+  POLICY
+  OTHER
+}
+
+enum AssessmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+  VIEWER
+}
