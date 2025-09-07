@@ -168,6 +168,7 @@ model Competency {
   levels            CompetencyLevel[]
   documents         CompetencyDocument[]
   assessments       CompetencyAssessment[]
+  jobCompetencies   JobCompetency[]
   
   @@map("competencies")
 }
@@ -276,4 +277,41 @@ enum Role {
   MANAGER
   STAFF
   VIEWER
+}
+
+model Job {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  code        String   @unique
+  unit        String?
+  division    String?
+  department  String?
+  section     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationship with competencies
+  jobCompetencies JobCompetency[]
+
+  @@map("jobs")
+}
+
+model JobCompetency {
+  id            String           @id @default(cuid())
+  jobId         String
+  competencyId  String
+  requiredLevel CompetencyLevelType
+  isRequired    Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  // Relationships
+  job         Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  competency  Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  // Ensure unique job-competency combinations
+  @@unique([jobId, competencyId])
+  @@map("job_competencies")
 }

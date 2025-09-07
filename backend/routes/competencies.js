@@ -249,7 +249,48 @@ router.put('/:id', async (req, res) => {
       }
     });
 
-    res.json(competency);
+    // Update levels if provided
+    if (levels && Array.isArray(levels)) {
+      // Delete existing levels
+      await prisma.competencyLevel.deleteMany({
+        where: { competencyId: id }
+      });
+
+      // Create new levels
+      for (const level of levels) {
+        await prisma.competencyLevel.create({
+          data: {
+            competencyId: id,
+            level: level.level,
+            title: level.title || `${level.level} Level`,
+            description: level.description || '',
+            indicators: level.indicators || []
+          }
+        });
+      }
+    }
+
+    // Return updated competency with levels
+    const updatedCompetency = await prisma.competency.findUnique({
+      where: { id },
+      include: {
+        levels: {
+          orderBy: {
+            level: 'asc'
+          }
+        },
+        documents: {
+          orderBy: {
+            createdAt: 'desc'
+          }
+        },
+        _count: {
+          select: { assessments: true }
+        }
+      }
+    });
+
+    res.json(updatedCompetency);
   } catch (error) {
     console.error('Error updating competency:', error);
     res.status(500).json({ message: 'Internal server error' });

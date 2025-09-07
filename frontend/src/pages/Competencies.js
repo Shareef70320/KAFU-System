@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -32,6 +33,7 @@ import api from '../lib/api';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 const Competencies = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,8 +47,9 @@ const Competencies = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState(null);
 
-  const competencyTypes = ['TECHNICAL', 'NON_TECHNICAL', 'BEHAVIORAL', 'LEADERSHIP', 'FUNCTIONAL'];
-  const competencyFamilies = ['Management', 'Finance', 'HR', 'Technical Services', 'Operations', 'Marketing', 'Sales'];
+  // These will be populated from actual data
+  const [competencyTypes, setCompetencyTypes] = useState([]);
+  const [competencyFamilies, setCompetencyFamilies] = useState([]);
 
   // Fetch competencies from API
   const { data: competenciesData, isLoading, isError, error } = useQuery({
@@ -58,7 +61,7 @@ const Competencies = () => {
           type: selectedType,
           family: selectedFamily,
           page: 1,
-          limit: 100
+          limit: 1000
         }
       });
       return response.data;
@@ -77,6 +80,19 @@ const Competencies = () => {
 
   const competencies = competenciesData?.competencies || [];
   const stats = statsData || {};
+
+  // Populate filter options from stats data
+  useEffect(() => {
+    if (stats.types && stats.families) {
+      // Get unique types from stats
+      const uniqueTypes = stats.types.map(t => t.type);
+      setCompetencyTypes(uniqueTypes);
+      
+      // Get unique families from stats
+      const uniqueFamilies = stats.families.map(f => f.name);
+      setCompetencyFamilies(uniqueFamilies);
+    }
+  }, [stats]);
 
   const handleFileUpload = async () => {
     if (!file) {
@@ -149,6 +165,45 @@ const Competencies = () => {
       case 'LEADERSHIP':
         return 'bg-orange-100 text-orange-800';
       case 'FUNCTIONAL':
+        return 'bg-pink-100 text-pink-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getFamilyColor = (family) => {
+    switch (family) {
+      case 'Operations':
+        return 'bg-red-100 text-red-800';
+      case 'Maintenance':
+        return 'bg-orange-100 text-orange-800';
+      case 'Technical Services':
+        return 'bg-blue-100 text-blue-800';
+      case 'Media':
+        return 'bg-purple-100 text-purple-800';
+      case 'HR & Admin':
+        return 'bg-green-100 text-green-800';
+      case 'Certification & Compliance':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Fire':
+        return 'bg-red-200 text-red-900';
+      case 'Security':
+        return 'bg-gray-100 text-gray-800';
+      case 'Finance & Procurement':
+        return 'bg-emerald-100 text-emerald-800';
+      case 'Quality':
+        return 'bg-indigo-100 text-indigo-800';
+      case 'HSE':
+        return 'bg-teal-100 text-teal-800';
+      case 'ICT':
+        return 'bg-cyan-100 text-cyan-800';
+      case 'Common':
+        return 'bg-slate-100 text-slate-800';
+      case 'Legal & Regulatory':
+        return 'bg-rose-100 text-rose-800';
+      case 'Internal Audit':
+        return 'bg-violet-100 text-violet-800';
+      case 'Commercial':
         return 'bg-pink-100 text-pink-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -363,15 +418,20 @@ const Competencies = () => {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{competency.family}</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">{competency.name}</h3>
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeColor(competency.type)}`}>
                         {competency.type.replace('_', ' ')}
                       </span>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getFamilyColor(competency.family)}`}>
+                        {competency.family}
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">{competency.name}</p>
-                    <p className="text-xs text-gray-500 mb-2"><strong>Family:</strong> Commercial</p>
+                    <p className="text-sm text-gray-600 mb-2">{competency.definition}</p>
                     <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span className="flex items-center">
+                      <span 
+                        className="flex items-center cursor-pointer hover:text-blue-600"
+                        onClick={() => setExpandedCompetency(expandedCompetency === competency.id ? null : competency.id)}
+                      >
                         <Target className="h-3 w-3 mr-1" />
                         {competency.levels.length} Levels
                       </span>
@@ -390,7 +450,11 @@ const Competencies = () => {
                   <button className="text-gray-400 hover:text-gray-600" title="View">
                     <Eye className="h-4 w-4" />
                   </button>
-                  <button className="text-gray-400 hover:text-gray-600" title="Edit">
+                  <button 
+                    onClick={() => navigate(`/competencies/edit/${competency.id}`)}
+                    className="text-gray-400 hover:text-blue-600" 
+                    title="Edit"
+                  >
                     <Edit className="h-4 w-4" />
                   </button>
                   <button className="text-gray-400 hover:text-red-600" title="Delete">
@@ -419,8 +483,7 @@ const Competencies = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {competency.levels.map((level) => (
                         <div key={level.id} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <h5 className="font-medium text-gray-900">{level.title}</h5>
+                          <div className="flex items-center justify-center mb-2">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(level.level)}`}>
                               {level.level}
                             </span>

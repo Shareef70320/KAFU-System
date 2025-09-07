@@ -13,7 +13,9 @@ import {
   Settings,
   LogOut,
   UserCog,
-  BookOpen
+  BookOpen,
+  Briefcase,
+  Link
 } from 'lucide-react';
 
 const Layout = () => {
@@ -27,6 +29,8 @@ const Layout = () => {
     { name: 'Groups', href: '/groups', icon: UserCheck },
     { name: 'Employees', href: '/employees', icon: UserCog },
     { name: 'Competencies', href: '/competencies', icon: BookOpen },
+    { name: 'Jobs', href: '/jobs', icon: Briefcase },
+    { name: 'Job-Competency Mapping', href: '/job-competency-mapping', icon: Link },
   ];
 
   // Mock user data for display

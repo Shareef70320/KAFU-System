@@ -9,6 +9,8 @@ const userRoutes = require('./routes/users');
 const groupRoutes = require('./routes/groups');
 const employeeRoutes = require('./routes/employees');
 const competencyRoutes = require('./routes/competencies');
+const jobRoutes = require('./routes/jobs');
+const jobCompetencyRoutes = require('./routes/job-competencies');
 const uploadRoutes = require('./routes/upload');
 
 const app = express();
@@ -34,6 +36,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/competencies', competencyRoutes);
+app.use('/api/jobs', jobRoutes);
+app.use('/api/job-competencies', jobCompetencyRoutes);
 app.use('/api/upload', uploadRoutes);
 
 // Health check

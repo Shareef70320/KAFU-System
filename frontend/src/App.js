@@ -7,6 +7,10 @@ import Users from './pages/Users';
 import Groups from './pages/Groups';
 import Employees from './pages/Employees';
 import Competencies from './pages/Competencies';
+import EditCompetency from './pages/EditCompetency';
+import Jobs from './pages/Jobs';
+import JobCompetencyMapping from './pages/JobCompetencyMapping';
+import AddMapping from './pages/AddMapping';
 import Dashboard from './pages/Dashboard';
 import Test from './pages/Test';
 
@@ -35,6 +39,10 @@ function App() {
               <Route path="groups" element={<Groups />} />
               <Route path="employees" element={<Employees />} />
               <Route path="competencies" element={<Competencies />} />
+              <Route path="competencies/edit/:id" element={<EditCompetency />} />
+              <Route path="jobs" element={<Jobs />} />
+              <Route path="job-competency-mapping" element={<JobCompetencyMapping />} />
+              <Route path="add-mapping" element={<AddMapping />} />
               <Route path="test" element={<Test />} />
             </Route>
           </Routes>

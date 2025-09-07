@@ -68,13 +68,13 @@ async function processCompetencyCSV() {
                 console.log(`Debug - Type mapping: "${rawType}" -> "${mappedType}"`);
               }
               
-              const competencyData = {
-                name: row['_3']?.trim(), // Competency Title (e.g., "Communication")
-                type: mappedType,
-                family: row['_2']?.trim() || 'General', // Competency Family (e.g., "Common")
-                definition: row['_4']?.trim(), // Competency Definition (the long description)
-                description: null
-              };
+            const competencyData = {
+              name: row['_2']?.trim(), // Competency Title (e.g., "Communication")
+              type: mappedType,
+              family: row['_3']?.trim() || 'General', // Competency Family (e.g., "Common")
+              definition: row['_4']?.trim(), // Competency Definition (the long description)
+              description: null
+            };
 
               if (!competencyData.name || !competencyData.definition) {
                 console.log(`Skipping row - missing required fields: ${competencyData.name || 'No name'}`);
