@@ -3,7 +3,6 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Select } from '../components/ui/select';
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,10 +11,7 @@ import {
   Briefcase,
   BookOpen,
   Target,
-  ChevronDown,
-  ChevronRight,
   Building2,
-  Users,
   ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -38,28 +34,42 @@ const AddMapping = () => {
   const [selectedLevel, setSelectedLevel] = useState('');
 
   // Fetch jobs
-  const { data: jobs = [] } = useQuery({
+  const { data: jobsData, error: jobsError } = useQuery({
     queryKey: ['jobs'],
     queryFn: () => api.get('/jobs').then(res => res.data),
+    retry: 1,
   });
 
   // Fetch competencies
-  const { data: competencies = [] } = useQuery({
+  const { data: competenciesData, error: competenciesError } = useQuery({
     queryKey: ['competencies'],
     queryFn: () => api.get('/competencies').then(res => res.data),
+    retry: 1,
   });
 
-  // Fetch job statistics
-  const { data: jobStats = {} } = useQuery({
-    queryKey: ['jobStats'],
-    queryFn: () => api.get('/jobs/stats').then(res => res.data),
-  });
+  const jobs = jobsData?.jobs || [];
+  const competencies = competenciesData?.competencies || [];
 
-  // Fetch competency statistics
-  const { data: competencyStats = {} } = useQuery({
-    queryKey: ['competencyStats'],
-    queryFn: () => api.get('/competencies/stats').then(res => res.data),
-  });
+  // Calculate stats from jobs data
+  const jobStats = React.useMemo(() => {
+    if (!jobs.length) return { units: [], divisions: [], departments: [] };
+    
+    const units = [...new Set(jobs.map(job => job.unit).filter(Boolean))].map(unit => ({ name: unit, count: jobs.filter(job => job.unit === unit).length }));
+    const divisions = [...new Set(jobs.map(job => job.division).filter(Boolean))].map(division => ({ name: division, count: jobs.filter(job => job.division === division).length }));
+    const departments = [...new Set(jobs.map(job => job.department).filter(Boolean))].map(department => ({ name: department, count: jobs.filter(job => job.department === department).length }));
+    
+    return { units, divisions, departments };
+  }, [jobs]);
+
+  // Calculate stats from competencies data
+  const competencyStats = React.useMemo(() => {
+    if (!competencies.length) return { types: [], families: [] };
+    
+    const types = [...new Set(competencies.map(comp => comp.type).filter(Boolean))].map(type => ({ name: type, count: competencies.filter(comp => comp.type === type).length }));
+    const families = [...new Set(competencies.map(comp => comp.family).filter(Boolean))].map(family => ({ name: family, count: competencies.filter(comp => comp.family === family).length }));
+    
+    return { types, families };
+  }, [competencies]);
 
   // Filter jobs based on search and filters
   const filteredJobs = jobs.filter(job => {
@@ -144,6 +154,28 @@ const AddMapping = () => {
     };
     return colors[family] || 'bg-gray-100 text-gray-800';
   };
+
+  // Show error if any API calls failed
+  if (jobsError || competenciesError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Loading Data</h1>
+          <p className="text-gray-600 mb-4">There was an error loading the required data:</p>
+          <div className="space-y-2 text-sm text-gray-500">
+            {jobsError && <p>Jobs: {jobsError.message}</p>}
+            {competenciesError && <p>Competencies: {competenciesError.message}</p>}
+          </div>
+          <Button 
+            onClick={() => window.location.reload()} 
+            className="mt-4"
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

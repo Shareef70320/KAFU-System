@@ -63,17 +63,29 @@ const Jobs = () => {
     keepPreviousData: true,
   });
 
-  // Fetch job statistics
-  const { data: statsData } = useQuery({
-    queryKey: ['job-stats'],
-    queryFn: async () => {
-      const response = await api.get('/jobs/stats/overview');
-      return response.data;
-    }
-  });
-
   const jobs = jobsData?.jobs || [];
-  const stats = statsData || {};
+  
+  // Calculate statistics locally
+  const stats = React.useMemo(() => {
+    if (!jobs.length) return { units: [], divisions: [], departments: [] };
+    
+    const units = [...new Set(jobs.map(j => j.unit).filter(Boolean))].map(unit => ({
+      name: unit,
+      count: jobs.filter(j => j.unit === unit).length
+    }));
+    
+    const divisions = [...new Set(jobs.map(j => j.division).filter(Boolean))].map(division => ({
+      name: division,
+      count: jobs.filter(j => j.division === division).length
+    }));
+    
+    const departments = [...new Set(jobs.map(j => j.department).filter(Boolean))].map(department => ({
+      name: department,
+      count: jobs.filter(j => j.department === department).length
+    }));
+    
+    return { units, divisions, departments };
+  }, [jobs]);
 
   // Populate filter options from stats data
   useEffect(() => {

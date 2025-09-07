@@ -69,17 +69,24 @@ const Competencies = () => {
     keepPreviousData: true,
   });
 
-  // Fetch competency statistics
-  const { data: statsData } = useQuery({
-    queryKey: ['competency-stats'],
-    queryFn: async () => {
-      const response = await api.get('/competencies/stats/overview');
-      return response.data;
-    }
-  });
-
   const competencies = competenciesData?.competencies || [];
-  const stats = statsData || {};
+  
+  // Calculate statistics locally
+  const stats = React.useMemo(() => {
+    if (!competencies.length) return { types: [], families: [] };
+    
+    const types = [...new Set(competencies.map(c => c.type).filter(Boolean))].map(type => ({
+      type,
+      count: competencies.filter(c => c.type === type).length
+    }));
+    
+    const families = [...new Set(competencies.map(c => c.family).filter(Boolean))].map(family => ({
+      family,
+      count: competencies.filter(c => c.family === family).length
+    }));
+    
+    return { types, families };
+  }, [competencies]);
 
   // Populate filter options from stats data
   useEffect(() => {
