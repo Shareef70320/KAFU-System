@@ -118,6 +118,24 @@ router.get('/competencies', async (req, res) => {
         HAVING COUNT(q.id) >= 1
         ORDER BY c.name
       `;
+
+      // Fallback: if no competencies found for user (missing job_code/mapping), return global list
+      if (!competencies || competencies.length === 0) {
+        console.warn('[user-assessments/competencies] No mapped competencies for user', userId, '— falling back to global list');
+        competencies = await prisma.$queryRaw`
+          SELECT DISTINCT 
+            c.id,
+            c.name,
+            c.description,
+            COUNT(q.id) as question_count
+          FROM competencies c
+          LEFT JOIN questions q ON c.id = q.competency_id
+          WHERE q.is_active = true
+          GROUP BY c.id, c.name, c.description
+          HAVING COUNT(q.id) >= 1
+          ORDER BY c.name
+        `;
+      }
     } else {
       // Previous behavior: all competencies with at least 1 active question
       competencies = await prisma.$queryRaw`
