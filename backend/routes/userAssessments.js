@@ -133,7 +133,7 @@ router.get('/competencies', async (req, res) => {
         FROM employees e
         JOIN jobs j ON TRIM(UPPER(j.code)) = TRIM(UPPER(e.job_code))
         JOIN job_competencies jc ON jc."jobId" = j.id
-        JOIN competencies c ON c.id = jc.competency_id
+        JOIN competencies c ON c.id = jc."competencyId"
         LEFT JOIN questions q ON c.id = q.competency_id
         WHERE TRIM(UPPER(e.sid)) = TRIM(UPPER(${userId}))
         GROUP BY c.id, c.name, c.description
