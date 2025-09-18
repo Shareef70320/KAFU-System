@@ -110,7 +110,7 @@ router.get('/competencies', async (req, res) => {
           COALESCE(COUNT(DISTINCT CASE WHEN q.is_active = true THEN q.id END), 0) as question_count
         FROM employees e
         JOIN jobs j ON TRIM(UPPER(j.code)) = TRIM(UPPER(e.job_code))
-        JOIN job_competencies jc ON jc.job_id = j.id
+        JOIN job_competencies jc ON jc."jobId" = j.id
         JOIN competencies c ON c.id = jc.competency_id
         LEFT JOIN questions q ON c.id = q.competency_id
         WHERE e.sid = ${userId}
