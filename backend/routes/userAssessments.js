@@ -118,6 +118,7 @@ router.get('/competencies', async (req, res) => {
         GROUP BY c.id, c.name, c.description
         ORDER BY c.name
       `;
+      console.log('[user-assessments/competencies] mapped count:', competencies?.length || 0);
 
       // Fallback: if no competencies found for user (missing job_code/mapping), return global list
       if (!competencies || competencies.length === 0) {
@@ -135,6 +136,7 @@ router.get('/competencies', async (req, res) => {
           HAVING COUNT(q.id) >= 1
           ORDER BY c.name
         `;
+        console.log('[user-assessments/competencies] fallback count:', competencies?.length || 0);
       }
     } else {
       // Previous behavior: all competencies with at least 1 active question
