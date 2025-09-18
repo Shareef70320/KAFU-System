@@ -102,7 +102,7 @@ router.get('/competencies', async (req, res) => {
 
     if (userId) {
       // Filter competencies by the user's job_code via job_competency mappings
-      console.log('[user-assessments/competencies] Fetch for userId:', ${'userId'}, 'raw:', ${'req.query.userId'});
+      console.log('[user-assessments/competencies] Fetch for userId:', userId, 'raw:', req.query.userId);
       competencies = await prisma.$queryRaw`
         SELECT DISTINCT 
           c.id,
