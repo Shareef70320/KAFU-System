@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -26,17 +26,20 @@ import {
   FileText as Document,
   Star,
   Clock,
-  AlertCircle
+  AlertCircle,
+  UserCheck,
+  X
 } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import EmployeePhoto from '../components/EmployeePhoto';
 
 const Competencies = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState(''); // Search input for client-side filtering
   const [selectedType, setSelectedType] = useState('');
   const [selectedFamily, setSelectedFamily] = useState('');
   const [showAddCompetency, setShowAddCompetency] = useState(false);
@@ -46,20 +49,35 @@ const Competencies = () => {
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState(null);
+  const [showAssessorModal, setShowAssessorModal] = useState(false);
+  const [selectedCompetency, setSelectedCompetency] = useState(null);
+  const [assessors, setAssessors] = useState([]);
+  const [assessorsLoading, setAssessorsLoading] = useState(false);
+  const searchInputRef = useRef(null);
 
   // These will be populated from actual data
   const [competencyTypes, setCompetencyTypes] = useState([]);
   const [competencyFamilies, setCompetencyFamilies] = useState([]);
 
-  // Fetch competencies from API
+  // No debouncing needed - client-side filtering is instant
+
+  // Maintain focus after re-renders
+  useEffect(() => {
+    if (searchInputRef.current && document.activeElement !== searchInputRef.current) {
+      // Only refocus if the user was previously typing in the search box
+      const wasSearching = searchInput.length > 0;
+      if (wasSearching) {
+        searchInputRef.current.focus();
+      }
+    }
+  });
+
+  // Fetch all competencies from API (no filtering on server side)
   const { data: competenciesData, isLoading, isError, error } = useQuery({
-    queryKey: ['competencies', searchTerm, selectedType, selectedFamily],
+    queryKey: ['competencies'],
     queryFn: async () => {
       const response = await api.get('/competencies', {
         params: {
-          search: searchTerm,
-          type: selectedType,
-          family: selectedFamily,
           page: 1,
           limit: 1000
         }
@@ -67,13 +85,23 @@ const Competencies = () => {
       return response.data;
     },
     keepPreviousData: true,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   const competencies = competenciesData?.competencies || [];
   
   // Calculate statistics locally
   const stats = React.useMemo(() => {
-    if (!competencies.length) return { types: [], families: [] };
+    if (!competencies.length) return { 
+      total: 0, 
+      active: 0, 
+      families: [], 
+      types: [],
+      totalAssessments: 0
+    };
+    
+    const total = competencies.length;
+    const active = competencies.filter(c => c.isActive).length;
     
     const types = [...new Set(competencies.map(c => c.type).filter(Boolean))].map(type => ({
       type,
@@ -85,7 +113,16 @@ const Competencies = () => {
       count: competencies.filter(c => c.family === family).length
     }));
     
-    return { types, families };
+    // Calculate total assessments from all competencies
+    const totalAssessments = competencies.reduce((sum, c) => sum + (c._count?.assessments || 0), 0);
+    
+    return { 
+      total, 
+      active, 
+      types, 
+      families, 
+      totalAssessments 
+    };
   }, [competencies]);
 
   // Populate filter options from stats data
@@ -96,7 +133,7 @@ const Competencies = () => {
       setCompetencyTypes(uniqueTypes);
       
       // Get unique families from stats
-      const uniqueFamilies = stats.families.map(f => f.name);
+      const uniqueFamilies = stats.families.map(f => f.family);
       setCompetencyFamilies(uniqueFamilies);
     }
   }, [stats]);
@@ -251,12 +288,110 @@ const Competencies = () => {
     }
   };
 
-  // Competencies are already filtered by the API based on searchTerm, selectedType, selectedFamily
-  const filteredCompetencies = competencies;
+  // Client-side filtering for instant search
+  const filteredCompetencies = useMemo(() => {
+    if (!competencies) return [];
+    
+    let filtered = competencies;
+    
+    // Search filter
+    if (searchInput.trim()) {
+      const searchLower = searchInput.toLowerCase();
+      filtered = filtered.filter(competency => 
+        competency.name?.toLowerCase().includes(searchLower) ||
+        competency.definition?.toLowerCase().includes(searchLower) ||
+        competency.family?.toLowerCase().includes(searchLower) ||
+        competency.type?.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    // Type filter
+    if (selectedType) {
+      filtered = filtered.filter(competency => competency.type === selectedType);
+    }
+    
+    // Family filter
+    if (selectedFamily) {
+      filtered = filtered.filter(competency => competency.family === selectedFamily);
+    }
+    
+    return filtered;
+  }, [competencies, searchInput, selectedType, selectedFamily]);
 
   const toggleCompetency = (competencyId) => {
     setExpandedCompetency(expandedCompetency === competencyId ? null : competencyId);
   };
+
+  const fetchAssessors = async (competencyId) => {
+    try {
+      setAssessorsLoading(true);
+      const response = await api.get(`/assessors/competency/${competencyId}`);
+      const assessors = response.data.assessors || [];
+      setAssessors(assessors);
+      
+      // Store assessors count for this competency
+      setCompetencyAssessors(prev => ({
+        ...prev,
+        [competencyId]: assessors
+      }));
+    } catch (error) {
+      console.error('Error fetching assessors:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load assessors for this competency.",
+        variant: "destructive",
+      });
+      setAssessors([]);
+    } finally {
+      setAssessorsLoading(false);
+    }
+  };
+
+  const openAssessorModal = (competency) => {
+    setSelectedCompetency(competency);
+    setShowAssessorModal(true);
+    fetchAssessors(competency.id);
+  };
+
+  // Check if competency has assessors (we'll need to track this)
+  const [competencyAssessors, setCompetencyAssessors] = useState({});
+  
+  // Function to check if a competency has assessors
+  const hasAssessors = (competencyId) => {
+    return competencyAssessors[competencyId] && competencyAssessors[competencyId].length > 0;
+  };
+
+  // Pre-fetch assessors for all competencies to show correct icon colors
+  useEffect(() => {
+    if (competencies.length > 0) {
+      const fetchAllAssessors = async () => {
+        const promises = competencies.map(async (competency) => {
+          try {
+            const response = await api.get(`/assessors/competency/${competency.id}`);
+            return {
+              competencyId: competency.id,
+              assessors: response.data.assessors || []
+            };
+          } catch (error) {
+            console.error(`Error fetching assessors for competency ${competency.id}:`, error);
+            return {
+              competencyId: competency.id,
+              assessors: []
+            };
+          }
+        });
+
+        const results = await Promise.all(promises);
+        const assessorsMap = {};
+        results.forEach(result => {
+          assessorsMap[result.competencyId] = result.assessors;
+        });
+        setCompetencyAssessors(assessorsMap);
+      };
+
+      fetchAllAssessors();
+    }
+  }, [competencies]);
 
   if (isLoading) {
     return (
@@ -373,11 +508,14 @@ const Competencies = () => {
               <div className="relative mt-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
+                  ref={searchInputRef}
                   id="search"
+                  key="search-input"
                   placeholder="Search by name, definition, or family..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="pl-10"
+                  autoComplete="off"
                 />
               </div>
             </div>
@@ -454,6 +592,13 @@ const Competencies = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <button 
+                    onClick={() => openAssessorModal(competency)}
+                    className={`${hasAssessors(competency.id) ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-green-600'}`}
+                    title={`View Assessors${hasAssessors(competency.id) ? ` (${competencyAssessors[competency.id]?.length || 0} assigned)` : ' (None assigned)'}`}
+                  >
+                    <UserCheck className="h-4 w-4" />
+                  </button>
                   <button className="text-gray-400 hover:text-gray-600" title="View">
                     <Eye className="h-4 w-4" />
                   </button>
@@ -592,6 +737,116 @@ const Competencies = () => {
                   {isUploading ? 'Uploading...' : 'Upload'}
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assessor Modal */}
+      {showAssessorModal && selectedCompetency && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 to-blue-50">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <UserCheck className="h-6 w-6 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">Assessors for {selectedCompetency.name}</h3>
+                  <p className="text-sm text-gray-600">{selectedCompetency.type} • {selectedCompetency.family}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAssessorModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {assessorsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading assessors...</p>
+                  </div>
+                </div>
+              ) : assessors.length === 0 ? (
+                <div className="text-center py-12">
+                  <UserCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Assessors Found</h3>
+                  <p className="text-gray-500">
+                    No assessors have been assigned to this competency yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="mb-6">
+                    <p className="text-sm text-gray-600">
+                      {assessors.length} assessor{assessors.length !== 1 ? 's' : ''} assigned to this competency
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {assessors.map((assessor) => (
+                      <div key={assessor.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <EmployeePhoto
+                              sid={assessor.assessor_sid}
+                              firstName={assessor.first_name}
+                              lastName={assessor.last_name}
+                              size="medium"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-gray-900 truncate">
+                              {assessor.first_name} {assessor.last_name}
+                            </h4>
+                            <p className="text-sm text-gray-600 truncate">
+                              {assessor.job_title || 'No Job Title'}
+                            </p>
+                            <p className="text-xs text-gray-500 font-mono">
+                              {assessor.assessor_sid}
+                            </p>
+                            
+                            <div className="mt-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-gray-600">Level:</span>
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getLevelColor(assessor.competency_level)}`}>
+                                  {assessor.competency_level}
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-gray-600">Status:</span>
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  assessor.is_active 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {assessor.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                              
+                              <div className="text-xs text-gray-500">
+                                <div className="flex items-center">
+                                  <span className="truncate">{assessor.email}</span>
+                                </div>
+                                <div className="flex items-center mt-1">
+                                  <span>{assessor.division || 'No Division'}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

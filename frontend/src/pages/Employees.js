@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -24,109 +25,155 @@ import {
   FileText,
   TrendingUp,
   UserCheck,
-  Clock
+  Clock,
+  Award,
+  BookOpen
 } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
+import { useQuery } from '@tanstack/react-query';
+import api from '../lib/api';
+import EmployeePhoto from '../components/EmployeePhoto';
 
 const Employees = () => {
   const { toast } = useToast();
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDepartment, setSelectedDepartment] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [selectedType, setSelectedType] = useState('');
+  const navigate = useNavigate();
+  const [searchInput, setSearchInput] = useState(''); // Search input for client-side filtering
+  const [selectedDivision, setSelectedDivision] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('');
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [stats, setStats] = useState({});
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 10,
-    total: 0,
-    pages: 0
+  const [showJCPModal, setShowJCPModal] = useState(false);
+  const [selectedEmployeeJCP, setSelectedEmployeeJCP] = useState(null);
+  const searchInputRef = useRef(null);
+  const [assessorEmployees, setAssessorEmployees] = useState(new Set());
+
+  // No debouncing needed - client-side filtering is instant
+
+  // Maintain focus after re-renders
+  useEffect(() => {
+    if (searchInputRef.current && document.activeElement !== searchInputRef.current) {
+      // Only refocus if the user was previously typing in the search box
+      const wasSearching = searchInput.length > 0;
+      if (wasSearching) {
+        searchInputRef.current.focus();
+      }
+    }
   });
 
-  // Mock data for demonstration
-  const mockEmployees = [
-    {
-      id: '1',
-      employeeId: 'EMP001',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@company.com',
-      phone: '+1-555-0123',
-      department: 'Engineering',
-      jobTitle: 'Senior Software Engineer',
-      employmentType: 'FULL_TIME',
-      employmentStatus: 'ACTIVE',
-      hireDate: '2023-01-15',
-      salary: 95000,
-      currency: 'USD',
-      workLocation: 'New York, NY',
-      avatar: 'JD'
-    },
-    {
-      id: '2',
-      employeeId: 'EMP002',
-      firstName: 'Jane',
-      lastName: 'Smith',
-      email: 'jane.smith@company.com',
-      phone: '+1-555-0124',
-      department: 'Marketing',
-      jobTitle: 'Marketing Manager',
-      employmentType: 'FULL_TIME',
-      employmentStatus: 'ACTIVE',
-      hireDate: '2022-08-20',
-      salary: 85000,
-      currency: 'USD',
-      workLocation: 'San Francisco, CA',
-      avatar: 'JS'
-    },
-    {
-      id: '3',
-      employeeId: 'EMP003',
-      firstName: 'Mike',
-      lastName: 'Johnson',
-      email: 'mike.johnson@company.com',
-      phone: '+1-555-0125',
-      department: 'Sales',
-      jobTitle: 'Sales Representative',
-      employmentType: 'FULL_TIME',
-      employmentStatus: 'ACTIVE',
-      hireDate: '2023-03-10',
-      salary: 70000,
-      currency: 'USD',
-      workLocation: 'Chicago, IL',
-      avatar: 'MJ'
-    }
-  ];
-
-  const departments = ['Engineering', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations'];
-  const employmentStatuses = ['ACTIVE', 'INACTIVE', 'TERMINATED', 'ON_LEAVE', 'SUSPENDED'];
-  const employmentTypes = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN', 'CONSULTANT', 'TEMPORARY'];
-
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setEmployees(mockEmployees);
-      setStats({
-        total: 150,
-        active: 142,
-        inactive: 5,
-        terminated: 3,
-        departments: [
-          { name: 'Engineering', count: 45 },
-          { name: 'Marketing', count: 25 },
-          { name: 'Sales', count: 30 },
-          { name: 'HR', count: 15 },
-          { name: 'Finance', count: 20 },
-          { name: 'Operations', count: 15 }
-        ]
-      });
-      setLoading(false);
-    }, 1000);
+  // Memoize search input handler to prevent re-renders
+  const handleSearchInputChange = useCallback((e) => {
+    setSearchInput(e.target.value);
   }, []);
+
+  // Fetch all employees from API (no filtering on server side)
+  const { data: employeesData, isLoading, error } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => api.get('/employees?page=1&limit=10000').then(res => res.data),
+    retry: 1,
+    keepPreviousData: true,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Fetch all employees for static statistics (without filters)
+  const { data: allEmployeesData } = useQuery({
+    queryKey: ['all-employees'],
+    queryFn: () => api.get('/employees?page=1&limit=10000').then(res => res.data),
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    cacheTime: 10 * 60 * 1000, // 10 minutes
+  });
+
+  // Fetch assessor employees
+  const { data: assessorData } = useQuery({
+    queryKey: ['assessor-employees'],
+    queryFn: async () => {
+      const response = await api.get('/assessors');
+      return response.data;
+    },
+    retry: 1,
+  });
+
+  // Update assessor employees set when data changes
+  useEffect(() => {
+    if (assessorData?.mappings) {
+      const assessorSids = new Set(assessorData.mappings.map(mapping => mapping.assessor_sid));
+      setAssessorEmployees(assessorSids);
+    }
+  }, [assessorData]);
+
+  // Helper function to check if an employee is an assessor
+  const isAssessor = (employeeSid) => {
+    return assessorEmployees.has(employeeSid);
+  };
+
+  // Fetch job-competency mappings for JCP calculation
+  const { data: jobCompetencyMappings } = useQuery({
+    queryKey: ['job-competency-mappings'],
+    queryFn: () => api.get('/job-competencies').then(res => res.data),
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    cacheTime: 10 * 60 * 1000, // 10 minutes
+  });
+
+  const employees = useMemo(() => employeesData?.employees || [], [employeesData?.employees]);
+  const allEmployees = useMemo(() => allEmployeesData?.employees || [], [allEmployeesData?.employees]);
+
+  // Calculate static statistics from all employees (not filtered)
+  const stats = useMemo(() => {
+    const total = allEmployees.length;
+    const active = allEmployees.filter(emp => emp.employment_status === 'ACTIVE').length;
+    const divisions = new Set(allEmployees.map(emp => emp.division).filter(Boolean)).size;
+    
+    // Calculate JCP (Job Competency Profile) - employees whose job codes are linked to competencies
+    const mappings = jobCompetencyMappings?.mappings || [];
+    const jobCodesWithCompetencies = new Set(mappings.map(mapping => mapping.job.code));
+    const jcp = allEmployees.filter(emp => 
+      emp.job_code && jobCodesWithCompetencies.has(emp.job_code)
+    ).length;
+    
+    return { total, active, divisions, jcp };
+  }, [allEmployees, jobCompetencyMappings]);
+
+  // Fetch all unique divisions and locations for filters
+  const { data: filterData } = useQuery({
+    queryKey: ['employee-filters'],
+    queryFn: () => api.get('/employees/filters').then(res => res.data),
+    retry: 1,
+  });
+
+  const divisions = filterData?.divisions || [];
+  const locations = filterData?.locations || [];
+
+  // Check if an employee has JCP (Job Competency Profile)
+  const hasJCP = useCallback((employee) => {
+    const mappings = jobCompetencyMappings?.mappings || [];
+    const jobCodesWithCompetencies = new Set(mappings.map(mapping => mapping.job.code));
+    return employee.job_code && jobCodesWithCompetencies.has(employee.job_code);
+  }, [jobCompetencyMappings]);
+
+  // Get JCP details for an employee
+  const getJCPDetails = useCallback((employee) => {
+    const mappings = jobCompetencyMappings?.mappings || [];
+    const employeeMappings = mappings.filter(mapping => mapping.job.code === employee.job_code);
+    
+    return {
+      employee,
+      job: employeeMappings[0]?.job || null,
+      competencies: employeeMappings.map(mapping => ({
+        competency: mapping.competency,
+        requiredLevel: mapping.requiredLevel,
+        isRequired: mapping.isRequired
+      }))
+    };
+  }, [jobCompetencyMappings]);
+
+  // Handle JCP button click
+  const handleJCPClick = useCallback((employee) => {
+    const jcpDetails = getJCPDetails(employee);
+    setSelectedEmployeeJCP(jcpDetails);
+    setShowJCPModal(true);
+  }, [getJCPDetails]);
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -200,27 +247,59 @@ const Employees = () => {
     });
   };
 
-  const filteredEmployees = employees.filter(employee => {
-    const matchesSearch = 
-      employee.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.jobTitle.toLowerCase().includes(searchTerm.toLowerCase());
+  // Client-side filtering for instant search
+  const filteredEmployees = useMemo(() => {
+    if (!employees) return [];
     
-    const matchesDepartment = !selectedDepartment || employee.department === selectedDepartment;
-    const matchesStatus = !selectedStatus || employee.employmentStatus === selectedStatus;
-    const matchesType = !selectedType || employee.employmentType === selectedType;
+    let filtered = employees;
+    
+    // Search filter
+    if (searchInput.trim()) {
+      const searchLower = searchInput.toLowerCase();
+      filtered = filtered.filter(employee => 
+        employee.first_name?.toLowerCase().includes(searchLower) ||
+        employee.last_name?.toLowerCase().includes(searchLower) ||
+        employee.email?.toLowerCase().includes(searchLower) ||
+        employee.sid?.toLowerCase().includes(searchLower) ||
+        employee.job_title?.toLowerCase().includes(searchLower) ||
+        employee.division?.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    // Division filter
+    if (selectedDivision) {
+      filtered = filtered.filter(employee => employee.division === selectedDivision);
+    }
+    
+    // Location filter
+    if (selectedLocation) {
+      filtered = filtered.filter(employee => employee.location === selectedLocation);
+    }
+    
+    return filtered;
+  }, [employees, searchInput, selectedDivision, selectedLocation]);
 
-    return matchesSearch && matchesDepartment && matchesStatus && matchesType;
-  });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading employees...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">
+            <Users className="h-12 w-12 mx-auto mb-2" />
+            <p className="text-lg font-semibold">Error loading employees</p>
+            <p className="text-sm">{error.message}</p>
+          </div>
         </div>
       </div>
     );
@@ -287,8 +366,8 @@ const Employees = () => {
                 <Building2 className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Departments</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.departments?.length || 0}</p>
+                <p className="text-sm font-medium text-gray-500">Divisions</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.divisions || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -297,11 +376,11 @@ const Employees = () => {
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-orange-100 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-orange-600" />
+                <FileText className="h-6 w-6 text-orange-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Avg. Salary</p>
-                <p className="text-2xl font-semibold text-gray-900">$85K</p>
+                <p className="text-sm font-medium text-gray-500">JCP</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.jcp || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -317,53 +396,42 @@ const Employees = () => {
               <div className="relative mt-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
+                  ref={searchInputRef}
                   id="search"
+                  key="search-input"
                   placeholder="Search by name, email, or ID..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={searchInput}
+                  onChange={handleSearchInputChange}
                   className="pl-10"
+                  autoComplete="off"
                 />
               </div>
             </div>
             <div>
-              <Label htmlFor="department">Department</Label>
+              <Label htmlFor="division">Division</Label>
               <select
-                id="department"
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
+                id="division"
+                value={selectedDivision}
+                onChange={(e) => setSelectedDivision(e.target.value)}
                 className="loyverse-input mt-1"
               >
-                <option value="">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
+                <option value="">All Divisions</option>
+                {divisions.map(div => (
+                  <option key={div} value={div}>{div}</option>
                 ))}
               </select>
             </div>
             <div>
-              <Label htmlFor="status">Employment Status</Label>
+              <Label htmlFor="location">Location</Label>
               <select
-                id="status"
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
+                id="location"
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
                 className="loyverse-input mt-1"
               >
-                <option value="">All Statuses</option>
-                {employmentStatuses.map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="type">Employment Type</Label>
-              <select
-                id="type"
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className="loyverse-input mt-1"
-              >
-                <option value="">All Types</option>
-                {employmentTypes.map(type => (
-                  <option key={type} value={type}>{type.replace('_', ' ')}</option>
+                <option value="">All Locations</option>
+                {locations.map(location => (
+                  <option key={location} value={location}>{location}</option>
                 ))}
               </select>
             </div>
@@ -371,84 +439,153 @@ const Employees = () => {
         </CardContent>
       </Card>
 
-      {/* Employees Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Employees List ({filteredEmployees.length})</CardTitle>
-          <CardDescription>
-            Comprehensive employee data management
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="loyverse-table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Department</th>
-                  <th>Position</th>
-                  <th>Status</th>
-                  <th>Type</th>
-                  <th>Hire Date</th>
-                  <th>Salary</th>
-                  <th>Location</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEmployees.map((employee) => (
-                  <tr key={employee.id} className="border-t border-gray-200">
-                    <td>
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-green-600 flex items-center justify-center text-white font-medium">
-                          {employee.avatar}
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {employee.firstName} {employee.lastName}
-                          </div>
-                          <div className="text-sm text-gray-500">{employee.email}</div>
-                          <div className="text-xs text-gray-400">ID: {employee.employeeId}</div>
+      {/* Employee Cards */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Employees ({filteredEmployees.length})</h2>
+          <p className="text-sm text-gray-500">Comprehensive employee data management</p>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+          {filteredEmployees.map((employee) => (
+            <Card key={employee.id} className="hover:shadow-lg transition-shadow duration-200">
+              <CardContent className="p-4">
+                {/* Horizontal Layout */}
+                <div className="flex items-start space-x-4">
+                  {/* Left Side - Photo and Basic Info */}
+                  <div className="flex-shrink-0">
+                    <EmployeePhoto
+                      sid={employee.sid}
+                      firstName={employee.first_name}
+                      lastName={employee.last_name}
+                      size="medium"
+                    />
+                  </div>
+
+                  {/* Right Side - Details and Actions */}
+                  <div className="flex-1 min-w-0">
+                    {/* Header with Name and JCP */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <h3 className="text-base font-semibold text-gray-900 truncate">
+                          {employee.first_name} {employee.last_name}
+                        </h3>
+                        {hasJCP(employee) && (
+                          <Award className="h-4 w-4 text-amber-500 flex-shrink-0" title="Has Job Competency Profile" />
+                        )}
+                        {isAssessor(employee.sid) && (
+                          <UserCheck className="h-4 w-4 text-green-600 flex-shrink-0" title="Assessor - Can evaluate competencies" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Email and ID */}
+                    <div className="mb-3">
+                      <p className="text-sm text-gray-500 truncate">{employee.email}</p>
+                      <p className="text-xs text-gray-400">
+                        {employee.sid ? `SID: ${employee.sid}` : `ID: ${employee.id.slice(-8)}`}
+                      </p>
+                    </div>
+
+                    {/* Details Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                      {/* Division & Unit */}
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <Building2 className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">{employee.division}</p>
+                          {employee.unit && (
+                            <p className="text-xs text-gray-500 truncate">Unit: {employee.unit}</p>
+                          )}
                         </div>
                       </div>
-                    </td>
-                    <td className="text-sm text-gray-900">{employee.department}</td>
-                    <td className="text-sm text-gray-900">{employee.jobTitle}</td>
-                    <td>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(employee.employmentStatus)}`}>
-                        {employee.employmentStatus}
+
+                      {/* Job Title & Grade */}
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <Users className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-900 truncate">{employee.job_title || 'N/A'}</p>
+                          {employee.grade && (
+                            <p className="text-xs text-gray-500">Grade: {employee.grade}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Location */}
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <MapPin className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-900 truncate">{employee.location || 'N/A'}</p>
+                          {employee.section && (
+                            <p className="text-xs text-gray-500 truncate">{employee.section}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Created Date */}
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <Calendar className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                        <p className="text-xs text-gray-500 truncate">{formatDate(employee.created_at)}</p>
+                      </div>
+                    </div>
+
+                    {/* Status Badges */}
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(employee.employment_status)}`}>
+                        {employee.employment_status}
                       </span>
-                    </td>
-                    <td>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeColor(employee.employmentType)}`}>
-                        {employee.employmentType.replace('_', ' ')}
+                      <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getTypeColor(employee.employment_type)}`}>
+                        {(employee.employment_type || '').replace('_', ' ')}
                       </span>
-                    </td>
-                    <td className="text-sm text-gray-500">{formatDate(employee.hireDate)}</td>
-                    <td className="text-sm text-gray-900">
-                      {employee.salary ? formatCurrency(employee.salary, employee.currency) : 'N/A'}
-                    </td>
-                    <td className="text-sm text-gray-500">{employee.workLocation}</td>
-                    <td>
-                      <div className="flex items-center space-x-2">
-                        <button className="text-gray-400 hover:text-gray-600" title="View">
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button className="text-gray-400 hover:text-gray-600" title="Edit">
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                      <div className="flex items-center space-x-1">
+                        <button 
+                          className="text-gray-400 hover:text-blue-600 p-1" 
+                          title="Edit"
+                          onClick={() => navigate(`/employees/edit/${employee.id}`)}
+                        >
                           <Edit className="h-4 w-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-red-600" title="Delete">
+                        {hasJCP(employee) && (
+                          <button 
+                            className="text-amber-500 hover:text-amber-600 p-1" 
+                            title="View Job Competency Profile"
+                            onClick={() => handleJCPClick(employee)}
+                          >
+                            <BookOpen className="h-4 w-4" />
+                          </button>
+                        )}
+                        <button className="text-gray-400 hover:text-gray-600 p-1" title="View">
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <button className="text-gray-400 hover:text-red-600 p-1" title="Delete">
                           <Trash2 className="h-4 w-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-gray-600" title="More">
+                        <button className="text-gray-400 hover:text-gray-600 p-1" title="More">
                           <MoreVertical className="h-4 w-4" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Employee Count */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Showing {employees.length} of {allEmployees.length} employees
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -499,6 +636,107 @@ const Employees = () => {
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Upload
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* JCP Modal */}
+      {showJCPModal && selectedEmployeeJCP && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <Award className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Job Competency Profile</h2>
+                    <p className="text-sm text-gray-600">
+                      {selectedEmployeeJCP.employee.first_name} {selectedEmployeeJCP.employee.last_name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowJCPModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Job Information */}
+              {selectedEmployeeJCP.job && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">Job Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Job Title:</span>
+                      <p className="text-sm text-gray-900">{selectedEmployeeJCP.job.title}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Job Code:</span>
+                      <p className="text-sm text-gray-900">{selectedEmployeeJCP.job.code}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Division:</span>
+                      <p className="text-sm text-gray-900">{selectedEmployeeJCP.job.division}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Unit:</span>
+                      <p className="text-sm text-gray-900">{selectedEmployeeJCP.job.unit}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Competencies */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Required Competencies ({selectedEmployeeJCP.competencies.length})
+                </h3>
+                <div className="space-y-4">
+                  {selectedEmployeeJCP.competencies.map((item, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-gray-900">{item.competency.name}</h4>
+                          <p className="text-xs text-gray-500 mt-1">{item.competency.family}</p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            item.requiredLevel === 'BASIC' ? 'bg-gray-100 text-gray-800' :
+                            item.requiredLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
+                            item.requiredLevel === 'ADVANCED' ? 'bg-blue-100 text-blue-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {item.requiredLevel}
+                          </span>
+                          {item.isRequired && (
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                              Required
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-2">{item.competency.definition}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => setShowJCPModal(false)}
+                  className="loyverse-button-primary"
+                >
+                  Close
                 </Button>
               </div>
             </div>

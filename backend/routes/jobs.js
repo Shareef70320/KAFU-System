@@ -11,49 +11,57 @@ router.get('/', async (req, res) => {
       page = 1, 
       limit = 50, 
       search = '', 
-      unit = '', 
       division = '',
-      department = '',
-      section = '',
-      sortBy = 'createdAt',
+      location = '',
+      sortBy = '"createdAt"',
       sortOrder = 'desc'
     } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
 
-    // Build where clause for filtering
-    const where = {
-      AND: [
-        search ? {
-          OR: [
-            { title: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } },
-            { code: { contains: search, mode: 'insensitive' } },
-            { unit: { contains: search, mode: 'insensitive' } },
-            { division: { contains: search, mode: 'insensitive' } },
-            { department: { contains: search, mode: 'insensitive' } },
-            { section: { contains: search, mode: 'insensitive' } }
-          ]
-        } : {},
-        unit ? { unit: { contains: unit, mode: 'insensitive' } } : {},
-        division ? { division: { contains: division, mode: 'insensitive' } } : {},
-        department ? { department: { contains: department, mode: 'insensitive' } } : {},
-        section ? { section: { contains: section, mode: 'insensitive' } } : {}
-      ]
-    };
+    // Build search conditions for raw SQL
+    let searchConditions = [];
+    if (search) {
+      searchConditions.push(`(
+        title ILIKE '%${search}%' OR 
+        description ILIKE '%${search}%' OR 
+        code ILIKE '%${search}%' OR 
+        unit ILIKE '%${search}%' OR 
+        division ILIKE '%${search}%' OR 
+        department ILIKE '%${search}%' OR 
+        section ILIKE '%${search}%' OR
+        location ILIKE '%${search}%' OR
+        grade ILIKE '%${search}%'
+      )`);
+    }
+    if (division) {
+      searchConditions.push(`division ILIKE '%${division}%'`);
+    }
+    if (location) {
+      searchConditions.push(`location ILIKE '%${location}%'`);
+    }
 
-    const [jobs, total] = await Promise.all([
-      prisma.job.findMany({
-        where,
-        skip,
-        take,
-        orderBy: {
-          [sortBy]: sortOrder
-        }
-      }),
-      prisma.job.count({ where })
-    ]);
+    const whereClause = searchConditions.length > 0 ? `WHERE ${searchConditions.join(' AND ')}` : '';
+
+    // Get jobs using raw SQL
+    const jobsQuery = `
+      SELECT * FROM jobs 
+      ${whereClause}
+      ORDER BY ${sortBy} ${sortOrder.toUpperCase()}
+      LIMIT ${take} OFFSET ${skip}
+    `;
+    
+    const jobs = await prisma.$queryRawUnsafe(jobsQuery);
+
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) as count FROM jobs 
+      ${whereClause}
+    `;
+    
+    const totalResult = await prisma.$queryRawUnsafe(countQuery);
+    const total = parseInt(totalResult[0].count);
 
     res.json({
       jobs,
@@ -66,6 +74,72 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching jobs:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get unique divisions and locations for filters
+router.get('/filters', async (req, res) => {
+  try {
+    // Get unique divisions
+    const divisionsQuery = `
+      SELECT DISTINCT division 
+      FROM jobs 
+      WHERE division IS NOT NULL AND division != ''
+      ORDER BY division
+    `;
+    const divisions = await prisma.$queryRawUnsafe(divisionsQuery);
+
+    // Get unique locations
+    const locationsQuery = `
+      SELECT DISTINCT location 
+      FROM jobs 
+      WHERE location IS NOT NULL AND location != ''
+      ORDER BY location
+    `;
+    const locations = await prisma.$queryRawUnsafe(locationsQuery);
+
+    res.json({
+      divisions: divisions.map(row => row.division),
+      locations: locations.map(row => row.location)
+    });
+  } catch (error) {
+    console.error('Error fetching filter options:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get job statistics
+router.get('/stats', async (req, res) => {
+  try {
+    // Get total jobs count
+    const totalJobsQuery = 'SELECT COUNT(*) as count FROM jobs';
+    const totalJobsResult = await prisma.$queryRawUnsafe(totalJobsQuery);
+    const totalJobs = parseInt(totalJobsResult[0].count);
+
+    // Get active jobs count
+    const activeJobsQuery = 'SELECT COUNT(*) as count FROM jobs WHERE "isActive" = true';
+    const activeJobsResult = await prisma.$queryRawUnsafe(activeJobsQuery);
+    const activeJobs = parseInt(activeJobsResult[0].count);
+
+    // Get unique units count
+    const unitsQuery = 'SELECT COUNT(DISTINCT unit) as count FROM jobs WHERE unit IS NOT NULL AND unit != \'\'';
+    const unitsResult = await prisma.$queryRawUnsafe(unitsQuery);
+    const units = parseInt(unitsResult[0].count);
+
+    // Get unique divisions count
+    const divisionsQuery = 'SELECT COUNT(DISTINCT division) as count FROM jobs WHERE division IS NOT NULL AND division != \'\'';
+    const divisionsResult = await prisma.$queryRawUnsafe(divisionsQuery);
+    const divisions = parseInt(divisionsResult[0].count);
+
+    res.json({
+      total: totalJobs,
+      active: activeJobs,
+      units: units,
+      divisions: divisions
+    });
+  } catch (error) {
+    console.error('Error fetching job statistics:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -93,7 +167,7 @@ router.get('/:id', async (req, res) => {
 // Create new job
 router.post('/', async (req, res) => {
   try {
-    const { title, description, code, unit, division, department, section } = req.body;
+    const { title, description, code, unit, division, department, section, location } = req.body;
 
     // Validate required fields
     if (!title || !code) {
@@ -117,7 +191,8 @@ router.post('/', async (req, res) => {
         unit,
         division,
         department,
-        section
+        section,
+        location
       }
     });
 
@@ -132,7 +207,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, code, unit, division, department, section, isActive } = req.body;
+    const { title, description, code, unit, division, department, section, location, isActive } = req.body;
 
     // Check if job exists
     const existingJob = await prisma.job.findUnique({
@@ -164,6 +239,7 @@ router.put('/:id', async (req, res) => {
         division,
         department,
         section,
+        location,
         isActive
       }
     });

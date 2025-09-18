@@ -10,97 +10,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  firstName String
-  lastName  String
-  role      Role       @default(STAFF)
-  groupId   String?
-  group     Group?     @relation(fields: [groupId], references: [id])
-  employee  Employee?  @relation
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  @@map("users")
-}
-
-model Group {
-  id          String      @id @default(cuid())
-  name        String      @unique
-  description String?
-  users       User[]
-  employees   Employee[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  @@map("groups")
-}
+// User and Group models removed - using Employee model only
 
 model Employee {
-  id                String    @id @default(cuid())
-  employeeId        String    @unique // Employee ID/Number
-  firstName         String
-  lastName          String
-  email             String    @unique
-  phone             String?
-  personalEmail     String?
-  dateOfBirth       DateTime?
-  gender            Gender?
-  nationality       String?
-  maritalStatus     MaritalStatus?
-  address           String?
-  city              String?
-  state             String?
-  country           String?
-  postalCode        String?
-  emergencyContact  String?
-  emergencyPhone    String?
-  emergencyRelation String?
-  
-  // Employment Details
-  department        String?
-  position          String?
-  jobTitle          String?
-  employmentType    EmploymentType?
-  employmentStatus  EmploymentStatus @default(ACTIVE)
-  hireDate          DateTime?
-  terminationDate   DateTime?
-  probationEndDate  DateTime?
-  reportingManager  String?
-  workLocation      String?
-  workSchedule      String?
-  
-  // HR Details
-  employeeType      EmployeeType?
-  costCenter        String?
-  payrollId         String?
-  benefitsEligible  Boolean   @default(true)
-  insuranceNumber   String?
-  taxId             String?
-  socialSecurity    String?
-  
-  // Compensation
-  salary            Decimal?
-  currency          String?   @default("USD")
-  payFrequency      PayFrequency?
-  bankAccount       String?
-  bankName          String?
-  
-  // System Fields
-  isActive          Boolean   @default(true)
-  lastLogin         DateTime?
-  notes             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                String    @id @default(cuid()) @map("id")
+  sid               String?   @unique @map("sid") // SID from HR data
+  erp_id            String?   @map("erp_id") // ERPID from HR data
+  first_name        String    @map("first_name")
+  last_name         String    @map("last_name")
+  email             String    @unique @map("email")
+  job_code          String?   @map("job_code") // JobCode from HR data
+  job_title         String?   @map("job_title")
+  division          String?   @map("division") // Division from HR data
+  unit              String?   @map("unit") // Unit from HR data
+  department        String?   @map("department")
+  section           String?   @map("section") // Section from HR data
+  sub_section       String?   @map("sub_section") // Sub Section from HR data
+  position_remark   String?   @map("position_remark") // Position Remark from HR data
+  grade             String?   @map("grade") // Grade from HR data
+  location          String?   @map("location") // Location from HR data
+  photo_url         String?   @map("photo_url") // Path to employee photo
+  line_manager_sid  String?   @map("line_manager_sid") // SID of the line manager
+  is_active         Boolean   @default(true) @map("is_active")
+  employment_status String    @default("ACTIVE") @map("employment_status")
+  employment_type   String?   @map("employment_type")
+  created_at        DateTime  @default(now()) @map("created_at")
+  updated_at        DateTime  @updatedAt @map("updated_at")
   
   // Relations
-  userId            String?   @unique
-  user              User?     @relation(fields: [userId], references: [id])
-  groupId           String?
-  group             Group?    @relation(fields: [groupId], references: [id])
   competencyAssessments CompetencyAssessment[]
+  employeeAssessments EmployeeAssessment[]
+  
+  // Self-referencing relationship for line manager
+  lineManager       Employee? @relation("LineManager", fields: [line_manager_sid], references: [sid])
+  directReports     Employee[] @relation("LineManager")
   
   @@map("employees")
 }
@@ -169,6 +112,8 @@ model Competency {
   documents         CompetencyDocument[]
   assessments       CompetencyAssessment[]
   jobCompetencies   JobCompetency[]
+  questions         Question[]
+  assessments_new   Assessment[]
   
   @@map("competencies")
 }
@@ -187,6 +132,8 @@ model CompetencyLevel {
   // Relations
   competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
   assessments       CompetencyAssessment[]
+  questions         Question[]
+  assessments_new   Assessment[]
   
   @@unique([competencyId, level])
   @@map("competency_levels")
@@ -288,6 +235,7 @@ model Job {
   division    String?
   department  String?
   section     String?
+  location    String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -314,4 +262,163 @@ model JobCompetency {
   // Ensure unique job-competency combinations
   @@unique([jobId, competencyId])
   @@map("job_competencies")
+}
+
+model JobCriticalityCriteria {
+  id          Int      @id @default(autoincrement())
+  name        String   @map("name")
+  definition  String   @default("") @map("definition")
+  weight      Int      @default(0) @map("weight")
+  icon        String   @map("icon")
+  color       String   @map("color")
+  min_rating  Int      @default(1) @map("min_rating")
+  max_rating  Int      @default(5) @map("max_rating")
+  is_active   Boolean  @default(true) @map("is_active")
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  @@map("job_criticality_criteria")
+}
+
+// Assessment System Models
+
+model Assessment {
+  id                String    @id @default(cuid())
+  title             String
+  description       String?
+  competencyId      String
+  competencyLevelId String?   // Target level for this assessment
+  isActive          Boolean   @default(true)
+  timeLimit         Int?      // Time limit in minutes (optional)
+  passingScore      Float     @default(70.0) // Passing percentage
+  maxAttempts       Int?      // Maximum attempts allowed (null = unlimited)
+  createdBy         String?   // Employee SID who created
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  competencyLevel   CompetencyLevel? @relation(fields: [competencyLevelId], references: [id], onDelete: SetNull)
+  questions         AssessmentQuestion[]
+  attempts          EmployeeAssessment[]
+  
+  @@map("assessments")
+}
+
+model Question {
+  id                String    @id @default(cuid())
+  text              String    // Question text
+  type              QuestionType
+  competencyId      String
+  competencyLevelId String?   // Difficulty level (linked to competency level)
+  points            Int       @default(1) // Points for correct answer
+  explanation       String?   // Explanation for the answer
+  isActive          Boolean   @default(true)
+  createdBy         String?   // Employee SID who created
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  competencyLevel   CompetencyLevel? @relation(fields: [competencyLevelId], references: [id], onDelete: SetNull)
+  options           QuestionOption[]
+  assessmentQuestions AssessmentQuestion[]
+  responses         EmployeeResponse[]
+  
+  @@map("questions")
+}
+
+model QuestionOption {
+  id          String    @id @default(cuid())
+  questionId  String
+  text        String    // Option text
+  isCorrect   Boolean   @default(false)
+  order       Int       @default(0) // Display order
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  responses   EmployeeResponse[]
+  
+  @@map("question_options")
+}
+
+model AssessmentQuestion {
+  id           String    @id @default(cuid())
+  assessmentId String
+  questionId   String
+  order        Int       @default(0) // Question order in assessment
+  points       Int       @default(1) // Points for this question in this assessment
+  createdAt    DateTime  @default(now())
+  
+  // Relations
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question     Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  @@unique([assessmentId, questionId])
+  @@map("assessment_questions")
+}
+
+model EmployeeAssessment {
+  id                String    @id @default(cuid())
+  employeeId        String
+  assessmentId      String
+  status            AssessmentAttemptStatus @default(NOT_STARTED)
+  score             Float?    // Final score percentage
+  maxScore          Float?    // Maximum possible score
+  timeSpent         Int?      // Time spent in seconds
+  startedAt         DateTime?
+  completedAt       DateTime?
+  evaluatedLevel    CompetencyLevelType? // System evaluated level
+  managerApproved   Boolean   @default(false)
+  assessorApproved  Boolean   @default(false)
+  managerNotes      String?
+  assessorNotes     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assessment        Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  responses         EmployeeResponse[]
+  
+  @@unique([employeeId, assessmentId])
+  @@map("employee_assessments")
+}
+
+model EmployeeResponse {
+  id                    String    @id @default(cuid())
+  employeeAssessmentId  String
+  questionId            String
+  selectedOptionId      String?   // For multiple choice questions
+  textResponse          String?   // For text-based questions
+  isCorrect             Boolean?  // Whether the response is correct
+  pointsEarned          Float     @default(0) // Points earned for this response
+  timeSpent             Int?      // Time spent on this question in seconds
+  createdAt             DateTime  @default(now())
+  
+  // Relations
+  employeeAssessment    EmployeeAssessment @relation(fields: [employeeAssessmentId], references: [id], onDelete: Cascade)
+  question              Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption        QuestionOption? @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+  
+  @@unique([employeeAssessmentId, questionId])
+  @@map("employee_responses")
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  SINGLE_CHOICE
+  TRUE_FALSE
+  TEXT_INPUT
+  RATING_SCALE
+}
+
+enum AssessmentAttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  TIME_EXCEEDED
 }

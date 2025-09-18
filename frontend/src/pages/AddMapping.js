@@ -36,43 +36,73 @@ const AddMapping = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobCompetencies, setJobCompetencies] = useState([]); // Array of {competency, level}
 
-  // Fetch jobs
+  // Fetch jobs - get all jobs without pagination
   const { data: jobsData, error: jobsError } = useQuery({
     queryKey: ['jobs'],
-    queryFn: () => api.get('/jobs').then(res => res.data),
+    queryFn: () => api.get('/jobs?limit=1000').then(res => res.data), // Get all jobs
     retry: 1,
   });
 
-  // Fetch competencies
+  // Fetch competencies - get all competencies without pagination
   const { data: competenciesData, error: competenciesError } = useQuery({
     queryKey: ['competencies'],
-    queryFn: () => api.get('/competencies').then(res => res.data),
+    queryFn: () => api.get('/competencies?limit=1000').then(res => res.data), // Get all competencies
     retry: 1,
   });
 
   const jobs = jobsData?.jobs || [];
   const competencies = competenciesData?.competencies || [];
 
+
   // Calculate stats from jobs data
   const jobStats = React.useMemo(() => {
     if (!jobs.length) return { units: [], divisions: [], departments: [] };
     
-    const units = [...new Set(jobs.map(job => job.unit).filter(Boolean))].map(unit => ({ name: unit, count: jobs.filter(job => job.unit === unit).length }));
-    const divisions = [...new Set(jobs.map(job => job.division).filter(Boolean))].map(division => ({ name: division, count: jobs.filter(job => job.division === division).length }));
-    const departments = [...new Set(jobs.map(job => job.department).filter(Boolean))].map(department => ({ name: department, count: jobs.filter(job => job.department === department).length }));
+    // Filter jobs based on selected job type (unit, division, or department)
+    let filteredJobs = jobs;
+    if (selectedJobType) {
+      filteredJobs = jobs.filter(job => 
+        job.unit === selectedJobType || 
+        job.division === selectedJobType || 
+        job.department === selectedJobType
+      );
+    }
+    
+    const units = [...new Set(filteredJobs.map(job => job.unit).filter(Boolean))].map(unit => ({ 
+      name: unit, 
+      count: filteredJobs.filter(job => job.unit === unit).length 
+    }));
+    const divisions = [...new Set(filteredJobs.map(job => job.division).filter(Boolean))].map(division => ({ 
+      name: division, 
+      count: filteredJobs.filter(job => job.division === division).length 
+    }));
+    const departments = [...new Set(filteredJobs.map(job => job.department).filter(Boolean))].map(department => ({ 
+      name: department, 
+      count: filteredJobs.filter(job => job.department === department).length 
+    }));
     
     return { units, divisions, departments };
-  }, [jobs]);
+  }, [jobs, selectedJobType]);
 
   // Calculate stats from competencies data
   const competencyStats = React.useMemo(() => {
     if (!competencies.length) return { types: [], families: [] };
     
     const types = [...new Set(competencies.map(comp => comp.type).filter(Boolean))].map(type => ({ name: type, count: competencies.filter(comp => comp.type === type).length }));
-    const families = [...new Set(competencies.map(comp => comp.family).filter(Boolean))].map(family => ({ name: family, count: competencies.filter(comp => comp.family === family).length }));
+    
+    // Filter families based on selected type
+    let filteredCompetencies = competencies;
+    if (selectedCompetencyType) {
+      filteredCompetencies = competencies.filter(comp => comp.type === selectedCompetencyType);
+    }
+    
+    const families = [...new Set(filteredCompetencies.map(comp => comp.family).filter(Boolean))].map(family => ({ 
+      name: family, 
+      count: filteredCompetencies.filter(comp => comp.family === family).length 
+    }));
     
     return { types, families };
-  }, [competencies]);
+  }, [competencies, selectedCompetencyType]);
 
   // Filter jobs based on search and filters
   const filteredJobs = jobs.filter(job => {
@@ -277,18 +307,22 @@ const AddMapping = () => {
                     <Label htmlFor="job-type">Filter by Unit/Division/Department</Label>
                     <select
                       value={selectedJobType}
-                      onChange={(e) => setSelectedJobType(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedJobType(e.target.value);
+                        // Clear any selected job when filter changes
+                        setSelectedJob(null);
+                      }}
                       className="loyverse-input mt-1 w-full"
                     >
                       <option value="">All Units/Divisions/Departments</option>
                       {jobStats.units?.map(unit => (
-                        <option key={unit.name} value={unit.name}>{unit.name}</option>
+                        <option key={unit.name} value={unit.name}>{unit.name} ({unit.count})</option>
                       ))}
                       {jobStats.divisions?.map(division => (
-                        <option key={division.name} value={division.name}>{division.name}</option>
+                        <option key={division.name} value={division.name}>{division.name} ({division.count})</option>
                       ))}
                       {jobStats.departments?.map(department => (
-                        <option key={department.name} value={department.name}>{department.name}</option>
+                        <option key={department.name} value={department.name}>{department.name} ({department.count})</option>
                       ))}
                     </select>
                   </div>
@@ -299,6 +333,7 @@ const AddMapping = () => {
                       onClick={() => {
                         setJobSearchTerm('');
                         setSelectedJobType('');
+                        setSelectedJob(null);
                       }}
                     >
                       Clear Filters
@@ -376,7 +411,11 @@ const AddMapping = () => {
                       <Label htmlFor="competency-type">Type</Label>
                       <select
                         value={selectedCompetencyType}
-                        onChange={(e) => setSelectedCompetencyType(e.target.value)}
+                        onChange={(e) => {
+                          setSelectedCompetencyType(e.target.value);
+                          // Clear family filter when type changes
+                          setSelectedCompetencyFamily('');
+                        }}
                         className="loyverse-input mt-1 w-full"
                       >
                         <option value="">All Types</option>
@@ -412,6 +451,7 @@ const AddMapping = () => {
                     </Button>
                   </div>
                 </div>
+
 
                 {/* Competencies List */}
                 <div className="space-y-3 max-h-96 overflow-y-auto">

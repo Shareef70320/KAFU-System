@@ -11,7 +11,16 @@ const employeeRoutes = require('./routes/employees');
 const competencyRoutes = require('./routes/competencies');
 const jobRoutes = require('./routes/jobs');
 const jobCompetencyRoutes = require('./routes/job-competencies');
+const jobCriticalityRoutes = require('./routes/job-criticality');
+const jobEvaluationRoutes = require('./routes/job-evaluations');
+const assessorRoutes = require('./routes/assessors');
+const assessmentRoutes = require('./routes/assessments');
+const questionRoutes = require('./routes/questions');
+const userAssessmentRoutes = require('./routes/userAssessments');
+const assessmentTemplateRoutes = require('./routes/assessmentTemplates');
+const newAssessmentRoutes = require('./routes/newAssessments');
 const uploadRoutes = require('./routes/upload');
+const photoRoutes = require('./routes/photos');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,7 +47,16 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/competencies', competencyRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/job-competencies', jobCompetencyRoutes);
+app.use('/api/job-criticality', jobCriticalityRoutes);
+app.use('/api/job-evaluations', jobEvaluationRoutes);
+app.use('/api/assessors', assessorRoutes);
+app.use('/api/assessments', assessmentRoutes);
+app.use('/api/questions', questionRoutes);
+app.use('/api/user-assessments', userAssessmentRoutes);
+app.use('/api/assessment-templates', assessmentTemplateRoutes);
+app.use('/api/new-assessments', newAssessmentRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/photos', photoRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -140,9 +140,9 @@ router.get('/:id', async (req, res) => {
             employee: {
               select: {
                 id: true,
-                firstName: true,
-                lastName: true,
-                employeeId: true
+                first_name: true,
+                last_name: true,
+                sid: true
               }
             },
             level: true

@@ -1,27 +1,79 @@
 # KAFU System - Competency Framework Management
 
-A comprehensive system for managing competency frameworks with user management, group organization, and role-based access control.
+A comprehensive system for managing competency frameworks with multi-role interface support - admin management, manager oversight, and user self-service capabilities.
+
+**Current Version:** v3.0.0 - "Complete Assessor Management System with Employee Integration" (December 2024)
 
 ## Features
 
-### Users Management
-- ✅ **CSV/Excel Upload**: Import multiple users from CSV or Excel files
-- ✅ **User Creation**: Add individual users with detailed information
-- ✅ **Role Assignment**: Assign roles (Admin, Manager, Staff, Viewer) to users
-- ✅ **Group Management**: Organize users into groups for better management
-- ✅ **Search & Filter**: Find users by name, email, role, or group
-- ✅ **Responsive Design**: Mobile-friendly interface with card-based layouts
+### 🎯 **Multi-Role Interface System**
+- ✅ **Admin Interface**: Complete management capabilities for administrators
+- ✅ **Manager Interface**: Hierarchical team management with JCP oversight
+- ✅ **User Interface**: Personalized staff experience with role-based access
+- ✅ **Dynamic Role Switching**: Dropdown selection with SID input for testing
+- ✅ **Responsive Design**: Works perfectly on desktop, tablet, and mobile
 
-### Groups Management
-- ✅ **Group Creation**: Create and manage user groups
-- ✅ **User Assignment**: Add/remove users from groups
-- ✅ **Group Information**: Add descriptions and manage group details
-- ✅ **Member Management**: View and manage group members
+### 👥 **Employee Management**
+- ✅ **1,254+ Employees**: Real HR data imported from CSV
+- ✅ **Card-Based Layout**: Modern, responsive employee cards
+- ✅ **Search & Filter**: Real-time search with debouncing
+- ✅ **JCP Integration**: Job Competency Profile indicators
+- ✅ **Assessor Indicators**: Visual icons showing assessor status
+- ✅ **Edit Functionality**: Complete employee data editing
+- ✅ **No Pagination**: All employees visible on single page
 
-### Authentication & Security
-- ✅ **JWT Authentication**: Secure token-based authentication
-- ✅ **Role-based Access**: Different permissions for different roles
+### 🏢 **Jobs Management**
+- ✅ **471 Jobs**: Complete job management system
+- ✅ **Table View**: Comprehensive job listing
+- ✅ **Filtering**: Division and location filters
+- ✅ **Statistics**: Static counts in header
+- ✅ **Edit Pages**: Full job data editing
+- ✅ **Employee Assignment View**: See all employees assigned to each job
+- ✅ **JCP Integration**: Visual indicators for jobs with competency profiles
+
+### 👨‍💼 **Manager Features**
+- ✅ **Hierarchical Team Management**: View all direct and indirect reports
+- ✅ **Team Jobs**: Jobs specific to manager's division/hierarchy
+- ✅ **Team JCPs**: Job Competency Profiles for team members
+- ✅ **JCP Indicators**: Visual badges showing which employees have JCPs
+- ✅ **Dynamic SID Testing**: Test with different manager SIDs
+- ✅ **Team Statistics**: JCP coverage and team metrics
+
+### 🎓 **Competency Framework**
+- ✅ **Complete Framework**: All competencies with levels
+- ✅ **List View**: All competencies with statistics
+- ✅ **Search & Filter**: Type and family filtering
+- ✅ **Edit Functionality**: Complete competency editing
+- ✅ **Assessment Tracking**: Employee competency assessments
+- ✅ **Assessor Integration**: Visual indicators for competencies with assessors
+- ✅ **Assessor Management**: Complete assessor-competency mapping system
+
+### 🔗 **Job-Competency Mapping**
+- ✅ **Profile Management**: Create and manage job profiles
+- ✅ **Competency Linking**: Link jobs to required competencies
+- ✅ **Level Requirements**: Set competency levels per job
+- ✅ **Visual Interface**: Easy-to-use mapping system
+
+### 👤 **User Interface (Staff)**
+- ✅ **My Profile**: Complete personal and job information
+- ✅ **Job Competency Profile**: Required competencies display
+- ✅ **Personalized Navigation**: Role-specific menu items
+- ✅ **Quick Actions**: Easy access to future features
+- ✅ **Real Data Integration**: SID 2254 demonstration
+
+### 👨‍🏫 **Assessor Management System**
+- ✅ **Complete CRUD Operations**: Create, read, update, delete assessor mappings
+- ✅ **Card-Based Interface**: Modern, attractive assessor management UI
+- ✅ **Search & Filter**: Real-time search by assessor name or SID
+- ✅ **4 Competency Levels**: BASIC, INTERMEDIATE, ADVANCED, MASTERY support
+- ✅ **All Competencies**: Complete list of 168+ competencies available
+- ✅ **All Employees**: Full employee database integration
+- ✅ **Cross-Page Integration**: Assessor indicators on Competencies and Employees pages
+
+### 🔐 **Authentication & Security**
+- ✅ **Role-based Access**: Different interfaces for different roles
 - ✅ **Protected Routes**: Secure access to system features
+- ✅ **Testing Mode**: Simplified role switching for development
 
 ### UI/UX Features
 - ✅ **Modern Design**: Clean, professional interface using Tailwind CSS

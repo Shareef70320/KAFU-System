@@ -15,15 +15,51 @@ import {
   UserCog,
   BookOpen,
   Briefcase,
-  Link
+  Link,
+  RefreshCw,
+  User,
+  Upload,
+  Target,
+  BarChart3,
+  MessageSquare
 } from 'lucide-react';
+import { useUser } from '../contexts/UserContext';
+import { useQuery } from '@tanstack/react-query';
+import api from '../lib/api';
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { currentRole, setCurrentRole, currentSid, setCurrentSid } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const navigation = [
+  // Enforce role-safe routing on refresh and direct loads
+  React.useEffect(() => {
+    const path = location.pathname;
+    const isAdminPath = path.startsWith('/dashboard') || path.startsWith('/users') || path.startsWith('/groups') || path.startsWith('/employees') || path.startsWith('/competencies') || path.startsWith('/jobs') || path.startsWith('/job-competency-mapping') || path.startsWith('/job-criticality') || path.startsWith('/job-evaluation') || path.startsWith('/assessors') || path.startsWith('/assessments') || path.startsWith('/question-bank') || path.startsWith('/photo-upload');
+    const isUserPath = path.startsWith('/user');
+
+    if (currentRole === 'USER' && isAdminPath) {
+      navigate('/user', { replace: true });
+    } else if (currentRole === 'ADMIN' && isUserPath) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [currentRole, location.pathname, navigate]);
+
+  // Check if current user is a manager (has direct reports)
+  const { data: isManager } = useQuery({
+    queryKey: ['is-manager', currentSid],
+    queryFn: async () => {
+      if (!currentSid || currentRole !== 'USER') return false;
+      const response = await api.get('/employees?limit=2000');
+      const employees = response.data.employees || response.data;
+      return employees.filter(emp => emp.line_manager_sid === currentSid).length > 0;
+    },
+    enabled: !!currentSid && currentRole === 'USER'
+  });
+
+  // Admin navigation
+  const adminNavigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Groups', href: '/groups', icon: UserCheck },
@@ -31,19 +67,93 @@ const Layout = () => {
     { name: 'Competencies', href: '/competencies', icon: BookOpen },
     { name: 'Jobs', href: '/jobs', icon: Briefcase },
     { name: 'Job-Competency Mapping', href: '/job-competency-mapping', icon: Link },
+    { name: 'Job Criticality', href: '/job-criticality', icon: Target },
+    { name: 'Job Evaluation', href: '/job-evaluation', icon: BarChart3 },
+    { name: 'Assessors', href: '/assessors', icon: UserCheck },
+    { name: 'Assessments', href: '/assessments', icon: Target },
+    { name: 'Question Bank', href: '/question-bank', icon: BookOpen },
+    { name: 'Photo Upload', href: '/photo-upload', icon: Upload },
   ];
 
+  // Base user navigation (for all users)
+  const baseUserNavigation = [
+    { name: 'Dashboard', href: '/user', icon: LayoutDashboard },
+    { name: 'My Profile', href: '/user/profile', icon: User },
+    { name: 'My Competencies', href: '/user/competencies', icon: BookOpen },
+    { name: 'Assessments', href: '/user/assessments', icon: UserCheck },
+    { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
+  ];
+
+  // Manager-specific navigation (only for users with direct reports)
+  const managerNavigation = [
+    { name: 'My Team', href: '/user/team', icon: Users },
+    { name: 'Team Jobs', href: '/user/jobs', icon: Briefcase },
+    { name: 'Team JCPs', href: '/user/jcps', icon: BookOpen },
+    { name: 'Manager Assessments', href: '/user/manager-assessments', icon: BarChart3 },
+  ];
+
+  const getNavigation = () => {
+    switch (currentRole) {
+      case 'ADMIN': 
+        return adminNavigation;
+      case 'USER': 
+        // Show manager pages only if user is actually a manager
+        return isManager ? [...baseUserNavigation, ...managerNavigation] : baseUserNavigation;
+      default: 
+        // Default to USER nav to prevent accidental admin exposure
+        return baseUserNavigation;
+    }
+  };
+
+  const navigation = getNavigation();
+
   // Mock user data for display
-  const user = {
-    firstName: 'Admin',
-    lastName: 'User',
-    role: 'ADMIN'
+  const user = currentRole === 'ADMIN' 
+    ? {
+        firstName: 'Admin',
+        lastName: 'User',
+        role: 'ADMIN',
+        sid: 'ADMIN',
+        jobTitle: 'System Administrator',
+        division: 'IT',
+        unit: 'System Administration',
+        grade: 'N/A',
+        location: 'Head Office',
+        email: 'admin@kafu.com'
+      }
+    : {
+        firstName: 'Loading...',
+        lastName: '',
+        role: currentRole,
+        sid: currentSid,
+        jobTitle: 'Loading...',
+        division: 'Loading...',
+        unit: 'Loading...',
+        grade: 'Loading...',
+        location: 'Loading...',
+        email: `${currentSid}@omanairports.com`
+      };
+
+  const handleRoleChange = (newRole) => {
+    setCurrentRole(newRole);
+    // Navigate to appropriate dashboard based on role
+    switch (newRole) {
+      case 'ADMIN':
+        navigate('/dashboard');
+        break;
+      case 'USER':
+        navigate('/user');
+        break;
+      default:
+        navigate('/user');
+    }
   };
 
   const isActive = (path) => location.pathname === path;
 
   return (
     <div className="min-h-screen bg-gray-50">
+      
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
@@ -150,53 +260,11 @@ const Layout = () => {
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main content area */}
       <div className="lg:pl-64">
-        {/* Top navigation */}
-        <div className="sticky top-0 z-10 bg-white shadow-sm">
-          <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 lg:hidden"
-              >
-                <Menu className="h-6 w-6" />
-              </button>
-              <div className="ml-4 lg:ml-0">
-                <h1 className="text-2xl font-semibold text-gray-900">
-                  {navigation.find(item => isActive(item.href))?.name || 'Dashboard'}
-                </h1>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                />
-              </div>
-              <button className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                <Bell className="h-6 w-6" />
-              </button>
-              <button className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                <Settings className="h-6 w-6" />
-              </button>
-            </div>
-          </div>
+        <div className="min-h-screen px-4 py-8">
+          <Outlet />
         </div>
-
-        {/* Page content */}
-        <main className="flex-1">
-          <div className="py-6">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-              <Outlet />
-            </div>
-          </div>
-        </main>
       </div>
     </div>
   );

@@ -23,7 +23,11 @@ import {
   ChevronDown,
   ChevronUp,
   Target,
-  X
+  X,
+  Info,
+  Star,
+  Award,
+  TrendingUp
 } from 'lucide-react';
 import api from '../lib/api';
 
@@ -37,21 +41,25 @@ const JobCompetencyMapping = () => {
   const [competencyFilter, setCompetencyFilter] = useState('all');
   const [levelFilter, setLevelFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // State for competency details modal
+  const [selectedCompetency, setSelectedCompetency] = useState(null);
+  const [showCompetencyModal, setShowCompetencyModal] = useState(false);
 
-  // Fetch jobs
+  // Fetch jobs - get all jobs without pagination
   const { data: jobsData } = useQuery({
     queryKey: ['jobs'],
     queryFn: async () => {
-      const response = await api.get('/jobs');
+      const response = await api.get('/jobs?limit=1000');
       return response.data;
     }
   });
 
-  // Fetch competencies
+  // Fetch competencies - get all competencies without pagination
   const { data: competenciesData } = useQuery({
     queryKey: ['competencies'],
     queryFn: async () => {
-      const response = await api.get('/competencies');
+      const response = await api.get('/competencies?limit=1000');
       return response.data;
     }
   });
@@ -143,6 +151,36 @@ const JobCompetencyMapping = () => {
   const handleDeleteMapping = (mappingId) => {
     if (window.confirm('Are you sure you want to delete this competency from the job profile?')) {
       deleteMappingMutation.mutate(mappingId);
+    }
+  };
+
+  // Handle competency click to show details
+  const handleCompetencyClick = async (competency, requiredLevel) => {
+    try {
+      // Fetch competency levels to get detailed information
+      const response = await api.get(`/competencies/${competency.id}`);
+      const competencyData = response.data;
+      
+      // Find the specific level details
+      const levelDetails = competencyData.levels?.find(level => level.level === requiredLevel);
+      
+      setSelectedCompetency({
+        ...competency,
+        requiredLevel,
+        levelDetails,
+        allLevels: competencyData.levels || []
+      });
+      setShowCompetencyModal(true);
+    } catch (error) {
+      console.error('Error fetching competency details:', error);
+      // Fallback to basic info if API fails
+      setSelectedCompetency({
+        ...competency,
+        requiredLevel,
+        levelDetails: null,
+        allLevels: []
+      });
+      setShowCompetencyModal(true);
     }
   };
 
@@ -439,27 +477,24 @@ const JobCompetencyMapping = () => {
                           {profile.competencies.map((comp) => (
                             <div
                               key={comp.id}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                              onClick={() => handleCompetencyClick(comp.competency, comp.requiredLevel)}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-all duration-200 group"
                             >
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2 mb-1">
                                   <BookOpen className="h-4 w-4 text-green-600" />
-                                  <span className="font-medium text-sm text-gray-900">
+                                  <span className="font-medium text-sm text-gray-900 group-hover:text-blue-600">
                                     {comp.competency.name}
                                   </span>
+                                  <Info className="h-3 w-3 text-gray-400 group-hover:text-blue-500" />
                                 </div>
                                 <Badge className={`text-xs ${getLevelColor(comp.requiredLevel)}`}>
                                   {comp.requiredLevel}
                                 </Badge>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteMapping(comp.id)}
-                                className="text-red-600 hover:text-red-700 p-1"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              <div className="text-gray-400 group-hover:text-blue-500">
+                                <Eye className="h-4 w-4" />
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -471,6 +506,166 @@ const JobCompetencyMapping = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Competency Details Modal */}
+        {showCompetencyModal && selectedCompetency && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <BookOpen className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        {selectedCompetency.name}
+                      </h3>
+                      <p className="text-sm text-gray-600">{selectedCompetency.family}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCompetencyModal(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                {/* Competency Information */}
+                <div className="space-y-6">
+                  {/* Basic Info */}
+                  <div>
+                    <h4 className="text-lg font-medium text-gray-900 mb-3">Competency Information</h4>
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                      <div>
+                        <label className="text-sm font-medium text-gray-600">Definition</label>
+                        <p className="text-gray-900 mt-1">{selectedCompetency.definition}</p>
+                      </div>
+                      {selectedCompetency.description && (
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Description</label>
+                          <p className="text-gray-900 mt-1">{selectedCompetency.description}</p>
+                        </div>
+                      )}
+                      <div className="flex items-center space-x-4">
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Type</label>
+                          <Badge className={`mt-1 ${
+                            selectedCompetency.type === 'TECHNICAL' 
+                              ? 'bg-blue-100 text-blue-800' 
+                              : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {selectedCompetency.type === 'TECHNICAL' ? 'Technical' : 'Non-Technical'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-600">Family</label>
+                          <Badge className="mt-1 bg-gray-100 text-gray-800">
+                            {selectedCompetency.family}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Required Level Details */}
+                  <div>
+                    <h4 className="text-lg font-medium text-gray-900 mb-3">Required Level Details</h4>
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-2">
+                          <Target className="h-5 w-5 text-blue-600" />
+                          <span className="font-medium text-blue-900">Required Level</span>
+                        </div>
+                        <Badge className={`${getLevelColor(selectedCompetency.requiredLevel)}`}>
+                          {selectedCompetency.requiredLevel}
+                        </Badge>
+                      </div>
+                      
+                      {selectedCompetency.levelDetails ? (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-sm font-medium text-blue-700">Level Title</label>
+                            <p className="text-blue-900 font-medium">{selectedCompetency.levelDetails.title}</p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-blue-700">Description</label>
+                            <p className="text-blue-900">{selectedCompetency.levelDetails.description}</p>
+                          </div>
+                          {selectedCompetency.levelDetails.indicators && selectedCompetency.levelDetails.indicators.length > 0 && (
+                            <div>
+                              <label className="text-sm font-medium text-blue-700">Key Indicators</label>
+                              <ul className="mt-2 space-y-1">
+                                {selectedCompetency.levelDetails.indicators.map((indicator, index) => (
+                                  <li key={index} className="flex items-start space-x-2 text-blue-900">
+                                    <Star className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                                    <span className="text-sm">{indicator}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4">
+                          <AlertCircle className="h-8 w-8 text-blue-400 mx-auto mb-2" />
+                          <p className="text-blue-700">Level details not available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* All Available Levels */}
+                  {selectedCompetency.allLevels && selectedCompetency.allLevels.length > 0 && (
+                    <div>
+                      <h4 className="text-lg font-medium text-gray-900 mb-3">All Available Levels</h4>
+                      <div className="space-y-2">
+                        {selectedCompetency.allLevels.map((level) => (
+                          <div
+                            key={level.id}
+                            className={`p-3 rounded-lg border ${
+                              level.level === selectedCompetency.requiredLevel
+                                ? 'bg-blue-50 border-blue-200'
+                                : 'bg-gray-50 border-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <Badge className={`text-xs ${getLevelColor(level.level)}`}>
+                                  {level.level}
+                                </Badge>
+                                <span className="font-medium text-gray-900">{level.title}</span>
+                                {level.level === selectedCompetency.requiredLevel && (
+                                  <Badge className="bg-blue-100 text-blue-800">Required</Badge>
+                                )}
+                              </div>
+                              <TrendingUp className="h-4 w-4 text-gray-400" />
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1 ml-16">{level.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowCompetencyModal(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
