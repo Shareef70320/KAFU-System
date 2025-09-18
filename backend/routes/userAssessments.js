@@ -285,7 +285,7 @@ router.post('/start', async (req, res) => {
       // 2 per level: BASIC, INTERMEDIATE, ADVANCED, MASTERY
       questions = await prisma.$queryRawUnsafe(`
         (
-          SELECT DISTINCT q.id, q.text, q.type, q.points, q.explanation,
+          SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
           JOIN competencies c ON q.competency_id = c.id
@@ -298,7 +298,7 @@ router.post('/start', async (req, res) => {
         )
         UNION ALL
         (
-          SELECT DISTINCT q.id, q.text, q.type, q.points, q.explanation,
+          SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
           JOIN competencies c ON q.competency_id = c.id
@@ -311,7 +311,7 @@ router.post('/start', async (req, res) => {
         )
         UNION ALL
         (
-          SELECT DISTINCT q.id, q.text, q.type, q.points, q.explanation,
+          SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
           JOIN competencies c ON q.competency_id = c.id
@@ -324,7 +324,7 @@ router.post('/start', async (req, res) => {
         )
         UNION ALL
         (
-          SELECT DISTINCT q.id, q.text, q.type, q.points, q.explanation,
+          SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
           JOIN competencies c ON q.competency_id = c.id
@@ -337,9 +337,18 @@ router.post('/start', async (req, res) => {
         )
       `, competencyId);
     } else {
-      // Default RANDOM strategy (with recent-exclusion and DISTINCT)
+      // Default RANDOM strategy (with recent-exclusion) using inner picked subquery to allow ORDER BY RANDOM()
       questions = await prisma.$queryRawUnsafe(`
-        SELECT DISTINCT
+        WITH picked AS (
+          SELECT q.id
+          FROM questions q
+          WHERE q.competency_id = $1
+            AND q.is_active = true
+            ${excludeRecentClause}
+          ORDER BY RANDOM()
+          LIMIT $2
+        )
+        SELECT 
           q.id,
           q.text,
           q.type,
@@ -347,19 +356,23 @@ router.post('/start', async (req, res) => {
           q.explanation,
           c.name as competency_name,
           cl.level as competency_level
-        FROM questions q
+        FROM picked p
+        JOIN questions q ON q.id = p.id
         JOIN competencies c ON q.competency_id = c.id
         LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
-        WHERE q.competency_id = $1
-          AND q.is_active = true
-          ${excludeRecentClause}
-        ORDER BY RANDOM()
-        LIMIT $2
       `, competencyId, numQuestions);
       // If exclusion left too few, fallback without exclusion
       if (!questions || questions.length < numQuestions) {
         const fallback = await prisma.$queryRaw`
-          SELECT DISTINCT
+          WITH picked AS (
+            SELECT q.id
+            FROM questions q
+            WHERE q.competency_id = ${competencyId}
+              AND q.is_active = true
+            ORDER BY RANDOM()
+            LIMIT ${numQuestions}
+          )
+          SELECT 
             q.id,
             q.text,
             q.type,
@@ -367,13 +380,10 @@ router.post('/start', async (req, res) => {
             q.explanation,
             c.name as competency_name,
             cl.level as competency_level
-          FROM questions q
+          FROM picked p
+          JOIN questions q ON q.id = p.id
           JOIN competencies c ON q.competency_id = c.id
           LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
-          WHERE q.competency_id = ${competencyId}
-            AND q.is_active = true
-          ORDER BY RANDOM()
-          LIMIT ${numQuestions}
         `;
         if (fallback && fallback.length >= (questions?.length || 0)) {
           questions = fallback;
