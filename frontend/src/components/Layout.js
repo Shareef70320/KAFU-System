@@ -16,13 +16,13 @@ import {
   BookOpen,
   Briefcase,
   Link,
-  RefreshCw,
   User,
   Upload,
   Target,
   BarChart3,
   MessageSquare
 } from 'lucide-react';
+import { Input } from './ui/input';
 import { useUser } from '../contexts/UserContext';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
@@ -153,6 +153,38 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Compact Role/SID switcher */}
+      <div className="w-full bg-gray-100 border-b border-gray-200 text-xs px-4 py-1 flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-700">Role</span>
+          <div className="inline-flex rounded-md shadow-sm" role="group">
+            <button
+              type="button"
+              onClick={() => handleRoleChange('USER')}
+              className={`px-2 py-1 text-xs border ${currentRole === 'USER' ? 'bg-white text-gray-900 border-gray-300' : 'bg-gray-50 text-gray-600 border-gray-200' } rounded-l-md`}
+            >
+              USER
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRoleChange('ADMIN')}
+              className={`px-2 py-1 text-xs border-t border-b border-r ${currentRole === 'ADMIN' ? 'bg-white text-gray-900 border-gray-300' : 'bg-gray-50 text-gray-600 border-gray-200' } rounded-r-md`}
+            >
+              ADMIN
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-700">SID</span>
+          <div className="w-32">
+            <Input
+              value={currentSid || ''}
+              placeholder="Enter SID"
+              onChange={(e) => setCurrentSid(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
       
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
