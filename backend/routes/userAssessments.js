@@ -101,6 +101,27 @@ router.get('/competencies', async (req, res) => {
     let competencies = [];
 
     if (userId) {
+      // Debug: inspect employee job_code and job mapping
+      try {
+        const empRows = await prisma.$queryRaw`
+          SELECT sid, job_code FROM employees WHERE TRIM(UPPER(sid)) = TRIM(UPPER(${userId})) LIMIT 1
+        `;
+        console.log('[user-assessments/competencies] employee row:', empRows);
+        if (empRows && empRows.length) {
+          const jobRows = await prisma.$queryRaw`
+            SELECT id, code FROM jobs WHERE TRIM(UPPER(code)) = TRIM(UPPER(${empRows[0].job_code})) LIMIT 1
+          `;
+          console.log('[user-assessments/competencies] matched job row:', jobRows);
+          if (jobRows && jobRows.length) {
+            const jcCount = await prisma.$queryRaw`
+              SELECT COUNT(*)::int as cnt FROM job_competencies WHERE "jobId" = ${jobRows[0].id}
+            `;
+            console.log('[user-assessments/competencies] job_competencies count:', jcCount);
+          }
+        }
+      } catch (dbgErr) {
+        console.warn('[user-assessments/competencies] debug queries failed:', dbgErr?.message || dbgErr);
+      }
       // Filter competencies by the user's job_code via job_competency mappings
       console.log('[user-assessments/competencies] Fetch for userId:', userId, 'raw:', req.query.userId);
       competencies = await prisma.$queryRaw`
