@@ -710,7 +710,8 @@ router.get('/history/:userId', async (req, res) => {
         "as".total_questions,
         "as".started_at,
         "as".completed_at,
-        "as".status
+        "as".status,
+        COALESCE("as".manager_selected_level, NULL) AS manager_selected_level
       FROM assessment_sessions "as"
       JOIN competencies c ON "as".competency_id = c.id
       WHERE "as".user_id = ${userId}
@@ -730,6 +731,7 @@ router.get('/history/:userId', async (req, res) => {
         startedAt: assessment.started_at,
         completedAt: assessment.completed_at,
         status: assessment.status
+        , managerSelectedLevel: assessment.manager_selected_level
       }))
     });
   } catch (error) {

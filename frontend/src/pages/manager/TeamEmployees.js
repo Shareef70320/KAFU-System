@@ -40,7 +40,7 @@ const TeamEmployees = () => {
   const [showAssessmentsModal, setShowAssessmentsModal] = useState(false);
   const [assessments, setAssessments] = useState([]);
   const [assessmentsLoading, setAssessmentsLoading] = useState(false);
-  const [managerLevel, setManagerLevel] = useState('');
+  const [managerLevels, setManagerLevels] = useState({}); // { [competencyId]: level }
   const [showAssessmentDetailModal, setShowAssessmentDetailModal] = useState(false);
   const [assessmentDetail, setAssessmentDetail] = useState(null);
   const [assessmentDetailLoading, setAssessmentDetailLoading] = useState(false);
@@ -162,7 +162,7 @@ const TeamEmployees = () => {
   const handleAssessmentsClick = async (employee) => {
     setSelectedEmployee(employee);
     setAssessments([]);
-    setManagerLevel('');
+    setManagerLevels({});
     setShowAssessmentsModal(true);
     try {
       setAssessmentsLoading(true);
@@ -176,16 +176,17 @@ const TeamEmployees = () => {
   };
 
   const saveManagerLevelByCompetency = async (userId, competencyId) => {
-    if (!managerLevel) return;
+    const level = managerLevels[competencyId];
+    if (!level) return;
     try {
       await api.post('/user-assessments/manager/confirm-level-by-competency', {
         userId,
         competencyId,
-        managerSelectedLevel: managerLevel
+        managerSelectedLevel: level
       });
       const resp = await api.get(`/user-assessments/history/${selectedEmployee.sid}`);
       setAssessments(resp.data.assessments || []);
-      setManagerLevel('');
+      setManagerLevels(prev => ({ ...prev, [competencyId]: level }));
     } catch (e) {
       console.error('Failed to save manager level:', e);
     }
@@ -785,8 +786,8 @@ const TeamEmployees = () => {
                             <div className="flex items-center gap-2">
                               <div className="text-xs text-gray-500 mr-2">{group.items.length} attempt{group.items.length > 1 ? 's' : ''}</div>
                               <select
-                                value={managerLevel}
-                                onChange={(e) => setManagerLevel(e.target.value)}
+                                value={managerLevels[compId] || ''}
+                                onChange={(e) => setManagerLevels(prev => ({ ...prev, [compId]: e.target.value }))}
                                 className="border border-gray-300 rounded-md px-2 py-1 text-sm"
                               >
                                 <option value="">Manager Level</option>
@@ -795,7 +796,7 @@ const TeamEmployees = () => {
                                 <option value="ADVANCED">ADVANCED</option>
                                 <option value="EXPERT">EXPERT</option>
                               </select>
-                              <Button size="sm" onClick={() => saveManagerLevelByCompetency(selectedEmployee.sid, compId)} disabled={!managerLevel}>
+                              <Button size="sm" onClick={() => saveManagerLevelByCompetency(selectedEmployee.sid, compId)} disabled={!managerLevels[compId]}>
                                 Save
                               </Button>
                             </div>
