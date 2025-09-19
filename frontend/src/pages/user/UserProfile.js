@@ -46,20 +46,20 @@ const UserProfile = () => {
     enabled: !!currentSid
   });
 
-  // Fetch job competency mappings for this user
+  // Fetch job competency mappings for this user with detailed level information
   const { data: jcpData } = useQuery({
     queryKey: ['user-jcp', currentSid],
     queryFn: async () => {
-      const response = await api.get('/job-competencies');
-      const mappings = response.data.mappings || [];
-      const userMapping = mappings.find(mapping => mapping.job.code === employeeData?.job_code);
+      if (!employeeData?.job_code) return null;
       
-      if (userMapping) {
-        // Group competencies by job
-        const jobCompetencies = mappings.filter(mapping => mapping.job.code === employeeData?.job_code);
+      // Fetch job competencies with detailed level information
+      const response = await api.get(`/job-competencies/job/${employeeData.job_code}`);
+      const mappings = response.data || [];
+      
+      if (mappings.length > 0) {
         return {
-          job: userMapping.job,
-          competencies: jobCompetencies
+          job: mappings[0].job,
+          competencies: mappings
         };
       }
       return null;
@@ -280,31 +280,115 @@ const UserProfile = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 Required Competencies ({jcpData.competencies.length})
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-6">
                 {jcpData.competencies.map((item, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-2">
+                  <div key={index} className="border border-gray-200 rounded-lg p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
+                    {/* Competency Header */}
+                    <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
-                        <h4 className="text-sm font-medium text-gray-900">{item.competency.name}</h4>
-                        <p className="text-xs text-gray-500 mt-1">{item.competency.family}</p>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-1">{item.competency.name}</h4>
+                        <div className="flex items-center space-x-3 text-sm text-gray-500">
+                          <span className="flex items-center">
+                            <BookOpen className="h-4 w-4 mr-1" />
+                            {item.competency.family}
+                          </span>
+                          <span className="flex items-center">
+                            <Award className="h-4 w-4 mr-1" />
+                            {item.competency.type}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
                           item.requiredLevel === 'BASIC' ? 'bg-gray-100 text-gray-800' :
                           item.requiredLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
                           item.requiredLevel === 'ADVANCED' ? 'bg-blue-100 text-blue-800' :
                           'bg-green-100 text-green-800'
                         }`}>
-                          {item.requiredLevel}
+                          Required: {item.requiredLevel}
                         </span>
                         {item.isRequired && (
                           <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                            Required
+                            Mandatory
                           </span>
                         )}
                       </div>
                     </div>
-                    <p className="text-sm text-gray-600 mt-2">{item.competency.definition}</p>
+
+                    {/* Competency Definition */}
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium text-gray-900 mb-2">Competency Definition</h5>
+                      <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
+                        {item.competency.definition}
+                      </p>
+                    </div>
+
+                    {/* Level Definitions */}
+                    {item.competency.levels && item.competency.levels.length > 0 && (
+                      <div className="mb-4">
+                        <h5 className="text-sm font-medium text-gray-900 mb-3">Level Definitions</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                          {item.competency.levels.map((level, levelIndex) => (
+                            <div key={levelIndex} className={`p-3 rounded-lg border ${
+                              level.level === item.requiredLevel 
+                                ? 'border-blue-300 bg-blue-50' 
+                                : 'border-gray-200 bg-gray-50'
+                            }`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                                  level.level === 'BASIC' ? 'bg-gray-100 text-gray-800' :
+                                  level.level === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
+                                  level.level === 'ADVANCED' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  {level.level}
+                                </span>
+                                {level.level === item.requiredLevel && (
+                                  <span className="text-xs text-blue-600 font-medium">Required</span>
+                                )}
+                              </div>
+                              <h6 className="text-xs font-medium text-gray-900 mb-1">{level.title}</h6>
+                              <p className="text-xs text-gray-600 leading-relaxed">{level.description}</p>
+                              {level.indicators && level.indicators.length > 0 && (
+                                <div className="mt-2">
+                                  <p className="text-xs font-medium text-gray-700 mb-1">Key Indicators:</p>
+                                  <ul className="text-xs text-gray-600 space-y-1">
+                                    {level.indicators.slice(0, 2).map((indicator, idx) => (
+                                      <li key={idx} className="flex items-start">
+                                        <span className="text-gray-400 mr-1">•</span>
+                                        <span>{indicator}</span>
+                                      </li>
+                                    ))}
+                                    {level.indicators.length > 2 && (
+                                      <li className="text-gray-500 italic">
+                                        +{level.indicators.length - 2} more indicators
+                                      </li>
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                      <div className="text-xs text-gray-500">
+                        Competency ID: {item.competency.id}
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" size="sm">
+                          <BookOpen className="h-3 w-3 mr-1" />
+                          Learn More
+                        </Button>
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Take Assessment
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
