@@ -64,6 +64,15 @@ const AssessorDashboard = () => {
     enabled: !!currentSid
   });
 
+  // Fetch unassigned review requests
+  const { data: unassignedRequestsData, isLoading: unassignedLoading } = useQuery({
+    queryKey: ['unassigned-review-requests'],
+    queryFn: async () => {
+      const response = await api.get(`/competency-reviews/requests?status=REQUESTED`);
+      return response.data;
+    }
+  });
+
   // Fetch assessor's completed reviews
   const { data: completedReviewsData, isLoading: completedLoading } = useQuery({
     queryKey: ['assessor-completed-reviews', currentSid],
@@ -72,6 +81,32 @@ const AssessorDashboard = () => {
       return response.data;
     },
     enabled: !!currentSid
+  });
+
+  // Assign review mutation
+  const assignReviewMutation = useMutation({
+    mutationFn: async (requestId) => {
+      const response = await api.put(`/competency-reviews/requests/${requestId}/assign`, {
+        assessorId: currentSid,
+        scheduledDate: new Date().toISOString().split('T')[0] // Today's date
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['assessor-review-requests']);
+      queryClient.invalidateQueries(['unassigned-review-requests']);
+      toast({
+        title: "Success",
+        description: "Review assigned successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to assign review",
+        variant: "destructive",
+      });
+    }
   });
 
   // Start review mutation
@@ -136,6 +171,10 @@ const AssessorDashboard = () => {
       });
     }
   });
+
+  const handleAssignReview = (requestId) => {
+    assignReviewMutation.mutate(requestId);
+  };
 
   const handleStartReview = (requestId) => {
     startReviewMutation.mutate(requestId);
@@ -266,6 +305,9 @@ const AssessorDashboard = () => {
     ['REQUESTED', 'SCHEDULED', 'IN_PROGRESS'].includes(r.status)
   ) || [];
   const completedReviews = completedReviewsData?.requests || [];
+  const unassignedRequests = unassignedRequestsData?.requests?.filter(r => 
+    !r.assessor_id && r.status === 'REQUESTED'
+  ) || [];
 
   return (
     <div className="space-y-6">
@@ -276,7 +318,7 @@ const AssessorDashboard = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center">
@@ -287,6 +329,19 @@ const AssessorDashboard = () => {
           <CardContent>
             <div className="text-3xl font-bold text-yellow-600">{pendingRequests.length}</div>
             <p className="text-sm text-gray-500">Awaiting your review</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center">
+              <AlertCircle className="h-5 w-5 mr-2 text-orange-600" />
+              Unassigned Requests
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-orange-600">{unassignedRequests.length}</div>
+            <p className="text-sm text-gray-500">Available to assign</p>
           </CardContent>
         </Card>
 
@@ -418,6 +473,85 @@ const AssessorDashboard = () => {
                           Complete Review
                         </Button>
                       )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Unassigned Review Requests */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            Unassigned Review Requests
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {unassignedLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+            </div>
+          ) : unassignedRequests.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <p>No unassigned review requests</p>
+              <p className="text-sm">New requests will appear here</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {unassignedRequests.map((request) => (
+                <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h3 className="font-semibold text-gray-900">{request.competency_name}</h3>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(request.requested_level)}`}>
+                          {request.requested_level}
+                        </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(request.status)}`}>
+                          {request.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-3">
+                        <div>
+                          <span className="font-medium">Employee:</span>
+                          <div>{request.employee_first_name} {request.employee_last_name}</div>
+                          <div className="text-xs text-gray-500">{request.employee_job_title}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium">Division:</span>
+                          <div>{request.employee_division}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium">Requested:</span>
+                          <div>{formatDate(request.requested_date)}</div>
+                        </div>
+                        <div>
+                          <span className="font-medium">Competency Family:</span>
+                          <div>{request.competency_family}</div>
+                        </div>
+                      </div>
+                      {request.notes && (
+                        <div className="mb-3">
+                          <span className="text-sm font-medium text-gray-700">Notes:</span>
+                          <p className="text-sm text-gray-600">{request.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleAssignReview(request.id)}
+                        disabled={assignReviewMutation.isPending}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <User className="h-3 w-3 mr-1" />
+                        Assign to Me
+                      </Button>
                     </div>
                   </div>
                 </div>
