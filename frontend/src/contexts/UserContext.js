@@ -23,6 +23,7 @@ export const UserProvider = ({ children }) => {
     console.log('UserContext - Initializing currentSid from localStorage:', sid);
     return sid;
   });
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Update localStorage when values change
   useEffect(() => {
@@ -39,6 +40,12 @@ export const UserProvider = ({ children }) => {
     queryClient.clear();
   }, [currentSid, queryClient]);
 
+  // Mark as initialized after first render
+  useEffect(() => {
+    setIsInitialized(true);
+    console.log('UserContext - Initialized with values:', { currentRole, currentSid });
+  }, []);
+
   // Debug: Log current values
   useEffect(() => {
     console.log('UserContext - Current values:', { currentRole, currentSid });
@@ -48,7 +55,8 @@ export const UserProvider = ({ children }) => {
     currentRole,
     setCurrentRole,
     currentSid,
-    setCurrentSid
+    setCurrentSid,
+    isInitialized
   };
 
   return (

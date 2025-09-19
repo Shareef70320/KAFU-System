@@ -555,3 +555,59 @@ curl -s 'http://localhost:5001/api/user-assessments/competencies?userId=2254' | 
 curl -s 'http://localhost:5001/api/user-assessments/competencies?userId=2254' | jq '.competencies[] | {name, hasQuestions, hasAssessment}'
 # All returned competencies should have both flags as true
 ```
+
+## 🔧 **Page Refresh Loading Delay Fix**
+
+### **Problem:** 
+Page takes a long time to load when refreshed, appears to be "processing in the back"
+
+### **Root Cause:** 
+Excessive API calls to `/user-assessments/settings/` endpoint for each competency card, causing network congestion and slow page rendering
+
+### **Symptoms:**
+- Page shows loading state for extended time after refresh
+- Multiple repeated API calls to settings endpoint in logs
+- Network tab shows many pending requests
+- User sees "processing" indicator
+
+### **Solution:**
+```bash
+# 1. Remove redundant useSettings hook calls
+# In frontend/src/pages/user/UserAssessments.js, remove:
+# const useSettings = (competencyId) => useQuery({...});
+
+# 2. Use data already available in competencies response
+# The competencies API already includes numQuestions and timeLimitMinutes
+# No need for additional settings API calls
+
+# 3. Update CompetencyCard to use competency data directly
+# const CompetencyCard = ({ competency }) => {
+#   const numQ = competency.numQuestions;
+#   const tlm = competency.timeLimitMinutes;
+#   // Remove useSettings calls
+# };
+
+# 4. Deploy changes
+git add -A && git commit -m "fix(user-assessments): remove redundant settings API calls"
+docker compose up -d --build
+```
+
+### **Prevention:**
+- Always check if data is already available before making additional API calls
+- Use React Query efficiently - avoid duplicate queries for the same data
+- Monitor network requests in browser dev tools during development
+- Test page refresh performance regularly
+
+### **Verification:**
+```bash
+# Check frontend logs for reduced API calls
+docker logs --tail=20 kafu-frontend
+# Should not see repeated /user-assessments/settings/ calls
+
+# Test page refresh speed
+# 1. Open browser dev tools (F12)
+# 2. Go to Network tab
+# 3. Refresh the page
+# 4. Verify only necessary API calls are made
+# 5. Page should load much faster
+```
