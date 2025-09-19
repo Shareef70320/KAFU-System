@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
     const assessments = await prisma.$queryRaw`
       SELECT 
         a.id,
-        a.title,
+        a.name as title,
         a.description,
         a.competency_id,
         a.competency_level_id,
@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
       LEFT JOIN competencies c ON a.competency_id = c.id
       LEFT JOIN competency_levels cl ON a.competency_level_id = cl.id
       LEFT JOIN assessment_questions aq ON a.id = aq.assessment_id
-      GROUP BY a.id, c.name, c.type, c.family, cl.level, cl.title
+      GROUP BY a.id, a.name, c.name, c.type, c.family, cl.level, cl.title
       ORDER BY a.created_at DESC
       LIMIT ${parseInt(limit)} OFFSET ${offset}
     `;
@@ -66,7 +66,18 @@ router.get('/:id', async (req, res) => {
 
     const assessment = await prisma.$queryRaw`
       SELECT 
-        a.*,
+        a.id,
+        a.name as title,
+        a.description,
+        a.competency_id,
+        a.competency_level_id,
+        a.is_active,
+        a.time_limit,
+        a.passing_score,
+        a.max_attempts,
+        a.created_by,
+        a.created_at,
+        a.updated_at,
         c.name as competency_name,
         c.type as competency_type,
         c.family as competency_family,
@@ -127,7 +138,7 @@ router.post('/', async (req, res) => {
 
     const assessment = await prisma.$queryRaw`
       INSERT INTO assessments (
-        title, description, competency_id, competency_level_id, 
+        name, description, competency_id, competency_level_id, 
         time_limit, passing_score, max_attempts, created_by, 
         is_active, created_at, updated_at
       ) VALUES (
@@ -166,7 +177,7 @@ router.put('/:id', async (req, res) => {
     const updateValues = [];
 
     if (title !== undefined) {
-      updateFields.push(`title = $${updateValues.length + 1}`);
+      updateFields.push(`name = $${updateValues.length + 1}`);
       updateValues.push(title);
     }
     if (description !== undefined) {
