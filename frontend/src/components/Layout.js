@@ -71,6 +71,7 @@ const Layout = () => {
     { name: 'Job Evaluation', href: '/job-evaluation', icon: BarChart3 },
     { name: 'Assessors', href: '/assessors', icon: UserCheck },
     { name: 'Assessor Management', href: '/assessor-management', icon: UserCog },
+    { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
     { name: 'Assessments', href: '/assessments', icon: Target },
     { name: 'Question Bank', href: '/question-bank', icon: BookOpen },
     { name: 'Photo Upload', href: '/photo-upload', icon: Upload },
@@ -83,6 +84,7 @@ const Layout = () => {
     { name: 'My Competencies', href: '/user/competencies', icon: BookOpen },
     { name: 'Assessments', href: '/user/assessments', icon: UserCheck },
     { name: 'Performance Reviews', href: '/user/performance-reviews', icon: MessageSquare },
+    { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
     { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
   ];
 
