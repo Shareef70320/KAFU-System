@@ -305,15 +305,15 @@ router.put('/requests/:id/assign', async (req, res) => {
     }
 
     // Update request
-    const updatedRequest = await prisma.$queryRaw`
+    const updatedRequest = await prisma.$queryRawUnsafe(`
       UPDATE review_requests 
-      SET assessor_id = ${assessorId}, 
-          scheduled_date = ${scheduledDate ? `${scheduledDate}::timestamp` : 'NULL'},
+      SET assessor_id = $1, 
+          scheduled_date = $2::timestamp,
           status = 'SCHEDULED'::review_status,
           updated_at = NOW()
-      WHERE id = ${id}
+      WHERE id = $3
       RETURNING *
-    `;
+    `, assessorId, scheduledDate || null, id);
 
     res.json({
       message: 'Assessor assigned successfully',
