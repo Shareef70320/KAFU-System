@@ -24,7 +24,8 @@ import {
   Play,
   FileText,
   Target,
-  TrendingUp
+  TrendingUp,
+  Plus
 } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
 import { useUser } from '../contexts/UserContext';
