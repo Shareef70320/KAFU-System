@@ -810,21 +810,21 @@ router.get('/session/:sessionId', async (req, res) => {
 
     const rows = await prisma.$queryRaw`
       SELECT 
-        as.id as session_id,
-        as.competency_id,
+        "as".id as session_id,
+        "as".competency_id,
         c.name as competency_name,
-        as.score,
-        as.percentage_score,
-        as.correct_answers,
-        as.total_questions,
-        as.started_at,
-        as.completed_at,
-        as.status,
-        as.system_level,
-        as.user_confirmed_level
-      FROM assessment_sessions as
-      JOIN competencies c ON as.competency_id = c.id
-      WHERE as.id = ${sessionId}
+        "as".score,
+        "as".percentage_score,
+        "as".correct_answers,
+        "as".total_questions,
+        "as".started_at,
+        "as".completed_at,
+        "as".status,
+        "as".system_level,
+        "as".user_confirmed_level
+      FROM assessment_sessions "as"
+      JOIN competencies c ON "as".competency_id = c.id
+      WHERE "as".id = ${sessionId}
       LIMIT 1
     `;
 

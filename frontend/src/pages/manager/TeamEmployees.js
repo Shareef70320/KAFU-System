@@ -822,10 +822,12 @@ const TeamEmployees = () => {
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[75vh]">
-              {assessmentDetailLoading || !assessmentDetail ? (
+              {assessmentDetailLoading ? (
                 <div className="flex items-center justify-center h-40">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
                 </div>
+              ) : !assessmentDetail ? (
+                <div className="text-center text-gray-500">Failed to load assessment details.</div>
               ) : (
                 <div className="space-y-4">
                   <div>
