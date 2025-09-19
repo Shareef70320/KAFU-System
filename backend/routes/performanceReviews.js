@@ -273,13 +273,30 @@ router.put('/requests/:id/assign', async (req, res) => {
       return res.status(404).json({ message: 'Assessor not found' });
     }
 
-    // Check if assessor can evaluate this competency at the requested level
+    // Check if assessor can evaluate this competency at the requested level or higher
+    const levelHierarchy = {
+      'BASIC': 1,
+      'INTERMEDIATE': 2,
+      'ADVANCED': 3,
+      'MASTERY': 4
+    };
+
+    const requestedLevelValue = levelHierarchy[request[0].requested_level];
+    if (!requestedLevelValue) {
+      return res.status(400).json({ message: 'Invalid requested level' });
+    }
+
     const assessorCompetency = await prisma.$queryRaw`
       SELECT competency_level FROM assessor_competencies 
       WHERE assessor_sid = ${assessorId} 
         AND competency_id = ${request[0].competency_id}
-        AND competency_level = ${request[0].requested_level}
         AND is_active = true
+        AND (
+          competency_level = 'BASIC' AND ${requestedLevelValue} <= 1 OR
+          competency_level = 'INTERMEDIATE' AND ${requestedLevelValue} <= 2 OR
+          competency_level = 'ADVANCED' AND ${requestedLevelValue} <= 3 OR
+          competency_level = 'MASTERY' AND ${requestedLevelValue} <= 4
+        )
       LIMIT 1
     `;
 
