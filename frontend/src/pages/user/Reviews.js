@@ -132,7 +132,9 @@ const Reviews = () => {
   // Fetch available assessors for a competency and level
   const fetchAvailableAssessors = async (competencyId, requiredLevel) => {
     try {
+      console.log('Fetching assessors for competency:', competencyId, 'required level:', requiredLevel);
       const response = await api.get(`/competency-reviews/assessors?competencyId=${competencyId}&requiredLevel=${requiredLevel}`);
+      console.log('Assessors response:', response.data);
       setAvailableAssessors(response.data || []);
     } catch (error) {
       console.error('Error fetching assessors:', error);
@@ -141,14 +143,22 @@ const Reviews = () => {
   };
 
   const handleCompetencyChange = (competencyId) => {
+    console.log('Competency changed to:', competencyId);
     setSelectedCompetency(competencyId);
     setAvailableAssessors([]);
     
     if (competencyId && jobProfileData) {
+      console.log('Job profile data:', jobProfileData);
       const jobCompetency = jobProfileData.find(jc => jc.competency.id === competencyId);
+      console.log('Found job competency:', jobCompetency);
       if (jobCompetency) {
+        console.log('Required level:', jobCompetency.requiredLevel);
         fetchAvailableAssessors(competencyId, jobCompetency.requiredLevel);
+      } else {
+        console.log('No job competency found for competency ID:', competencyId);
       }
+    } else {
+      console.log('Missing competencyId or jobProfileData:', { competencyId, jobProfileData });
     }
   };
 
