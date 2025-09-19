@@ -52,8 +52,8 @@ const UserProfile = () => {
     queryFn: async () => {
       if (!employeeData?.job_code) return null;
       
-      // Fetch job competencies with detailed level information
-      const response = await api.get(`/job-competencies/job/${employeeData.job_code}`);
+      // Fetch job competencies with detailed level information using job code
+      const response = await api.get(`/job-competencies/job-code/${employeeData.job_code}`);
       const mappings = response.data || [];
       
       if (mappings.length > 0) {

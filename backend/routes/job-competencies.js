@@ -77,7 +77,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get mappings for a specific job
+// Get mappings for a specific job by job ID
 router.get('/job/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
@@ -85,6 +85,16 @@ router.get('/job/:jobId', async (req, res) => {
     const mappings = await prisma.jobCompetency.findMany({
       where: { jobId },
       include: {
+        job: {
+          select: {
+            id: true,
+            title: true,
+            code: true,
+            unit: true,
+            division: true,
+            department: true
+          }
+        },
         competency: {
           select: {
             id: true,
@@ -97,7 +107,8 @@ router.get('/job/:jobId', async (req, res) => {
                 id: true,
                 level: true,
                 title: true,
-                description: true
+                description: true,
+                indicators: true
               },
               orderBy: {
                 level: 'asc'
@@ -116,6 +127,64 @@ router.get('/job/:jobId', async (req, res) => {
     res.json(mappings);
   } catch (error) {
     console.error('Error fetching job competencies:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get mappings for a specific job by job code
+router.get('/job-code/:jobCode', async (req, res) => {
+  try {
+    const { jobCode } = req.params;
+    
+    const mappings = await prisma.jobCompetency.findMany({
+      where: {
+        job: {
+          code: jobCode
+        }
+      },
+      include: {
+        job: {
+          select: {
+            id: true,
+            title: true,
+            code: true,
+            unit: true,
+            division: true,
+            department: true
+          }
+        },
+        competency: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            family: true,
+            definition: true,
+            levels: {
+              select: {
+                id: true,
+                level: true,
+                title: true,
+                description: true,
+                indicators: true
+              },
+              orderBy: {
+                level: 'asc'
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        competency: {
+          name: 'asc'
+        }
+      }
+    });
+
+    res.json(mappings);
+  } catch (error) {
+    console.error('Error fetching job competencies by code:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
