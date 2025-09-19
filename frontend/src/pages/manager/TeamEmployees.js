@@ -175,11 +175,12 @@ const TeamEmployees = () => {
     }
   };
 
-  const saveManagerLevel = async (sessionId) => {
+  const saveManagerLevelByCompetency = async (userId, competencyId) => {
     if (!managerLevel) return;
     try {
-      await api.post('/user-assessments/manager/confirm-level', {
-        sessionId,
+      await api.post('/user-assessments/manager/confirm-level-by-competency', {
+        userId,
+        competencyId,
         managerSelectedLevel: managerLevel
       });
       const resp = await api.get(`/user-assessments/history/${selectedEmployee.sid}`);
@@ -781,7 +782,23 @@ const TeamEmployees = () => {
                         <div key={compId} className="border border-gray-200 rounded-lg">
                           <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
                             <div className="font-semibold text-gray-900">{group.name}</div>
-                            <div className="text-xs text-gray-500">{group.items.length} attempt{group.items.length > 1 ? 's' : ''}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs text-gray-500 mr-2">{group.items.length} attempt{group.items.length > 1 ? 's' : ''}</div>
+                              <select
+                                value={managerLevel}
+                                onChange={(e) => setManagerLevel(e.target.value)}
+                                className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+                              >
+                                <option value="">Manager Level</option>
+                                <option value="BASIC">BASIC</option>
+                                <option value="INTERMEDIATE">INTERMEDIATE</option>
+                                <option value="ADVANCED">ADVANCED</option>
+                                <option value="EXPERT">EXPERT</option>
+                              </select>
+                              <Button size="sm" onClick={() => saveManagerLevelByCompetency(selectedEmployee.sid, compId)} disabled={!managerLevel}>
+                                Save
+                              </Button>
+                            </div>
                           </div>
                           <div className="p-4 space-y-3">
                             {group.items.map((a) => (
@@ -795,20 +812,6 @@ const TeamEmployees = () => {
                                 <div className="flex items-center space-x-2">
                                   <Button variant="outline" size="sm" onClick={() => handleViewAssessmentDetails(a.sessionId)}>
                                     View Details
-                                  </Button>
-                                  <select
-                                    value={managerLevel}
-                                    onChange={(e) => setManagerLevel(e.target.value)}
-                                    className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-                                  >
-                                    <option value="">Manager Level</option>
-                                    <option value="BASIC">BASIC</option>
-                                    <option value="INTERMEDIATE">INTERMEDIATE</option>
-                                    <option value="ADVANCED">ADVANCED</option>
-                                    <option value="EXPERT">EXPERT</option>
-                                  </select>
-                                  <Button size="sm" onClick={() => saveManagerLevel(a.sessionId)} disabled={!managerLevel}>
-                                    Save
                                   </Button>
                                 </div>
                               </div>

@@ -666,6 +666,34 @@ router.post('/manager/confirm-level', async (req, res) => {
   }
 });
 
+// Manager: set manager_selected_level for a user & competency (applies to all sessions)
+router.post('/manager/confirm-level-by-competency', async (req, res) => {
+  try {
+    const { userId, competencyId, managerSelectedLevel } = req.body;
+    if (!userId || !competencyId || !managerSelectedLevel) {
+      return res.status(400).json({ success: false, error: 'userId, competencyId and managerSelectedLevel are required' });
+    }
+
+    await ensureLevelColumns();
+
+    try {
+      await prisma.$queryRaw`
+        UPDATE assessment_sessions
+        SET manager_selected_level = ${managerSelectedLevel}, updated_at = NOW()
+        WHERE user_id = ${userId} AND competency_id = ${competencyId}
+      `;
+    } catch (e) {
+      console.error('Failed to bulk update manager_selected_level:', e);
+      return res.status(500).json({ success: false, error: `Failed to save manager level: ${e.message || e}` });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving manager level by competency:', error);
+    res.status(500).json({ success: false, error: `Failed to save manager level: ${error.message || error}` });
+  }
+});
+
 // Get assessment history for a user
 router.get('/history/:userId', async (req, res) => {
   try {
