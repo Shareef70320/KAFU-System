@@ -172,8 +172,10 @@ docker-compose logs frontend --tail=10
 - **Database:** 1,254 employees imported from HRData.csv
 - **API:** All endpoints working, returning real HR data
 - **User Profile:** Working with SID 2254, showing Job Competency Profile
+- **User Assessments:** ✅ Working - 9 competency cards showing, Start Assessment functional
+- **Default Assessment:** ✅ Working - 4 questions, 30 minutes, linked to all competencies via `apply_to_all=true`
 
-**Last Updated:** December 2024 - User Profile Fixed
+**Last Updated:** September 2025 - User Assessments Fixed
 
 ## 🔧 **User Profile "Error loading profile" Fix**
 
@@ -340,4 +342,157 @@ curl -s "http://localhost:5001/api/questions/QUESTION_ID/options" | jq '.options
 # 1. Go to Question Bank page
 # 2. Click Edit on any question
 # 3. Verify: Competency Level selected, Options populated, Correct answer checked
+```
+
+## 🔧 **Assessment Cards Not Showing Fix**
+
+### **Problem:** 
+User sees "no cards" on Take Assessment page despite having competencies assigned
+
+### **Root Cause:** 
+Frontend UserContext default SID doesn't match the user being tested (default: '2255', needed: '2254')
+
+### **Symptoms:**
+- Take Assessment page shows "SID: 2255 | competencies: 0"
+- User has job_code and competencies in database
+- API works when called directly with correct SID
+
+### **Solution:**
+```bash
+# 1. Change SID in frontend UI
+# In the top bar, change SID input from '2255' to '2254'
+
+# OR clear localStorage to reset defaults:
+# 2. Open browser console (F12)
+# 3. Run: localStorage.clear()
+# 4. Refresh page
+
+# 3. Verify competencies are loaded
+curl -s 'http://localhost:5001/api/user-assessments/competencies?userId=2254' | jq '.competencies | length'
+# Should return: 9
+```
+
+### **Prevention:**
+- Always check UserContext default values when testing
+- Use role switcher to change SID for different users
+- Clear localStorage when switching between different test scenarios
+
+### **Verification:**
+```bash
+# Test competencies API with correct SID
+curl -s 'http://localhost:5001/api/user-assessments/competencies?userId=2254' | jq '.competencies[] | select(.name == "Learning and Development Planning")'
+# Should return competency with numQuestions and timeLimitMinutes
+```
+
+## 🔧 **"Failed to start assessment" Error Fix**
+
+### **Problem:** 
+Clicking "Start Assessment" returns "Failed to start assessment" error
+
+### **Root Cause:** 
+SQL query with `SELECT DISTINCT` and `ORDER BY` without including ordered column in SELECT list
+
+### **Symptoms:**
+- Backend logs show: `ERROR: for SELECT DISTINCT, ORDER BY expressions must appear in select list`
+- Assessment cards show but start button fails
+- Error code: `42P10`
+
+### **Solution:**
+```bash
+# 1. Fix the SQL query in backend/routes/userAssessments.js
+# Change this query (around line 271):
+# SELECT DISTINCT ar.question_id
+# FROM assessment_responses ar
+# JOIN assessment_sessions s ON s.id = ar.session_id
+# WHERE s.user_id = ${userId}
+#   AND s.competency_id = ${competencyId}
+#   AND s.status = 'COMPLETED'
+# ORDER BY s.completed_at DESC
+
+# To this:
+# SELECT DISTINCT ar.question_id, s.completed_at
+# FROM assessment_responses ar
+# JOIN assessment_sessions s ON s.id = ar.session_id
+# WHERE s.user_id = ${userId}
+#   AND s.competency_id = ${competencyId}
+#   AND s.status = 'COMPLETED'
+# ORDER BY s.completed_at DESC
+
+# 2. Deploy the fix
+git add -A && git commit -m "fix(user-assessments): add completed_at to SELECT DISTINCT query"
+docker compose up -d --build
+
+# 3. Test assessment start
+curl -X POST 'http://localhost:5001/api/user-assessments/start' \
+  -H 'Content-Type: application/json' \
+  -d '{"competencyId": "COMPETENCY_ID", "userId": "2254"}'
+```
+
+### **Prevention:**
+- Always include ORDER BY columns in SELECT DISTINCT queries
+- Test SQL queries before deploying
+- Check for PostgreSQL-specific syntax requirements
+
+### **Verification:**
+```bash
+# Test assessment start API
+curl -X POST 'http://localhost:5001/api/user-assessments/start' \
+  -H 'Content-Type: application/json' \
+  -d '{"competencyId": "cmf8t6fte0043m8ize1jcr4rb", "userId": "2254"}' | jq '.success'
+# Should return: true
+
+# Check backend logs
+docker logs --tail=10 kafu-backend
+# Should not show DISTINCT/ORDER BY errors
+```
+
+## 🔧 **Database Schema Mismatch Fix**
+
+### **Problem:** 
+API returns "column does not exist" errors despite Prisma schema showing different field names
+
+### **Root Cause:** 
+Prisma schema uses camelCase (e.g., `title`) but actual database uses snake_case (e.g., `name`)
+
+### **Symptoms:**
+- Backend logs show: `column a.title does not exist`
+- API returns 500 errors
+- Prisma schema shows different field names than database
+
+### **Solution:**
+```bash
+# 1. Check actual database schema
+docker exec kafu-postgres psql -U kafu_user -d kafu_system -c "\d table_name"
+
+# 2. Update SQL queries to use correct column names
+# In backend/routes/assessments.js, change:
+# a.title
+# to:
+# a.name as title
+
+# 3. Fix BigInt serialization issues
+# Change:
+# COUNT(*) as count
+# to:
+# COUNT(*)::int as count
+
+# 4. Deploy fixes
+git add -A && git commit -m "fix(assessments): use correct column names and fix BigInt serialization"
+docker compose up -d --build
+```
+
+### **Prevention:**
+- Always check actual database schema before writing queries
+- Use `::int` casting for COUNT() queries to avoid BigInt issues
+- Test APIs after schema changes
+
+### **Verification:**
+```bash
+# Test assessments API
+curl -s 'http://localhost:5001/api/assessments' | jq '.success'
+# Should return: true
+
+# Check for column errors in logs
+docker logs --tail=10 kafu-backend
+# Should not show "column does not exist" errors
 ```

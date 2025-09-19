@@ -176,7 +176,7 @@ router.get('/competencies', async (req, res) => {
       `;
     }
 
-    // Enrich with active assessment settings for accurate card display
+    // Enrich with active assessment settings and filter out competencies without assessments
     const enriched = await Promise.all(
       competencies.map(async (comp) => {
         const assessment = await selectAssessmentForCompetency(comp.id, null);
@@ -187,11 +187,15 @@ router.get('/competencies', async (req, res) => {
           questionCount: Number(comp.question_count),
           numQuestions: assessment ? Number(assessment.num_questions || 0) : 0,
           timeLimitMinutes: assessment ? Number(assessment.time_limit_minutes || 0) : 0,
+          hasAssessment: !!assessment, // Add flag to indicate if assessment exists
         };
       })
     );
 
-    res.json({ success: true, competencies: enriched });
+    // Filter out competencies that don't have assessments
+    const competenciesWithAssessments = enriched.filter(comp => comp.hasAssessment);
+
+    res.json({ success: true, competencies: competenciesWithAssessments });
   } catch (error) {
     console.error('Error fetching competencies for assessment:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch competencies' });
