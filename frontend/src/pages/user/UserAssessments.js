@@ -755,13 +755,15 @@ const UserAssessments = () => {
                             userConfirmedLevel: level
                           });
                           toast({ title: 'Level Confirmed', description: `You selected ${level}` });
+                          // Refresh competencies data to show updated level
+                          queryClient.invalidateQueries(['user-assessments-competencies']);
                         } catch (e) {
                           const msg = e?.response?.data?.error || e?.message || 'Failed to confirm level';
                           console.error('Confirm level failed:', e);
                           toast({ title: 'Error', description: msg, variant: 'destructive' });
                         }
                       }}
-                      className={`px-3 py-2 rounded border text-sm ${getLevelColor(level)} hover:opacity-90`}
+                      className={`px-3 py-2 rounded border text-sm font-medium transition-all duration-200 ${getLevelColor(level)} hover:opacity-90 hover:scale-105 active:scale-95`}
                     >
                       {level}
                     </button>

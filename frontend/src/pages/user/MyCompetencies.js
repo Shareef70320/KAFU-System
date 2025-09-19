@@ -234,6 +234,31 @@ const MyCompetencies = () => {
                   <p>{competency.description || 'No description available'}</p>
                 </div>
 
+                {/* Competency Status - Show all three levels if available */}
+                {(competency.userConfirmedLevel || competency.managerSelectedLevel) && (
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Competency Status</h4>
+                    <div className="space-y-2">
+                      {competency.userConfirmedLevel && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Your Level:</span>
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getLevelColor(competency.userConfirmedLevel)}`}>
+                            {competency.userConfirmedLevel}
+                          </span>
+                        </div>
+                      )}
+                      {competency.managerSelectedLevel && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Manager Level:</span>
+                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getLevelColor(competency.managerSelectedLevel)}`}>
+                            {competency.managerSelectedLevel}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Action Button - Only show if competency has questions and assessments */}
                 {competency.hasQuestions && competency.hasAssessment && (
                   <div className="mt-4 flex justify-end">

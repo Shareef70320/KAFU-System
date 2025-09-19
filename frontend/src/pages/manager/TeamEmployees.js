@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { useToast } from '../../components/ui/use-toast';
 import { 
   Users, 
   Search, 
@@ -29,6 +30,7 @@ import { useUser } from '../../contexts/UserContext';
 
 const TeamEmployees = () => {
   const { currentSid } = useUser();
+  const { toast } = useToast();
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -180,15 +182,36 @@ const TeamEmployees = () => {
     if (!level) return;
     try {
       await api.post('/user-assessments/manager/confirm-level-by-competency', {
-        userId,
+        employeeId: userId,
         competencyId,
         managerSelectedLevel: level
       });
+      
+      // Show success feedback
+      toast({
+        title: "Manager Level Saved",
+        description: `Level ${level} saved for this competency`,
+      });
+      
+      // Refresh assessments to show updated manager level
       const resp = await api.get(`/user-assessments/history/${selectedEmployee.sid}`);
       setAssessments(resp.data.assessments || []);
-      setManagerLevels(prev => ({ ...prev, [competencyId]: level }));
+      
+      // Re-initialize managerLevels from the updated data
+      const updatedManagerLevels = resp.data.assessments.reduce((acc, a) => {
+        if (a.managerSelectedLevel && !acc[a.competencyId]) {
+          acc[a.competencyId] = a.managerSelectedLevel;
+        }
+        return acc;
+      }, {});
+      setManagerLevels(updatedManagerLevels);
     } catch (e) {
       console.error('Failed to save manager level:', e);
+      toast({
+        title: "Error",
+        description: "Failed to save manager level",
+        variant: "destructive",
+      });
     }
   };
 
@@ -788,16 +811,29 @@ const TeamEmployees = () => {
                               <select
                                 value={managerLevels[compId] || ''}
                                 onChange={(e) => setManagerLevels(prev => ({ ...prev, [compId]: e.target.value }))}
-                                className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+                                className={`border rounded-md px-2 py-1 text-sm transition-all duration-200 ${
+                                  managerLevels[compId] 
+                                    ? 'border-green-500 bg-green-50 text-green-800' 
+                                    : 'border-gray-300 hover:border-gray-400'
+                                }`}
                               >
-                                <option value="">Manager Level</option>
+                                <option value="">Set Manager Level</option>
                                 <option value="BASIC">BASIC</option>
                                 <option value="INTERMEDIATE">INTERMEDIATE</option>
                                 <option value="ADVANCED">ADVANCED</option>
                                 <option value="EXPERT">EXPERT</option>
                               </select>
-                              <Button size="sm" onClick={() => saveManagerLevelByCompetency(selectedEmployee.sid, compId)} disabled={!managerLevels[compId]}>
-                                Save
+                              <Button 
+                                size="sm" 
+                                onClick={() => saveManagerLevelByCompetency(selectedEmployee.sid, compId)} 
+                                disabled={!managerLevels[compId]}
+                                className={`transition-all duration-200 ${
+                                  managerLevels[compId] 
+                                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                                    : 'bg-gray-300 text-gray-500'
+                                }`}
+                              >
+                                {managerLevels[compId] ? '✓ Saved' : 'Save'}
                               </Button>
                             </div>
                           </div>
