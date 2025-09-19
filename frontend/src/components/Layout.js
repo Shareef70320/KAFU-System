@@ -70,7 +70,6 @@ const Layout = () => {
     { name: 'Job Criticality', href: '/job-criticality', icon: Target },
     { name: 'Job Evaluation', href: '/job-evaluation', icon: BarChart3 },
     { name: 'Assessors', href: '/assessors', icon: UserCheck },
-    { name: 'Assessor Management', href: '/assessor-management', icon: UserCog },
     { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
     { name: 'Assessments', href: '/assessments', icon: Target },
     { name: 'Question Bank', href: '/question-bank', icon: BookOpen },

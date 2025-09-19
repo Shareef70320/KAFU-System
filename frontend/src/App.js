@@ -40,7 +40,6 @@ import TeamJobs from './pages/manager/TeamJobs';
 import TeamJCPs from './pages/manager/TeamJCPs';
 import ManagerAssessments from './pages/manager/ManagerAssessments';
 // Admin Routes
-import AssessorManagement from './pages/AssessorManagement';
 import AssessorDashboard from './pages/AssessorDashboard';
 
 const queryClient = new QueryClient({
@@ -78,7 +77,6 @@ function App() {
                 <Route path="job-criticality" element={<AdminRoute><JobCriticality /></AdminRoute>} />
                 <Route path="job-evaluation" element={<AdminRoute><JobEvaluation /></AdminRoute>} />
                 <Route path="assessors" element={<AdminRoute><Assessors /></AdminRoute>} />
-                <Route path="assessor-management" element={<AdminRoute><AssessorManagement /></AdminRoute>} />
                 <Route path="assessor-dashboard" element={<AssessorDashboard />} />
                 <Route path="assessments" element={<AdminRoute><NewAssessments /></AdminRoute>} />
                 <Route path="question-bank" element={<AdminRoute><QuestionBank /></AdminRoute>} />
