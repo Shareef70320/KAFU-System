@@ -21,6 +21,8 @@ const assessmentTemplateRoutes = require('./routes/assessmentTemplates');
 const newAssessmentRoutes = require('./routes/newAssessments');
 const uploadRoutes = require('./routes/upload');
 const photoRoutes = require('./routes/photos');
+const assessorManagementRoutes = require('./routes/assessorManagement');
+const performanceReviewRoutes = require('./routes/performanceReviews');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -57,6 +59,8 @@ app.use('/api/assessment-templates', assessmentTemplateRoutes);
 app.use('/api/new-assessments', newAssessmentRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/photos', photoRoutes);
+app.use('/api/assessor-management', assessorManagementRoutes);
+app.use('/api/performance-reviews', performanceReviewRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
