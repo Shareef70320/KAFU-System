@@ -17,7 +17,9 @@ import {
   BarChart3,
   ArrowRight,
   ArrowLeft,
-  RotateCcw
+  RotateCcw,
+  X,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '../../components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -61,7 +63,18 @@ const UserAssessments = () => {
     }
   });
 
-  // Note: Settings are now included in the competencies response, no need for separate API calls
+  // Get attempt information for each competency
+  const useAttempts = (competencyId) => useQuery({
+    queryKey: ['assessment-attempts', competencyId, currentUserId],
+    queryFn: async () => {
+      if (!competencyId || !currentUserId) return { attemptsLeft: 0, attemptsUsed: 0, maxAttempts: 0 };
+      console.log('Fetching attempts for competency:', competencyId, 'user:', currentUserId);
+      const res = await api.get(`/user-assessments/settings/${competencyId}?userId=${currentUserId}`);
+      console.log('Attempts response:', res.data);
+      return res.data;
+    },
+    enabled: !!competencyId && !!currentUserId,
+  });
 
   const templatesLoading = false;
 
@@ -265,11 +278,14 @@ const UserAssessments = () => {
 
   // Card component to safely use hooks per competency
   const CompetencyCard = ({ competency }) => {
+    const { data: attemptsData, isLoading: attemptsLoading } = useAttempts(competency.id);
     const numQ = typeof competency.numQuestions === 'number' ? competency.numQuestions : undefined;
     const tlm = typeof competency.timeLimitMinutes === 'number' ? competency.timeLimitMinutes : undefined;
-    // Note: Attempt limits will be handled by the backend when starting assessments
-    const attemptsInfo = '';
-    const disabled = false;
+    const attemptsLeft = attemptsData?.attemptsLeft || 0;
+    const attemptsUsed = attemptsData?.attemptsUsed || 0;
+    const maxAttempts = attemptsData?.maxAttempts || 0;
+    const attemptsInfo = attemptsLoading ? '' : (attemptsLeft > 0 ? ` (${attemptsLeft} left)` : ' (No attempts left)');
+    const disabled = !attemptsLoading && attemptsLeft === 0;
     return (
       <Card key={competency.id} className="hover:shadow-lg transition-shadow">
         <CardHeader>
@@ -296,8 +312,24 @@ const UserAssessments = () => {
                 onClick={() => handleStartAssessment(competency)}
                 className="w-full"
                 disabled={startAssessmentMutation.isPending || disabled}
+                variant={disabled ? "secondary" : "default"}
               >
-                {disabled ? `Attempts exhausted${attemptsInfo}` : (startAssessmentMutation.isPending ? 'Starting...' : `Start Assessment${attemptsInfo}`)}
+                {startAssessmentMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : disabled ? (
+                  <>
+                    <X className="mr-2 h-4 w-4" />
+                    No Attempts Left
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Start Assessment{attemptsInfo}
+                  </>
+                )}
               </Button>
               <Button 
                 onClick={() => handleViewDashboard(competency)}
@@ -316,9 +348,10 @@ const UserAssessments = () => {
 
   // Retake button which respects attempt limits for the selected competency
   const RetakeButton = ({ competencyId, onRetake }) => {
-    // Note: Attempt limits will be handled by the backend when starting assessments
-    const disabled = !competencyId;
-    const label = 'Take Another Assessment';
+    const { data: attemptsData, isLoading } = useAttempts(competencyId);
+    const attemptsLeft = attemptsData?.attemptsLeft || 0;
+    const disabled = !competencyId || (!isLoading && attemptsLeft === 0);
+    const label = disabled ? 'No Attempts Left' : 'Take Another Assessment';
     return (
       <Button
         onClick={onRetake}

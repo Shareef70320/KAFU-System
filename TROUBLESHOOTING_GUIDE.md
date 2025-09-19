@@ -663,3 +663,61 @@ docker compose up -d --build
 # 4. Repeat for other user routes
 # 5. Check browser console for initialization logs
 ```
+
+## 🔧 **"Failed to fetch assessment result" Error Fix**
+
+### **Problem:** 
+"View Dashboard" button shows error "Failed to fetch assessment result" when trying to view completed assessment details
+
+### **Root Cause:** 
+PostgreSQL syntax error with table alias `as` - `as` is a reserved keyword in PostgreSQL and needs to be quoted when used as a table alias
+
+### **Symptoms:**
+- "View Dashboard" button shows error message
+- Backend logs show: `ERROR: syntax error at or near "as"`
+- Assessment history and latest-result endpoints fail
+- Users cannot view their completed assessment details
+
+### **Solution:**
+```bash
+# 1. Fix SQL queries in backend/routes/userAssessments.js
+# Quote the table alias "as" in all PostgreSQL queries:
+
+# Before (incorrect):
+# FROM assessment_sessions as
+# WHERE as.user_id = ${userId}
+
+# After (correct):
+# FROM assessment_sessions "as"
+# WHERE "as".user_id = ${userId}
+
+# 2. Apply fix to all affected endpoints:
+# - /history/:userId
+# - /latest-result/:userId/:competencyId
+# - /session/:sessionId
+
+# 3. Deploy changes
+git add -A && git commit -m "fix(user-assessments): fix SQL syntax error with 'as' table alias"
+docker compose up -d --build
+```
+
+### **Prevention:**
+- Always quote table aliases that might be reserved keywords in PostgreSQL
+- Test SQL queries in PostgreSQL console before implementing
+- Use descriptive table aliases instead of short ones like "as"
+- Review PostgreSQL reserved keywords list when choosing aliases
+
+### **Verification:**
+```bash
+# Test the fixed endpoints
+curl -s 'http://localhost:5001/api/user-assessments/history/2254' | jq '.assessments | length'
+# Should return number of completed assessments
+
+curl -s 'http://localhost:5001/api/user-assessments/latest-result/2254/COMPETENCY_ID' | jq '.assessment.competencyName'
+# Should return competency name without errors
+
+# Test in frontend
+# 1. Go to Take Assessment page
+# 2. Click "View Dashboard" on any competency card
+# 3. Should show assessment details without errors
+```
