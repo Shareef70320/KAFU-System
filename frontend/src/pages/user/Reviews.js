@@ -38,8 +38,8 @@ const Reviews = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedCompetency, setSelectedCompetency] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState('');
   const [requestNotes, setRequestNotes] = useState('');
+  const [availableAssessors, setAvailableAssessors] = useState([]);
   const [activeTab, setActiveTab] = useState('competency'); // 'competency' or 'annual'
 
   const { currentSid } = useUser();
@@ -64,6 +64,21 @@ const Reviews = () => {
     queryFn: async () => {
       const response = await api.get(`/user-assessments/competencies?userId=${currentSid}`);
       return response.data;
+    },
+    enabled: !!currentSid
+  });
+
+  // Fetch user's job competency profile to get required levels
+  const { data: jobProfileData, isLoading: jobProfileLoading } = useQuery({
+    queryKey: ['user-job-profile', currentSid],
+    queryFn: async () => {
+      const response = await api.get(`/employees/${currentSid}`);
+      const employee = response.data;
+      if (employee?.job_code) {
+        const jcpResponse = await api.get(`/job-competencies/job-code/${employee.job_code}`);
+        return jcpResponse.data;
+      }
+      return [];
     },
     enabled: !!currentSid
   });
@@ -98,8 +113,8 @@ const Reviews = () => {
       queryClient.invalidateQueries(['user-review-requests']);
       setShowRequestModal(false);
       setSelectedCompetency('');
-      setSelectedLevel('');
       setRequestNotes('');
+      setAvailableAssessors([]);
       toast({
         title: "Success",
         description: "Review request submitted successfully",
@@ -114,11 +129,45 @@ const Reviews = () => {
     }
   });
 
+  // Fetch available assessors for a competency and level
+  const fetchAvailableAssessors = async (competencyId, requiredLevel) => {
+    try {
+      const response = await api.get(`/competency-reviews/assessors?competencyId=${competencyId}&requiredLevel=${requiredLevel}`);
+      setAvailableAssessors(response.data || []);
+    } catch (error) {
+      console.error('Error fetching assessors:', error);
+      setAvailableAssessors([]);
+    }
+  };
+
+  const handleCompetencyChange = (competencyId) => {
+    setSelectedCompetency(competencyId);
+    setAvailableAssessors([]);
+    
+    if (competencyId && jobProfileData) {
+      const jobCompetency = jobProfileData.find(jc => jc.competency.id === competencyId);
+      if (jobCompetency) {
+        fetchAvailableAssessors(competencyId, jobCompetency.requiredLevel);
+      }
+    }
+  };
+
   const handleRequestReview = () => {
-    if (!selectedCompetency || !selectedLevel) {
+    if (!selectedCompetency) {
       toast({
         title: "Error",
-        description: "Please select a competency and level",
+        description: "Please select a competency",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Find the required level for this competency from job profile
+    const jobCompetency = jobProfileData?.find(jc => jc.competency.id === selectedCompetency);
+    if (!jobCompetency) {
+      toast({
+        title: "Error",
+        description: "This competency is not part of your job profile",
         variant: "destructive",
       });
       return;
@@ -127,7 +176,7 @@ const Reviews = () => {
     createRequestMutation.mutate({
       employeeId: currentSid,
       competencyId: selectedCompetency,
-      requestedLevel: selectedLevel,
+      requestedLevel: jobCompetency.requiredLevel,
       notes: requestNotes
     });
   };
@@ -822,7 +871,7 @@ const Reviews = () => {
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Competency</label>
-                <Select value={selectedCompetency} onValueChange={setSelectedCompetency}>
+                <Select value={selectedCompetency} onValueChange={handleCompetencyChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select competency" />
                   </SelectTrigger>
@@ -835,20 +884,64 @@ const Reviews = () => {
                   </SelectContent>
                 </Select>
               </div>
+            {selectedCompetency && jobProfileData && (
               <div>
-                <label className="text-sm font-medium text-gray-700">Requested Level</label>
-                <Select value={selectedLevel} onValueChange={setSelectedLevel}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BASIC">BASIC</SelectItem>
-                    <SelectItem value="INTERMEDIATE">INTERMEDIATE</SelectItem>
-                    <SelectItem value="ADVANCED">ADVANCED</SelectItem>
-                    <SelectItem value="MASTERY">MASTERY</SelectItem>
-                  </SelectContent>
-                </Select>
+                <label className="text-sm font-medium text-gray-700">Required Level</label>
+                <div className="p-3 bg-blue-50 rounded-lg border">
+                  {(() => {
+                    const jobCompetency = jobProfileData.find(jc => jc.competency.id === selectedCompetency);
+                    return jobCompetency ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-blue-800">
+                          {jobCompetency.requiredLevel}
+                        </span>
+                        <span className="text-xs text-blue-600">
+                          From your job profile
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-500">Not found in job profile</span>
+                    );
+                  })()}
+                </div>
               </div>
+            )}
+            
+            {selectedCompetency && availableAssessors.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-gray-700">Available Assessors</label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {availableAssessors.map((assessor) => (
+                    <div key={assessor.id} className="p-2 bg-green-50 rounded border border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-sm font-medium text-green-800">
+                            {assessor.assessor.firstName} {assessor.assessor.lastName}
+                          </span>
+                          <span className="text-xs text-green-600 ml-2">
+                            ({assessor.assessor.sid})
+                          </span>
+                        </div>
+                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                          {assessor.competencyLevel}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {selectedCompetency && availableAssessors.length === 0 && (
+              <div>
+                <label className="text-sm font-medium text-gray-700">Available Assessors</label>
+                <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <span className="text-sm text-yellow-800">
+                    No assessors available for this competency and level
+                  </span>
+                </div>
+              </div>
+            )}
               <div>
                 <label className="text-sm font-medium text-gray-700">Notes (Optional)</label>
                 <Textarea

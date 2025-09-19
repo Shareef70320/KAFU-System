@@ -4,6 +4,80 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const router = express.Router();
 
+// Get available assessors for a competency and required level
+router.get('/assessors', async (req, res) => {
+  try {
+    const { competencyId, requiredLevel } = req.query;
+    
+    if (!competencyId || !requiredLevel) {
+      return res.status(400).json({ message: 'competencyId and requiredLevel are required' });
+    }
+
+    // Define level hierarchy for comparison
+    const levelHierarchy = {
+      'BASIC': 1,
+      'INTERMEDIATE': 2,
+      'ADVANCED': 3,
+      'MASTERY': 4
+    };
+
+    const requiredLevelValue = levelHierarchy[requiredLevel];
+    if (!requiredLevelValue) {
+      return res.status(400).json({ message: 'Invalid required level' });
+    }
+
+    // Find assessors who can evaluate this competency at the required level or higher
+    const assessors = await prisma.$queryRaw`
+      SELECT 
+        ac.id,
+        ac.assessor_sid,
+        ac.competency_id,
+        ac.competency_level,
+        ac.is_active,
+        e.first_name,
+        e.last_name,
+        e.email,
+        e.job_code
+      FROM assessor_competencies ac
+      JOIN employees e ON ac.assessor_sid = e.sid
+      WHERE ac.competency_id = ${competencyId}
+        AND ac.is_active = true
+        AND (
+          ac.competency_level = 'BASIC' AND ${requiredLevelValue} <= 1 OR
+          ac.competency_level = 'INTERMEDIATE' AND ${requiredLevelValue} <= 2 OR
+          ac.competency_level = 'ADVANCED' AND ${requiredLevelValue} <= 3 OR
+          ac.competency_level = 'MASTERY' AND ${requiredLevelValue} <= 4
+        )
+      ORDER BY 
+        CASE ac.competency_level
+          WHEN 'MASTERY' THEN 4
+          WHEN 'ADVANCED' THEN 3
+          WHEN 'INTERMEDIATE' THEN 2
+          WHEN 'BASIC' THEN 1
+        END DESC,
+        e.first_name ASC
+    `;
+
+    // Transform the data to match frontend expectations
+    const transformedAssessors = assessors.map(assessor => ({
+      id: assessor.id,
+      competencyLevel: assessor.competency_level,
+      assessor: {
+        sid: assessor.assessor_sid,
+        firstName: assessor.first_name,
+        lastName: assessor.last_name,
+        email: assessor.email,
+        jobCode: assessor.job_code
+      }
+    }));
+
+    res.json(transformedAssessors);
+  } catch (error) {
+    console.error('Error fetching available assessors:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get all review requests with filtering
 router.get('/requests', async (req, res) => {
   try {
