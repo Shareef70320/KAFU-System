@@ -31,6 +31,7 @@ import MyCompetencies from './pages/user/MyCompetencies';
 import UserAssessments from './pages/user/UserAssessments';
 import Reviews from './pages/user/Reviews';
 import UserDashboard from './pages/user/UserDashboard';
+import PerformanceReviews from './pages/user/PerformanceReviews';
 import PhotoUpload from './pages/PhotoUpload';
 // Manager Routes
 import ManagerDashboard from './pages/manager/ManagerDashboard';
@@ -38,6 +39,8 @@ import TeamEmployees from './pages/manager/TeamEmployees';
 import TeamJobs from './pages/manager/TeamJobs';
 import TeamJCPs from './pages/manager/TeamJCPs';
 import ManagerAssessments from './pages/manager/ManagerAssessments';
+// Admin Routes
+import AssessorManagement from './pages/AssessorManagement';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -74,6 +77,7 @@ function App() {
                 <Route path="job-criticality" element={<AdminRoute><JobCriticality /></AdminRoute>} />
                 <Route path="job-evaluation" element={<AdminRoute><JobEvaluation /></AdminRoute>} />
                 <Route path="assessors" element={<AdminRoute><Assessors /></AdminRoute>} />
+                <Route path="assessor-management" element={<AdminRoute><AssessorManagement /></AdminRoute>} />
                 <Route path="assessments" element={<AdminRoute><NewAssessments /></AdminRoute>} />
                 <Route path="question-bank" element={<AdminRoute><QuestionBank /></AdminRoute>} />
                 <Route path="photo-upload" element={<AdminRoute><PhotoUpload /></AdminRoute>} />
@@ -86,6 +90,7 @@ function App() {
                 <Route path="user/competencies" element={<UserRoute><MyCompetencies /></UserRoute>} />
                 <Route path="user/assessments" element={<UserRoute><UserAssessments /></UserRoute>} />
                 <Route path="user/reviews" element={<UserRoute><Reviews /></UserRoute>} />
+                <Route path="user/performance-reviews" element={<UserRoute><PerformanceReviews /></UserRoute>} />
                 <Route path="user/team" element={<UserRoute><TeamEmployees /></UserRoute>} />
                 <Route path="user/jobs" element={<UserRoute><TeamJobs /></UserRoute>} />
                 <Route path="user/jcps" element={<UserRoute><TeamJCPs /></UserRoute>} />
