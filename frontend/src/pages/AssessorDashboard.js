@@ -58,7 +58,7 @@ const AssessorDashboard = () => {
   const { data: reviewRequestsData, isLoading: requestsLoading } = useQuery({
     queryKey: ['assessor-review-requests', currentSid],
     queryFn: async () => {
-      const response = await api.get(`/performance-reviews/requests?assessorId=${currentSid}`);
+      const response = await api.get(`/competency-reviews/requests?assessorId=${currentSid}`);
       return response.data;
     },
     enabled: !!currentSid
@@ -68,7 +68,7 @@ const AssessorDashboard = () => {
   const { data: completedReviewsData, isLoading: completedLoading } = useQuery({
     queryKey: ['assessor-completed-reviews', currentSid],
     queryFn: async () => {
-      const response = await api.get(`/performance-reviews/requests?assessorId=${currentSid}&status=COMPLETED`);
+      const response = await api.get(`/competency-reviews/requests?assessorId=${currentSid}&status=COMPLETED`);
       return response.data;
     },
     enabled: !!currentSid
@@ -77,7 +77,7 @@ const AssessorDashboard = () => {
   // Start review mutation
   const startReviewMutation = useMutation({
     mutationFn: async (requestId) => {
-      const response = await api.put(`/performance-reviews/requests/${requestId}/start`);
+      const response = await api.put(`/competency-reviews/requests/${requestId}/start`);
       return response.data;
     },
     onSuccess: () => {
@@ -99,7 +99,7 @@ const AssessorDashboard = () => {
   // Complete review mutation
   const completeReviewMutation = useMutation({
     mutationFn: async ({ requestId, reviewData }) => {
-      const response = await api.post(`/performance-reviews/requests/${requestId}/complete`, reviewData);
+      const response = await api.post(`/competency-reviews/requests/${requestId}/complete`, reviewData);
       return response.data;
     },
     onSuccess: () => {

@@ -40,7 +40,7 @@ const Reviews = () => {
   const [selectedCompetency, setSelectedCompetency] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [requestNotes, setRequestNotes] = useState('');
-  const [activeTab, setActiveTab] = useState('performance'); // 'performance' or 'annual'
+  const [activeTab, setActiveTab] = useState('competency'); // 'competency' or 'annual'
 
   const { currentSid } = useUser();
   const { toast } = useToast();
@@ -72,7 +72,7 @@ const Reviews = () => {
   const { data: reviewRequestsData, isLoading: requestsLoading } = useQuery({
     queryKey: ['user-review-requests', currentSid],
     queryFn: async () => {
-      const response = await api.get(`/performance-reviews/requests?employeeId=${currentSid}`);
+      const response = await api.get(`/competency-reviews/requests?employeeId=${currentSid}`);
       return response.data;
     },
     enabled: !!currentSid
@@ -82,7 +82,7 @@ const Reviews = () => {
   const { data: reviewHistoryData, isLoading: historyLoading } = useQuery({
     queryKey: ['user-review-history', currentSid],
     queryFn: async () => {
-      const response = await api.get(`/performance-reviews/employee/${currentSid}`);
+      const response = await api.get(`/competency-reviews/employee/${currentSid}`);
       return response.data;
     },
     enabled: !!currentSid
@@ -91,7 +91,7 @@ const Reviews = () => {
   // Create review request mutation
   const createRequestMutation = useMutation({
     mutationFn: async (data) => {
-      const response = await api.post('/performance-reviews/requests', data);
+      const response = await api.post('/competency-reviews/requests', data);
       return response.data;
     },
     onSuccess: () => {
@@ -285,14 +285,14 @@ const Reviews = () => {
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           <button
-            onClick={() => setActiveTab('performance')}
+            onClick={() => setActiveTab('competency')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'performance'
+              activeTab === 'competency'
                 ? 'border-green-500 text-green-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Performance Reviews
+            Competency Review
           </button>
           <button
             onClick={() => setActiveTab('annual')}
@@ -309,7 +309,7 @@ const Reviews = () => {
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {activeTab === 'performance' ? (
+        {activeTab === 'competency' ? (
           <>
             {/* Available Competencies */}
             <Card>
@@ -439,11 +439,11 @@ const Reviews = () => {
         <CardHeader>
           <CardTitle className="text-xl flex items-center">
             <BookOpen className="h-6 w-6 mr-2 text-green-600" />
-            {activeTab === 'performance' ? 'Performance Review History' : 'Review History'}
+            {activeTab === 'competency' ? 'Competency Review History' : 'Review History'}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {activeTab === 'performance' ? (
+          {activeTab === 'competency' ? (
             <div className="space-y-6">
               {/* Current Review Requests */}
               <div>

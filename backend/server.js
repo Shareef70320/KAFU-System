@@ -60,7 +60,7 @@ app.use('/api/new-assessments', newAssessmentRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/assessor-management', assessorManagementRoutes);
-app.use('/api/performance-reviews', performanceReviewRoutes);
+app.use('/api/competency-reviews', performanceReviewRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
