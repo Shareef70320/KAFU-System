@@ -31,7 +31,6 @@ import MyCompetencies from './pages/user/MyCompetencies';
 import UserAssessments from './pages/user/UserAssessments';
 import Reviews from './pages/user/Reviews';
 import UserDashboard from './pages/user/UserDashboard';
-import PerformanceReviews from './pages/user/PerformanceReviews';
 import PhotoUpload from './pages/PhotoUpload';
 // Manager Routes
 import ManagerDashboard from './pages/manager/ManagerDashboard';
@@ -90,7 +89,6 @@ function App() {
                 <Route path="user/competencies" element={<UserRoute><MyCompetencies /></UserRoute>} />
                 <Route path="user/assessments" element={<UserRoute><UserAssessments /></UserRoute>} />
                 <Route path="user/reviews" element={<UserRoute><Reviews /></UserRoute>} />
-                <Route path="user/performance-reviews" element={<UserRoute><PerformanceReviews /></UserRoute>} />
                 <Route path="user/team" element={<UserRoute><TeamEmployees /></UserRoute>} />
                 <Route path="user/jobs" element={<UserRoute><TeamJobs /></UserRoute>} />
                 <Route path="user/jcps" element={<UserRoute><TeamJCPs /></UserRoute>} />

@@ -82,9 +82,8 @@ const Layout = () => {
     { name: 'My Profile', href: '/user/profile', icon: User },
     { name: 'My Competencies', href: '/user/competencies', icon: BookOpen },
     { name: 'Assessments', href: '/user/assessments', icon: UserCheck },
-    { name: 'Performance Reviews', href: '/user/performance-reviews', icon: MessageSquare },
-    { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
     { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
+    { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
   ];
 
   // Manager-specific navigation (only for users with direct reports)
