@@ -644,20 +644,20 @@ router.get('/history/:userId', async (req, res) => {
 
     const assessments = await prisma.$queryRaw`
       SELECT 
-        as.id as session_id,
-        as.competency_id,
+        "as".id as session_id,
+        "as".competency_id,
         c.name as competency_name,
-        as.score,
-        as.percentage_score,
-        as.correct_answers,
-        as.total_questions,
-        as.started_at,
-        as.completed_at,
-        as.status
-      FROM assessment_sessions as
-      JOIN competencies c ON as.competency_id = c.id
-      WHERE as.user_id = ${userId}
-      ORDER BY as.completed_at DESC
+        "as".score,
+        "as".percentage_score,
+        "as".correct_answers,
+        "as".total_questions,
+        "as".started_at,
+        "as".completed_at,
+        "as".status
+      FROM assessment_sessions "as"
+      JOIN competencies c ON "as".competency_id = c.id
+      WHERE "as".user_id = ${userId}
+      ORDER BY "as".completed_at DESC
     `;
 
     res.json({
@@ -688,24 +688,24 @@ router.get('/latest-result/:userId/:competencyId', async (req, res) => {
 
     const assessment = await prisma.$queryRaw`
       SELECT 
-        as.id as session_id,
-        as.competency_id,
+        "as".id as session_id,
+        "as".competency_id,
         c.name as competency_name,
-        as.score,
-        as.percentage_score,
-        as.correct_answers,
-        as.total_questions,
-        as.started_at,
-        as.completed_at,
-        as.status,
-        as.system_level,
-        as.user_confirmed_level
-      FROM assessment_sessions as
-      JOIN competencies c ON as.competency_id = c.id
-      WHERE as.user_id = ${userId} 
-        AND as.competency_id = ${competencyId}
-        AND as.status = 'COMPLETED'
-      ORDER BY as.completed_at DESC
+        "as".score,
+        "as".percentage_score,
+        "as".correct_answers,
+        "as".total_questions,
+        "as".started_at,
+        "as".completed_at,
+        "as".status,
+        "as".system_level,
+        "as".user_confirmed_level
+      FROM assessment_sessions "as"
+      JOIN competencies c ON "as".competency_id = c.id
+      WHERE "as".user_id = ${userId} 
+        AND "as".competency_id = ${competencyId}
+        AND "as".status = 'COMPLETED'
+      ORDER BY "as".completed_at DESC
       LIMIT 1
     `;
 

@@ -611,3 +611,55 @@ docker logs --tail=20 kafu-frontend
 # 4. Verify only necessary API calls are made
 # 5. Page should load much faster
 ```
+
+## 🔧 **Page Refresh Redirect Loop Fix**
+
+### **Problem:** 
+When refreshing any user page, the page either keeps loading indefinitely or redirects to `/user/competencies` instead of staying on the current page
+
+### **Root Cause:** 
+The UserContext was not properly initialized before routing logic executed, causing redirect loops and incorrect navigation behavior
+
+### **Symptoms:**
+- Page refresh redirects to `/user/competencies` instead of staying on current page
+- Page shows loading state indefinitely
+- User gets stuck in redirect loops
+- Navigation doesn't work properly after refresh
+
+### **Solution:**
+```bash
+# 1. Add initialization state to UserContext
+# In frontend/src/contexts/UserContext.js, add:
+# const [isInitialized, setIsInitialized] = useState(false);
+# 
+# useEffect(() => {
+#   setIsInitialized(true);
+#   console.log('UserContext - Initialized with values:', { currentRole, currentSid });
+# }, []);
+
+# 2. Update route guards to wait for initialization
+# In frontend/src/components/UserRoute.js, AdminRoute.js, RoleBasedRedirect.js:
+# if (!isInitialized) {
+#   return <LoadingSpinner />;
+# }
+
+# 3. Deploy changes
+git add -A && git commit -m "fix(routing): add initialization state to prevent redirect loops"
+docker compose up -d --build
+```
+
+### **Prevention:**
+- Always ensure context is fully initialized before making routing decisions
+- Use loading states for async context initialization
+- Test page refresh behavior on all routes
+- Avoid redirects based on uninitialized state
+
+### **Verification:**
+```bash
+# Test page refresh on different routes
+# 1. Go to /user/assessments
+# 2. Refresh the page (F5 or Cmd+R)
+# 3. Should stay on /user/assessments, not redirect
+# 4. Repeat for other user routes
+# 5. Check browser console for initialization logs
+```
