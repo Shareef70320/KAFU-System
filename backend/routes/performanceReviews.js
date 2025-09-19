@@ -93,17 +93,34 @@ router.get('/requests', async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
 
-    // Build where clause
-    const whereConditions = [];
-    if (employeeId) whereConditions.push(`rr.employee_id = '${employeeId}'`);
-    if (assessorId) whereConditions.push(`rr.assessor_id = '${assessorId}'`);
-    if (status) whereConditions.push(`rr.status = '${status}'`);
-    if (competencyId) whereConditions.push(`rr.competency_id = '${competencyId}'`);
+    // Build where clause with proper parameterization
+    let whereClause = '';
+    const params = [];
+    let paramIndex = 1;
 
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    if (employeeId) {
+      whereClause += `WHERE rr.employee_id = $${paramIndex}`;
+      params.push(employeeId);
+      paramIndex++;
+    }
+    if (assessorId) {
+      whereClause += whereClause ? ` AND rr.assessor_id = $${paramIndex}` : `WHERE rr.assessor_id = $${paramIndex}`;
+      params.push(assessorId);
+      paramIndex++;
+    }
+    if (status) {
+      whereClause += whereClause ? ` AND rr.status = $${paramIndex}` : `WHERE rr.status = $${paramIndex}`;
+      params.push(status);
+      paramIndex++;
+    }
+    if (competencyId) {
+      whereClause += whereClause ? ` AND rr.competency_id = $${paramIndex}` : `WHERE rr.competency_id = $${paramIndex}`;
+      params.push(competencyId);
+      paramIndex++;
+    }
 
     const [requests, total] = await Promise.all([
-      prisma.$queryRaw`
+      prisma.$queryRawUnsafe(`
         SELECT 
           rr.id,
           rr.employee_id,
@@ -134,13 +151,13 @@ router.get('/requests', async (req, res) => {
         JOIN competencies c ON rr.competency_id = c.id
         ${whereClause}
         ORDER BY rr.created_at DESC
-        LIMIT ${take} OFFSET ${skip}
-      `,
-      prisma.$queryRaw`
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `, ...params, take, skip),
+      prisma.$queryRawUnsafe(`
         SELECT COUNT(*)::int as count 
         FROM review_requests rr
         ${whereClause}
-      `
+      `, ...params)
     ]);
 
     res.json({
