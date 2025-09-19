@@ -174,6 +174,7 @@ docker-compose logs frontend --tail=10
 - **User Profile:** Working with SID 2254, showing Job Competency Profile
 - **User Assessments:** ✅ Working - 9 competency cards showing, Start Assessment functional
 - **Default Assessment:** ✅ Working - 4 questions, 30 minutes, linked to all competencies via `apply_to_all=true`
+- **Assessment Filtering:** ✅ Working - Only shows competency cards that have assessments available
 
 **Last Updated:** September 2025 - User Assessments Fixed
 

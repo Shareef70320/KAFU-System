@@ -137,6 +137,7 @@ router.get('/competencies', async (req, res) => {
         LEFT JOIN questions q ON c.id = q.competency_id
         WHERE TRIM(UPPER(e.sid)) = TRIM(UPPER(${userId}))
         GROUP BY c.id, c.name, c.description
+        HAVING COALESCE(COUNT(DISTINCT CASE WHEN q.is_active = true THEN q.id END), 0) > 0
         ORDER BY c.name
       `;
       console.log('[user-assessments/competencies] mapped count:', competencies?.length || 0);
@@ -154,7 +155,7 @@ router.get('/competencies', async (req, res) => {
           LEFT JOIN questions q ON c.id = q.competency_id
           WHERE q.is_active = true
           GROUP BY c.id, c.name, c.description
-          HAVING COUNT(q.id) >= 1
+          HAVING COUNT(q.id) > 0
           ORDER BY c.name
         `;
         console.log('[user-assessments/competencies] fallback count:', competencies?.length || 0);
@@ -171,15 +172,18 @@ router.get('/competencies', async (req, res) => {
         LEFT JOIN questions q ON c.id = q.competency_id
         WHERE q.is_active = true
         GROUP BY c.id, c.name, c.description
-        HAVING COUNT(q.id) >= 1
+        HAVING COUNT(q.id) > 0
         ORDER BY c.name
       `;
     }
 
-    // Enrich with active assessment settings and filter out competencies without assessments
+    // Enrich with active assessment settings and filter out competencies without questions or assessments
     const enriched = await Promise.all(
       competencies.map(async (comp) => {
         const assessment = await selectAssessmentForCompetency(comp.id, null);
+        const hasQuestions = Number(comp.question_count) > 0;
+        const hasAssessment = !!assessment;
+        
         return {
           id: comp.id,
           name: comp.name,
@@ -187,15 +191,16 @@ router.get('/competencies', async (req, res) => {
           questionCount: Number(comp.question_count),
           numQuestions: assessment ? Number(assessment.num_questions || 0) : 0,
           timeLimitMinutes: assessment ? Number(assessment.time_limit_minutes || 0) : 0,
-          hasAssessment: !!assessment, // Add flag to indicate if assessment exists
+          hasQuestions,
+          hasAssessment,
         };
       })
     );
 
-    // Filter out competencies that don't have assessments
-    const competenciesWithAssessments = enriched.filter(comp => comp.hasAssessment);
+    // Filter out competencies that don't have questions OR assessments
+    const competenciesWithQuestionsAndAssessments = enriched.filter(comp => comp.hasQuestions && comp.hasAssessment);
 
-    res.json({ success: true, competencies: competenciesWithAssessments });
+    res.json({ success: true, competencies: competenciesWithQuestionsAndAssessments });
   } catch (error) {
     console.error('Error fetching competencies for assessment:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch competencies' });
