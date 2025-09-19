@@ -178,11 +178,19 @@ router.get('/competencies', async (req, res) => {
     }
 
     // Enrich with active assessment settings and filter out competencies without questions or assessments
-    const enriched = await Promise.all(
+        const enriched = await Promise.all(
       competencies.map(async (comp) => {
         const assessment = await selectAssessmentForCompetency(comp.id, null);
         const hasQuestions = Number(comp.question_count) > 0;
         const hasAssessment = !!assessment;
+            // Pull latest saved levels for this user+competency
+            const levelsRow = await prisma.$queryRaw`
+              SELECT
+                MAX(user_confirmed_level) FILTER (WHERE user_confirmed_level IS NOT NULL) AS user_level,
+                MAX(manager_selected_level) FILTER (WHERE manager_selected_level IS NOT NULL) AS manager_level
+              FROM assessment_sessions
+              WHERE user_id = ${userId} AND competency_id = ${comp.id}
+            `;
         
         return {
           id: comp.id,
@@ -193,6 +201,8 @@ router.get('/competencies', async (req, res) => {
           timeLimitMinutes: assessment ? Number(assessment.time_limit_minutes || 0) : 0,
           hasQuestions,
           hasAssessment,
+              userConfirmedLevel: levelsRow?.[0]?.user_level || null,
+              managerSelectedLevel: levelsRow?.[0]?.manager_level || null,
         };
       })
     );
@@ -609,21 +619,24 @@ router.post('/confirm-level', async (req, res) => {
     }
     console.log('Confirm level request:', { sessionId, userConfirmedLevel });
 
-    // Validate session exists
-    const exists = await prisma.$queryRaw`
-      SELECT 1 FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
+    // Fetch session to derive user and competency
+    const sessionRows = await prisma.$queryRaw`
+      SELECT user_id, competency_id FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
     `;
-    if (!exists || exists.length === 0) {
+    if (!sessionRows || sessionRows.length === 0) {
       return res.status(404).json({ success: false, error: 'Assessment session not found' });
     }
+    const userId = sessionRows[0].user_id;
+    const competencyId = sessionRows[0].competency_id;
     // Ensure columns exist
     await ensureLevelColumns();
 
     try {
+      // Persist the user's chosen level across all sessions for this competency
       await prisma.$queryRaw`
         UPDATE assessment_sessions
         SET user_confirmed_level = ${userConfirmedLevel}, updated_at = NOW()
-        WHERE id = ${sessionId}
+        WHERE user_id = ${userId} AND competency_id = ${competencyId}
       `;
     } catch (e) {
       console.error('Failed to update user_confirmed_level:', e);
@@ -711,7 +724,8 @@ router.get('/history/:userId', async (req, res) => {
         "as".started_at,
         "as".completed_at,
         "as".status,
-        COALESCE("as".manager_selected_level, NULL) AS manager_selected_level
+        COALESCE("as".manager_selected_level, NULL) AS manager_selected_level,
+        COALESCE("as".user_confirmed_level, NULL) AS user_confirmed_level
       FROM assessment_sessions "as"
       JOIN competencies c ON "as".competency_id = c.id
       WHERE "as".user_id = ${userId}
@@ -730,8 +744,9 @@ router.get('/history/:userId', async (req, res) => {
         totalQuestions: Number(assessment.total_questions),
         startedAt: assessment.started_at,
         completedAt: assessment.completed_at,
-        status: assessment.status
-        , managerSelectedLevel: assessment.manager_selected_level
+        status: assessment.status,
+        managerSelectedLevel: assessment.manager_selected_level,
+        userConfirmedLevel: assessment.user_confirmed_level
       }))
     });
   } catch (error) {
