@@ -308,8 +308,8 @@ router.put('/requests/:id/assign', async (req, res) => {
     const updatedRequest = await prisma.$queryRaw`
       UPDATE review_requests 
       SET assessor_id = ${assessorId}, 
-          scheduled_date = ${scheduledDate || null},
-          status = 'SCHEDULED',
+          scheduled_date = ${scheduledDate ? `${scheduledDate}::timestamp` : 'NULL'},
+          status = 'SCHEDULED'::review_status,
           updated_at = NOW()
       WHERE id = ${id}
       RETURNING *
