@@ -43,14 +43,15 @@ router.get('/', async (req, res) => {
       SELECT COUNT(*) as count FROM assessments
     `;
 
+    const totalCount = Number(total[0]?.count || 0);
     res.json({
       success: true,
       assessments: assessments || [],
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: parseInt(total[0]?.count || 0),
-        pages: Math.ceil((total[0]?.count || 0) / parseInt(limit))
+        total: totalCount,
+        pages: Math.ceil(totalCount / parseInt(limit))
       }
     });
   } catch (error) {
