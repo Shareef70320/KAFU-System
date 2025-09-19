@@ -721,3 +721,71 @@ curl -s 'http://localhost:5001/api/user-assessments/latest-result/2254/COMPETENC
 # 2. Click "View Dashboard" on any competency card
 # 3. Should show assessment details without errors
 ```
+
+## 🔧 **Assessment Attempt Limits Implementation**
+
+### **Feature:** 
+"Start Assessment" button is disabled when all attempts are exhausted for a competency
+
+### **Implementation:**
+```bash
+# 1. Add attempt tracking hook in frontend
+# In frontend/src/pages/user/UserAssessments.js:
+# const useAttempts = (competencyId) => useQuery({
+#   queryKey: ['assessment-attempts', competencyId, currentUserId],
+#   queryFn: async () => {
+#     const res = await api.get(`/user-assessments/settings/${competencyId}?userId=${currentUserId}`);
+#     return res.data;
+#   },
+#   enabled: !!competencyId && !!currentUserId,
+# });
+
+# 2. Update CompetencyCard to use attempt data
+# const CompetencyCard = ({ competency }) => {
+#   const { data: attemptsData, isLoading: attemptsLoading } = useAttempts(competency.id);
+#   const attemptsLeft = attemptsData?.attemptsLeft || 0;
+#   const disabled = !attemptsLoading && attemptsLeft === 0;
+#   const attemptsInfo = attemptsLoading ? '' : (attemptsLeft > 0 ? ` (${attemptsLeft} left)` : ' (No attempts left)');
+# };
+
+# 3. Update button styling and text
+# <Button 
+#   disabled={startAssessmentMutation.isPending || disabled}
+#   variant={disabled ? "secondary" : "default"}
+# >
+#   {disabled ? (
+#     <>
+#       <X className="mr-2 h-4 w-4" />
+#       No Attempts Left
+#     </>
+#   ) : (
+#     <>
+#       <Play className="mr-2 h-4 w-4" />
+#       Start Assessment{attemptsInfo}
+#     </>
+#   )}
+# </Button>
+```
+
+### **Backend Support:**
+- Attempt tracking is already implemented in `/user-assessments/settings/:competencyId`
+- Returns: `attemptsLeft`, `attemptsUsed`, `maxAttempts`, `allowMultipleAttempts`
+- Backend enforces limits in `/user-assessments/start` endpoint
+
+### **User Experience:**
+- Button shows "Start Assessment (X left)" when attempts available
+- Button shows "No Attempts Left" and is disabled when exhausted
+- Button uses secondary variant (grayed out) when disabled
+- Attempt info updates in real-time
+
+### **Verification:**
+```bash
+# Test attempt limits
+curl -s 'http://localhost:5001/api/user-assessments/settings/COMPETENCY_ID?userId=2254' | jq '{attemptsLeft, attemptsUsed, maxAttempts}'
+
+# In frontend:
+# 1. Go to Take Assessment page
+# 2. Check competency cards for attempt info
+# 3. Buttons should be disabled for competencies with 0 attempts left
+# 4. Buttons should show remaining attempts for available competencies
+```

@@ -637,6 +637,35 @@ router.post('/confirm-level', async (req, res) => {
   }
 });
 
+// Manager: set manager selected level for a session
+router.post('/manager/confirm-level', async (req, res) => {
+  try {
+    const { sessionId, managerSelectedLevel } = req.body;
+    if (!sessionId || !managerSelectedLevel) {
+      return res.status(400).json({ success: false, error: 'sessionId and managerSelectedLevel are required' });
+    }
+
+    // Ensure column exists
+    await ensureLevelColumns();
+
+    try {
+      await prisma.$queryRaw`
+        UPDATE assessment_sessions
+        SET manager_selected_level = ${managerSelectedLevel}, updated_at = NOW()
+        WHERE id = ${sessionId}
+      `;
+    } catch (e) {
+      console.error('Failed to update manager_selected_level:', e);
+      return res.status(500).json({ success: false, error: `Failed to save manager level: ${e.message || e}` });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving manager level:', error);
+    res.status(500).json({ success: false, error: `Failed to save manager level: ${error.message || error}` });
+  }
+});
+
 // Get assessment history for a user
 router.get('/history/:userId', async (req, res) => {
   try {

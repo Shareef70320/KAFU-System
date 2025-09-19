@@ -16,6 +16,7 @@ import {
   Edit,
   BookOpen,
   CheckCircle,
+  BarChart3,
   X,
   ChevronRight,
   ChevronDown,
@@ -36,6 +37,10 @@ const TeamEmployees = () => {
   const [jcpData, setJcpData] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showJCPModal, setShowJCPModal] = useState(false);
+  const [showAssessmentsModal, setShowAssessmentsModal] = useState(false);
+  const [assessments, setAssessments] = useState([]);
+  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
+  const [managerLevel, setManagerLevel] = useState('');
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [viewMode, setViewMode] = useState('tree'); // 'tree' or 'grid'
 
@@ -149,6 +154,37 @@ const TeamEmployees = () => {
   const handleJCPClick = (employee) => {
     setSelectedEmployee(employee);
     setShowJCPModal(true);
+  };
+
+  const handleAssessmentsClick = async (employee) => {
+    setSelectedEmployee(employee);
+    setAssessments([]);
+    setManagerLevel('');
+    setShowAssessmentsModal(true);
+    try {
+      setAssessmentsLoading(true);
+      const resp = await api.get(`/user-assessments/history/${employee.sid}`);
+      setAssessments(resp.data.assessments || []);
+    } catch (e) {
+      console.error('Failed to load assessments:', e);
+    } finally {
+      setAssessmentsLoading(false);
+    }
+  };
+
+  const saveManagerLevel = async (sessionId) => {
+    if (!managerLevel) return;
+    try {
+      await api.post('/user-assessments/manager/confirm-level', {
+        sessionId,
+        managerSelectedLevel: managerLevel
+      });
+      const resp = await api.get(`/user-assessments/history/${selectedEmployee.sid}`);
+      setAssessments(resp.data.assessments || []);
+      setManagerLevel('');
+    } catch (e) {
+      console.error('Failed to save manager level:', e);
+    }
   };
 
   const filterEmployees = () => {
@@ -289,6 +325,14 @@ const TeamEmployees = () => {
                           <span className="text-xs text-green-600 font-medium">JCP</span>
                         </button>
                       )}
+                      <button
+                        onClick={() => handleAssessmentsClick(node)}
+                        className="ml-2 flex items-center hover:bg-blue-50 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                        title="View Assessments"
+                      >
+                        <BarChart3 className="h-4 w-4 text-blue-600 mr-1" />
+                        <span className="text-xs text-blue-600 font-medium">Assessments</span>
+                      </button>
                     </div>
                     
                     <div className="flex items-center text-sm text-gray-500">
@@ -553,6 +597,14 @@ const TeamEmployees = () => {
                             <span className="text-xs text-green-600 font-medium">JCP</span>
                           </button>
                         )}
+                        <button
+                          onClick={() => handleAssessmentsClick(employee)}
+                          className="ml-2 flex items-center hover:bg-blue-50 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                          title="View Assessments"
+                        >
+                          <BarChart3 className="h-4 w-4 text-blue-600 mr-1" />
+                          <span className="text-xs text-blue-600 font-medium">Assessments</span>
+                        </button>
                       </div>
                       
                       <div className="flex items-center text-sm text-gray-500">
@@ -669,6 +721,67 @@ const TeamEmployees = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assessments Modal */}
+      {showAssessmentsModal && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Assessments - {selectedEmployee.first_name} {selectedEmployee.last_name}
+              </h3>
+              <button
+                onClick={() => setShowAssessmentsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[70vh]">
+              {assessmentsLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                </div>
+              ) : assessments.length === 0 ? (
+                <div className="text-center text-gray-500">No assessments found.</div>
+              ) : (
+                <div className="space-y-3">
+                  {assessments.map(a => (
+                    <div key={a.sessionId} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-medium text-gray-900">{a.competencyName}</div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            Score: {a.percentageScore}% ({a.correctAnswers}/{a.totalQuestions})
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">Completed: {a.completedAt ? new Date(a.completedAt).toLocaleString() : '—'}</div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <select
+                            value={managerLevel}
+                            onChange={(e) => setManagerLevel(e.target.value)}
+                            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+                          >
+                            <option value="">Select Manager Level</option>
+                            <option value="BASIC">BASIC</option>
+                            <option value="INTERMEDIATE">INTERMEDIATE</option>
+                            <option value="ADVANCED">ADVANCED</option>
+                            <option value="EXPERT">EXPERT</option>
+                          </select>
+                          <Button size="sm" onClick={() => saveManagerLevel(a.sessionId)} disabled={!managerLevel}>
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
