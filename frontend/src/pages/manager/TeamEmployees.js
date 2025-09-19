@@ -41,6 +41,9 @@ const TeamEmployees = () => {
   const [assessments, setAssessments] = useState([]);
   const [assessmentsLoading, setAssessmentsLoading] = useState(false);
   const [managerLevel, setManagerLevel] = useState('');
+  const [showAssessmentDetailModal, setShowAssessmentDetailModal] = useState(false);
+  const [assessmentDetail, setAssessmentDetail] = useState(null);
+  const [assessmentDetailLoading, setAssessmentDetailLoading] = useState(false);
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [viewMode, setViewMode] = useState('tree'); // 'tree' or 'grid'
 
@@ -184,6 +187,20 @@ const TeamEmployees = () => {
       setManagerLevel('');
     } catch (e) {
       console.error('Failed to save manager level:', e);
+    }
+  };
+
+  const handleViewAssessmentDetails = async (sessionId) => {
+    try {
+      setAssessmentDetail(null);
+      setAssessmentDetailLoading(true);
+      setShowAssessmentDetailModal(true);
+      const resp = await api.get(`/user-assessments/session/${sessionId}`);
+      setAssessmentDetail(resp.data.assessment || null);
+    } catch (e) {
+      console.error('Failed to load assessment details:', e);
+    } finally {
+      setAssessmentDetailLoading(false);
     }
   };
 
@@ -762,6 +779,9 @@ const TeamEmployees = () => {
                           <div className="text-xs text-gray-500 mt-1">Completed: {a.completedAt ? new Date(a.completedAt).toLocaleString() : '—'}</div>
                         </div>
                         <div className="flex items-center space-x-2">
+                          <Button variant="outline" size="sm" onClick={() => handleViewAssessmentDetails(a.sessionId)}>
+                            View Details
+                          </Button>
                           <select
                             value={managerLevel}
                             onChange={(e) => setManagerLevel(e.target.value)}
@@ -780,6 +800,78 @@ const TeamEmployees = () => {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assessment Detail Modal */}
+      {showAssessmentDetailModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Assessment Details</h3>
+              <button
+                onClick={() => setShowAssessmentDetailModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[75vh]">
+              {assessmentDetailLoading || !assessmentDetail ? (
+                <div className="flex items-center justify-center h-40">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-xl font-semibold text-gray-900">{assessmentDetail.competencyName}</div>
+                    <div className="text-gray-600 text-sm mt-1">
+                      Score: {assessmentDetail.percentageScore}% ({assessmentDetail.correctAnswers}/{assessmentDetail.totalQuestions})
+                    </div>
+                    <div className="text-gray-500 text-xs mt-1">
+                      Started: {assessmentDetail.startedAt ? new Date(assessmentDetail.startedAt).toLocaleString() : '—'} | Completed: {assessmentDetail.completedAt ? new Date(assessmentDetail.completedAt).toLocaleString() : '—'}
+                    </div>
+                    {(assessmentDetail.systemLevel || assessmentDetail.userConfirmedLevel) && (
+                      <div className="mt-2 text-sm text-gray-700">
+                        System Level: {assessmentDetail.systemLevel || '—'} | User Level: {assessmentDetail.userConfirmedLevel || '—'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <div className="font-medium text-gray-900 mb-2">Question Details</div>
+                    <div className="space-y-3">
+                      {assessmentDetail.details.map((d, idx) => (
+                        <div key={idx} className={`rounded-md border p-3 ${d.isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium text-gray-900">Q{idx + 1}. {d.questionText}</div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${d.isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {d.isCorrect ? 'Correct' : 'Incorrect'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-700 mt-1">
+                            {d.selectedOptionText ? (
+                              <>
+                                <div>Selected: {d.selectedOptionText}</div>
+                                {d.correctOptionText && d.selectedOptionText !== d.correctOptionText && (
+                                  <div>Correct: {d.correctOptionText}</div>
+                                )}
+                              </>
+                            ) : d.answerText ? (
+                              <div>Answer: {d.answerText}</div>
+                            ) : (
+                              <div>Answer: —</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
