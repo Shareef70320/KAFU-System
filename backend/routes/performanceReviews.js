@@ -109,7 +109,7 @@ router.get('/requests', async (req, res) => {
       paramIndex++;
     }
     if (status) {
-      whereClause += whereClause ? ` AND rr.status = $${paramIndex}` : `WHERE rr.status = $${paramIndex}`;
+      whereClause += whereClause ? ` AND rr.status = $${paramIndex}::review_status` : `WHERE rr.status = $${paramIndex}::review_status`;
       params.push(status);
       paramIndex++;
     }
