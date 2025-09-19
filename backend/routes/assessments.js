@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
         c.family as competency_family,
         cl.level as level_name,
         cl.title as level_title,
-        COUNT(aq.question_id) as question_count
+        COUNT(aq.question_id)::int as question_count
       FROM assessments a
       LEFT JOIN competencies c ON a.competency_id = c.id
       LEFT JOIN competency_levels cl ON a.competency_level_id = cl.id
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
     `;
 
     const total = await prisma.$queryRaw`
-      SELECT COUNT(*) as count FROM assessments
+      SELECT COUNT(*)::int as count FROM assessments
     `;
 
     const totalCount = Number(total[0]?.count || 0);
