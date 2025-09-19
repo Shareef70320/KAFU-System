@@ -38,32 +38,20 @@ const MyCompetencies = () => {
     enabled: !!currentSid
   });
 
-  // Fetch job competency mappings for this user
-  const { data: jcpData, isLoading: jcpLoading } = useQuery({
-    queryKey: ['user-jcp', currentSid, employeeData?.job_code],
+  // Fetch competencies with questions and assessments for this user
+  const { data: competenciesData, isLoading: competenciesLoading } = useQuery({
+    queryKey: ['user-competencies', currentSid],
     queryFn: async () => {
-      console.log('MyCompetencies - Fetching JCP data for SID:', currentSid);
-      if (!employeeData?.job_code) {
-        console.log('MyCompetencies - No employee job_code; returning null');
+      console.log('MyCompetencies - Fetching competencies data for SID:', currentSid);
+      if (!currentSid) {
+        console.log('MyCompetencies - No currentSid; returning null');
         return null;
       }
-      const response = await api.get('/job-competencies');
-      const mappings = response.data.mappings || [];
-      const jobCode = String(employeeData.job_code).trim();
-      const userMapping = mappings.find(mapping => String(mapping.job.code).trim() === jobCode);
-      
-      if (userMapping) {
-        const jobCompetencies = mappings.filter(mapping => String(mapping.job.code).trim() === jobCode);
-        console.log('MyCompetencies - Found JCP data:', { job: userMapping.job, competencies: jobCompetencies });
-        return {
-          job: userMapping.job,
-          competencies: jobCompetencies
-        };
-      }
-      console.log('MyCompetencies - No JCP data found for job_code:', jobCode);
-      return { job: { code: jobCode }, competencies: [] };
+      const response = await api.get(`/user-assessments/competencies?userId=${currentSid}`);
+      console.log('MyCompetencies - Found competencies data:', response.data);
+      return response.data;
     },
-    enabled: !!employeeData?.job_code
+    enabled: !!currentSid
   });
 
   useEffect(() => {
@@ -72,9 +60,8 @@ const MyCompetencies = () => {
     }
   }, [employeeData]);
 
-  // Mock assessment data (in real app, this would come from API)
-  // Real competency data from job mappings
-  const competencies = jcpData?.competencies || [];
+  // Competencies with questions and assessments available
+  const competencies = competenciesData?.competencies || [];
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -110,7 +97,7 @@ const MyCompetencies = () => {
   const totalCount = competencies.length;
   const overallProgress = totalCount > 0 ? 0 : 0; // Will be calculated from real assessment data
 
-  if (employeeLoading || jcpLoading) {
+  if (employeeLoading || competenciesLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
@@ -226,37 +213,39 @@ const MyCompetencies = () => {
               <div key={competency.id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">{competency.competency.name}</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">{competency.name}</h3>
                     <div className="flex items-center space-x-4 mt-2">
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-500">Required Level:</span>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.requiredLevel)}`}>
-                          {competency.requiredLevel}
+                        <span className="text-sm text-gray-500">Questions Available:</span>
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          {competency.questionCount}
                         </span>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-500">Required:</span>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${competency.isRequired ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
-                          {competency.isRequired ? 'Yes' : 'No'}
+                        <span className="text-sm text-gray-500">Assessment:</span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${competency.hasAssessment ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {competency.hasAssessment ? 'Available' : 'Not Available'}
                         </span>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="text-sm text-gray-500">
-                  <p>{competency.competency.description || 'No description available'}</p>
+                  <p>{competency.description || 'No description available'}</p>
                 </div>
 
-                {/* Action Button */}
-                <div className="mt-4 flex justify-end">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => window.location.href = '/user/assessments'}
-                  >
-                    Take Assessment
-                  </Button>
-                </div>
+                {/* Action Button - Only show if competency has questions and assessments */}
+                {competency.hasQuestions && competency.hasAssessment && (
+                  <div className="mt-4 flex justify-end">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => window.location.href = '/user/assessments'}
+                    >
+                      Take Assessment
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
