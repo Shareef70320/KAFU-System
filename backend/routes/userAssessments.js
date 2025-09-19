@@ -269,7 +269,7 @@ router.post('/start', async (req, res) => {
 
     // Prefer new questions: exclude ones the user recently saw for this competency (last 3 completed sessions)
     const recentSeen = await prisma.$queryRaw`
-      SELECT DISTINCT ar.question_id
+      SELECT DISTINCT ar.question_id, s.completed_at
       FROM assessment_responses ar
       JOIN assessment_sessions s ON s.id = ar.session_id
       WHERE s.user_id = ${userId}
