@@ -118,12 +118,12 @@ router.get('/filters', async (req, res) => {
 });
 
 // Get single employee
-router.get('/:id', async (req, res) => {
+router.get('/:sid', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { sid } = req.params;
     
     const employees = await prisma.$queryRawUnsafe(
-      'SELECT * FROM employees WHERE id = $1', id
+      'SELECT * FROM employees WHERE sid = $1', sid
     );
 
     if (employees.length === 0) {
