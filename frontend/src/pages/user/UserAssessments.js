@@ -61,18 +61,7 @@ const UserAssessments = () => {
     }
   });
 
-  // Get per-competency settings (numQuestions, timeLimit)
-  const useSettings = (competencyId) => useQuery({
-    queryKey: ['assessment-settings', competencyId, currentUserId],
-    queryFn: async () => {
-      if (!competencyId) return { numQuestions: 10, timeLimitMinutes: 30 };
-      console.log('Fetching settings for competency:', competencyId, 'user:', currentUserId);
-      const res = await api.get(`/user-assessments/settings/${competencyId}?userId=${currentUserId}`);
-      console.log('Settings response:', res.data);
-      return res.data;
-    },
-    enabled: !!competencyId,
-  });
+  // Note: Settings are now included in the competencies response, no need for separate API calls
 
   const templatesLoading = false;
 
@@ -276,12 +265,11 @@ const UserAssessments = () => {
 
   // Card component to safely use hooks per competency
   const CompetencyCard = ({ competency }) => {
-    const { data: settings, isLoading: settingsLoading } = useSettings(competency.id);
     const numQ = typeof competency.numQuestions === 'number' ? competency.numQuestions : undefined;
     const tlm = typeof competency.timeLimitMinutes === 'number' ? competency.timeLimitMinutes : undefined;
-    const attemptsLeft = settings?.attemptsLeft;
-    const attemptsInfo = settingsLoading ? '' : (typeof attemptsLeft === 'number' ? ` (${attemptsLeft} left)` : '');
-    const disabled = settings && attemptsLeft === 0;
+    // Note: Attempt limits will be handled by the backend when starting assessments
+    const attemptsInfo = '';
+    const disabled = false;
     return (
       <Card key={competency.id} className="hover:shadow-lg transition-shadow">
         <CardHeader>
@@ -328,10 +316,9 @@ const UserAssessments = () => {
 
   // Retake button which respects attempt limits for the selected competency
   const RetakeButton = ({ competencyId, onRetake }) => {
-    const { data: settings, isLoading } = useSettings(competencyId);
-    const attemptsLeft = settings?.attemptsLeft;
-    const disabled = !competencyId || (!isLoading && attemptsLeft === 0);
-    const label = disabled ? 'No Attempts Left' : 'Take Another Assessment';
+    // Note: Attempt limits will be handled by the backend when starting assessments
+    const disabled = !competencyId;
+    const label = 'Take Another Assessment';
     return (
       <Button
         onClick={onRetake}

@@ -175,6 +175,7 @@ docker-compose logs frontend --tail=10
 - **User Assessments:** ✅ Working - 9 competency cards showing, Start Assessment functional
 - **Default Assessment:** ✅ Working - 4 questions, 30 minutes, linked to all competencies via `apply_to_all=true`
 - **Assessment Filtering:** ✅ Working - Only shows competency cards that have assessments available
+- **Question-Based Filtering:** ✅ Working - Only shows competencies that have both questions AND assessments
 
 **Last Updated:** September 2025 - User Assessments Fixed
 
@@ -496,4 +497,61 @@ curl -s 'http://localhost:5001/api/assessments' | jq '.success'
 # Check for column errors in logs
 docker logs --tail=10 kafu-backend
 # Should not show "column does not exist" errors
+```
+
+## 🔧 **Question-Based Competency Filtering Fix**
+
+### **Problem:** 
+Competencies show up in My Competencies page even when they don't have questions available
+
+### **Root Cause:** 
+My Competencies page was using job-competencies API which doesn't check for question availability
+
+### **Solution:**
+```bash
+# 1. Update My Competencies page to use user-assessments/competencies API
+# In frontend/src/pages/user/MyCompetencies.js, change:
+# const { data: jcpData } = useQuery({
+#   queryKey: ['user-jcp', currentSid, employeeData?.job_code],
+#   queryFn: async () => {
+#     const response = await api.get('/job-competencies');
+#     // ... job-competencies logic
+#   }
+# });
+
+# To:
+# const { data: competenciesData } = useQuery({
+#   queryKey: ['user-competencies', currentSid],
+#   queryFn: async () => {
+#     const response = await api.get(`/user-assessments/competencies?userId=${currentSid}`);
+#     return response.data;
+#   }
+# });
+
+# 2. Update rendering logic to only show "Take Assessment" button for competencies with questions
+# {competency.hasQuestions && competency.hasAssessment && (
+#   <Button onClick={() => window.location.href = '/user/assessments'}>
+#     Take Assessment
+#   </Button>
+# )}
+
+# 3. Deploy changes
+git add -A && git commit -m "feat(my-competencies): filter by questions and assessments"
+docker compose up -d --build
+```
+
+### **Prevention:**
+- Always use the user-assessments/competencies API for user-facing competency lists
+- Check both `hasQuestions` and `hasAssessment` flags before showing action buttons
+- Test with competencies that have no questions to ensure proper filtering
+
+### **Verification:**
+```bash
+# Test competencies API
+curl -s 'http://localhost:5001/api/user-assessments/competencies?userId=2254' | jq '.competencies | length'
+# Should return only competencies with questions and assessments
+
+# Check individual competency flags
+curl -s 'http://localhost:5001/api/user-assessments/competencies?userId=2254' | jq '.competencies[] | {name, hasQuestions, hasAssessment}'
+# All returned competencies should have both flags as true
 ```
