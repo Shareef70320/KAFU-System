@@ -15,9 +15,7 @@ router.get('/competency/:competencyId', async (req, res) => {
         ac.assessor_sid,
         ac.competency_id,
         ac.competency_level,
-        ac.is_active,
         ac.created_at,
-        ac.updated_at,
         e.first_name,
         e.last_name,
         e.email,
@@ -55,9 +53,7 @@ router.get('/', async (req, res) => {
         ac.assessor_sid,
         ac.competency_id,
         ac.competency_level,
-        ac.is_active,
         ac.created_at,
-        ac.updated_at,
         e.first_name,
         e.last_name,
         e.email,
@@ -201,8 +197,8 @@ router.post('/', async (req, res) => {
 
     // Create the mapping
     const newMapping = await prisma.$queryRaw`
-      INSERT INTO assessor_competencies (assessor_sid, competency_id, competency_level, is_active)
-      VALUES (${assessorSid}, ${competencyId}, ${competencyLevel}, true)
+      INSERT INTO assessor_competencies (id, assessor_sid, competency_id, competency_level)
+      VALUES (gen_random_uuid()::text, ${assessorSid}, ${competencyId}, ${competencyLevel})
       RETURNING *
     `;
 
@@ -302,7 +298,7 @@ router.delete('/:id', async (req, res) => {
 
     const deletedMapping = await prisma.$queryRaw`
       DELETE FROM assessor_competencies 
-      WHERE id = ${parseInt(id)}
+      WHERE id = ${id}
       RETURNING *
     `;
 
@@ -334,7 +330,7 @@ router.get('/stats/overview', async (req, res) => {
         COUNT(*) as total_mappings,
         COUNT(DISTINCT assessor_sid) as total_assessors,
         COUNT(DISTINCT competency_id) as total_competencies,
-        COUNT(CASE WHEN is_active = true THEN 1 END) as active_mappings
+        COUNT(*) as total_mappings
       FROM assessor_competencies
     `;
 
@@ -343,7 +339,6 @@ router.get('/stats/overview', async (req, res) => {
         competency_level,
         COUNT(*) as count
       FROM assessor_competencies
-      WHERE is_active = true
       GROUP BY competency_level
       ORDER BY competency_level
     `;

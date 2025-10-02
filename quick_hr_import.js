@@ -31,27 +31,27 @@ async function quickImport() {
         const firstName = nameParts[0] || '';
         const lastName = nameParts.slice(1).join(' ') || '';
         
+        const sid = values[0]?.trim() || null;
         const employee = {
-          employeeId: values[0]?.trim() || `EMP_${i}`,
-          sid: values[0]?.trim() || null,
-          erpId: values[2]?.trim() || null,
-          firstName: firstName,
-          lastName: lastName,
+          id: sid ? `EMP${sid}` : `EMP_${i}`,
+          sid: sid,
+          erp_id: values[2]?.trim() || null,
+          first_name: firstName,
+          last_name: lastName,
           email: values[3]?.trim() || '',
-          jobCode: values[4]?.trim() || null,
-          jobTitle: values[5]?.trim() || null,
+          job_code: values[4]?.trim() || null,
+          job_title: values[5]?.trim() || null,
           division: values[6]?.trim() || null,
           unit: values[7]?.trim() || null,
           department: values[8]?.trim() || null,
           section: values[9]?.trim() || null,
-          subSection: values[10]?.trim() || null,
-          positionRemark: values[11]?.trim() || null,
+          sub_section: values[10]?.trim() || null,
+          position_remark: values[11]?.trim() || null,
           grade: values[12]?.trim() || null,
           location: values[13]?.trim() || null,
-          workLocation: values[13]?.trim() || null,
-          photoUrl: values[0] ? `/employee-photos/${values[0].trim()}.jpg` : null,
-          isActive: true,
-          employmentStatus: 'ACTIVE',
+          photo_url: sid ? `/employee-photos/${sid}.jpg` : null,
+          is_active: true,
+          employment_status: 'ACTIVE',
         };
         
         employees.push(employee);

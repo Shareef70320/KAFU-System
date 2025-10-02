@@ -22,8 +22,16 @@ router.get('/', async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const take = parseInt(limit);
+    const pageNum = Number.isFinite(Number(page)) && Number(page) > 0 ? parseInt(page) : 1;
+    const take = Number.isFinite(Number(limit)) && Number(limit) > 0 ? parseInt(limit) : 10;
+    const skip = (pageNum - 1) * take;
+
+    // Whitelist sort columns to avoid SQL errors/injection
+    const allowedSortColumns = new Set([
+      'created_at', 'first_name', 'last_name', 'email', 'job_title', 'division', 'department', 'unit', 'section', 'location', 'sid', 'job_code'
+    ]);
+    const sortColumn = allowedSortColumns.has(String(sortBy)) ? String(sortBy) : 'created_at';
+    const sortDirection = String(sortOrder).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
     // Build search conditions for raw SQL
     let searchConditions = [];
@@ -56,7 +64,7 @@ router.get('/', async (req, res) => {
     const employeesQuery = `
       SELECT * FROM employees 
       ${whereClause}
-      ORDER BY ${sortBy} ${sortOrder.toUpperCase()}
+      ORDER BY ${sortColumn} ${sortDirection}
       LIMIT ${take} OFFSET ${skip}
     `;
     
@@ -74,10 +82,10 @@ router.get('/', async (req, res) => {
     res.json({
       employees,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: take,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / take)
       }
     });
   } catch (error) {
@@ -188,10 +196,10 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    // Validate line_manager_sid if provided
-    if (updateData.line_manager_sid) {
+    // Validate line_manager_sid if provided and not empty
+    if (updateData.line_manager_sid && updateData.line_manager_sid.trim() !== '') {
       const managerExists = await prisma.$queryRawUnsafe(
-        'SELECT id FROM employees WHERE sid = $1', updateData.line_manager_sid
+        'SELECT id FROM employees WHERE sid = $1', updateData.line_manager_sid.trim()
       );
       
       if (managerExists.length === 0) {
@@ -213,9 +221,20 @@ router.put('/:id', async (req, res) => {
 
     for (const [key, value] of Object.entries(updateData)) {
       if (allowedFields.includes(key) && value !== undefined) {
-        updateFields.push(`${key} = $${paramCount}`);
-        values.push(value);
-        paramCount++;
+        // Handle empty strings for nullable fields
+        let processedValue = value;
+        if (key === 'line_manager_sid' && (value === '' || value === null)) {
+          processedValue = null;
+        }
+        
+        // Use NULL for empty strings in SQL
+        if (processedValue === null) {
+          updateFields.push(`${key} = NULL`);
+        } else {
+          updateFields.push(`${key} = $${paramCount}`);
+          values.push(processedValue);
+          paramCount++;
+        }
       }
     }
 

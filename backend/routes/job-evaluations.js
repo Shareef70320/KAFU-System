@@ -72,6 +72,7 @@ router.post('/', async (req, res) => {
       ORDER BY id ASC
     `;
 
+    // criteria.weight is stored as 0..100 percentages; use directly
     const weights = {
       decisionMakingPower: parseFloat(criteria[0]?.weight || 0),
       riskOfAbsence: parseFloat(criteria[1]?.weight || 0),
@@ -90,9 +91,11 @@ router.post('/', async (req, res) => {
       (numberOfReportees * weights.numberOfReportees);
 
     // Determine criticality level
+    // With weights 0-100 and ratings 1-5, max possible score is 500 (5 × 100)
+    // Thresholds: <=300 = Low, >300 and <450 = Medium, >=450 = High
     let criticalityLevel = 'Low';
-    if (weightedScore >= 20) criticalityLevel = 'High';
-    else if (weightedScore >= 15) criticalityLevel = 'Medium';
+    if (weightedScore >= 450) criticalityLevel = 'High';
+    else if (weightedScore > 300) criticalityLevel = 'Medium';
 
     // Check if evaluation exists for this job
     const existingEvaluation = await prisma.$queryRaw`

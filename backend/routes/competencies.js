@@ -7,6 +7,7 @@ const csv = require('csv-parser');
 
 const prisma = new PrismaClient();
 const router = express.Router();
+let xlsx;
 
 // Configure multer for document uploads
 const documentStorage = multer.diskStorage({
@@ -38,6 +39,259 @@ const documentUpload = multer({
     } else {
       cb(new Error('Only documents (PDF, DOC, DOCX, TXT, PPT, PPTX, XLS, XLSX) are allowed'), false);
     }
+  }
+});
+
+// CSV upload for competencies (Type, Competency Family, Competency Title, Competency Definition, Basic, Intermediate, Advanced, Mastery)
+const csvUpload = multer({ dest: 'uploads/' });
+
+router.post('/upload-csv', csvUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No CSV file provided' });
+  }
+
+  const filePath = req.file.path;
+  let success = 0;
+  const errors = [];
+
+  const normalizeType = (val) => {
+    if (!val) return null;
+    const s = String(val).trim().toUpperCase().replace(/\s+/g, '_');
+    // Map common labels
+    if (s.includes('NON') && s.includes('TECHNICAL')) return 'NON_TECHNICAL';
+    if (s.includes('TECHNICAL')) return 'TECHNICAL';
+    if (s.includes('LEADERSHIP')) return 'LEADERSHIP';
+    if (s.includes('BEHAVIOR')) return 'BEHAVIORAL';
+    if (s.includes('FUNCTION')) return 'FUNCTIONAL';
+    return s; // fallback
+  };
+
+  const levelOrder = [
+    { key: 'Basic', enum: 'BASIC' },
+    { key: 'Intermediate', enum: 'INTERMEDIATE' },
+    { key: 'Advanced', enum: 'ADVANCED' },
+    { key: 'Mastery', enum: 'MASTERY' },
+  ];
+
+  try {
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(filePath)
+        .pipe(csv({ separator: '\t', mapHeaders: ({ header }) => header.trim() }))
+        .on('data', async (row) => {
+          // Support either tab-separated as pasted or comma-separated files
+          const get = (k) => row[k] ?? row[k?.replace(/\s+/g, ' ')] ?? row[k?.replace(/\s+/g, '')];
+
+          // If it looks empty (e.g., due to comma CSV), try fallback parser later
+          if (!get('Competency Title') && !get('Competency Title ')) return;
+
+          const rawType = get('Type');
+          const family = (get('Competency Family') || '').toString().trim();
+          const name = (get('Competency Title') || '').toString().trim().replace(/^"|"$/g, '');
+          const definition = (get('Competency Definition') || '').toString().trim();
+
+          if (!name) { errors.push('Missing Competency Title'); return; }
+
+          const type = normalizeType(rawType) || 'NON_TECHNICAL';
+
+          // Build levels from columns
+          const levels = [];
+          for (const { key, enum: lvl } of levelOrder) {
+            const text = (get(key) || '').toString().trim();
+            if (!text) continue;
+            levels.push({ level: lvl, title: key, description: text, indicators: [] });
+          }
+
+          try {
+            // Upsert by name to avoid duplicates
+            const existing = await prisma.competency.findUnique({ where: { name } });
+            let compId = existing?.id;
+            if (!existing) {
+              const created = await prisma.competency.create({
+                data: { name, type, family, definition, description: null }
+              });
+              compId = created.id;
+            } else {
+              await prisma.competency.update({ where: { id: compId }, data: { type, family, definition } });
+              // Clear previous levels to replace
+              await prisma.competencyLevel.deleteMany({ where: { competencyId: compId } });
+            }
+
+            if (levels.length > 0) {
+              await prisma.competencyLevel.createMany({
+                data: levels.map(l => ({
+                  competencyId: compId,
+                  level: l.level,
+                  title: l.title,
+                  description: l.description,
+                  indicators: l.indicators
+                }))
+              });
+            }
+            success++;
+          } catch (e) {
+            errors.push(`Row for '${name}': ${e.message}`);
+          }
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
+
+    // Fallback for comma-separated CSV if nothing parsed
+    if (success === 0) {
+      await new Promise((resolve, reject) => {
+        fs.createReadStream(filePath)
+          .pipe(csv({ separator: ',', mapHeaders: ({ header }) => header.trim() }))
+          .on('data', async (row) => {
+            const rawType = row['Type'];
+            const family = (row['Competency Family'] || '').toString().trim();
+            const name = (row['Competency Title'] || '').toString().trim().replace(/^"|"$/g, '');
+            const definition = (row['Competency Definition'] || '').toString().trim();
+            if (!name) return;
+            const type = normalizeType(rawType) || 'NON_TECHNICAL';
+
+            const levels = [];
+            for (const { key, enum: lvl } of levelOrder) {
+              const text = (row[key] || '').toString().trim();
+              if (!text) continue;
+              levels.push({ level: lvl, title: key, description: text, indicators: [] });
+            }
+
+            try {
+              const existing = await prisma.competency.findUnique({ where: { name } });
+              let compId = existing?.id;
+              if (!existing) {
+                const created = await prisma.competency.create({
+                  data: { name, type, family, definition, description: null }
+                });
+                compId = created.id;
+              } else {
+                await prisma.competency.update({ where: { id: compId }, data: { type, family, definition } });
+                await prisma.competencyLevel.deleteMany({ where: { competencyId: compId } });
+              }
+
+              if (levels.length > 0) {
+                await prisma.competencyLevel.createMany({
+                  data: levels.map(l => ({
+                    competencyId: compId,
+                    level: l.level,
+                    title: l.title,
+                    description: l.description,
+                    indicators: l.indicators
+                  }))
+                });
+              }
+              success++;
+            } catch (e) {
+              errors.push(`Row for '${name}': ${e.message}`);
+            }
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+    }
+
+    // Cleanup
+    try { fs.unlinkSync(filePath); } catch {}
+
+    res.json({ message: `Competency upload completed. ${success} successful, ${errors.length} errors.`, errors: errors.length ? errors.slice(0, 10) : undefined });
+  } catch (err) {
+    try { fs.unlinkSync(filePath); } catch {}
+    console.error('Competency CSV upload error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Excel (.xlsx) upload using xlsx parser
+const xlsxUpload = multer({ dest: 'uploads/' });
+router.post('/upload-xlsx', xlsxUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'No Excel file provided' });
+  const filePath = req.file.path;
+  let success = 0;
+  const errors = [];
+
+  const normalizeType = (val) => {
+    if (!val) return null;
+    const s = String(val).trim().toUpperCase().replace(/\s+/g, '_');
+    if (s.includes('NON') && s.includes('TECHNICAL')) return 'NON_TECHNICAL';
+    if (s.includes('TECHNICAL')) return 'TECHNICAL';
+    if (s.includes('LEADERSHIP')) return 'LEADERSHIP';
+    if (s.includes('BEHAVIOR')) return 'BEHAVIORAL';
+    if (s.includes('FUNCTION')) return 'FUNCTIONAL';
+    return s;
+  };
+  const levelOrder = [
+    { key: 'Basic', enum: 'BASIC' },
+    { key: 'Intermediate', enum: 'INTERMEDIATE' },
+    { key: 'Advanced', enum: 'ADVANCED' },
+    { key: 'Mastery', enum: 'MASTERY' },
+  ];
+
+  try {
+    try { xlsx = xlsx || require('xlsx'); } catch (e) {
+      throw new Error('Server missing xlsx module. Please install it.');
+    }
+    const wb = xlsx.readFile(filePath);
+    const sheetName = wb.SheetNames[0];
+    const sheet = wb.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+
+    const hmap = (h) => h.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+    for (const row of rows) {
+      try {
+        // Build a normalized-key object
+        const norm = {};
+        for (const k of Object.keys(row)) norm[hmap(k)] = row[k];
+
+        const rawType = norm['type'];
+        const family = (norm['competencyfamily'] || '').toString().trim();
+        const name = (norm['competencytitle'] || '').toString().trim().replace(/^"|"$/g, '');
+        const definition = (norm['competencydefinition'] || '').toString().trim();
+        if (!name) { errors.push('Missing Competency Title'); continue; }
+        const type = normalizeType(rawType) || 'NON_TECHNICAL';
+
+        const levels = [];
+        for (const { key, enum: lvl } of levelOrder) {
+          const col = key.toLowerCase().replace(/[^a-z0-9]+/g, '');
+          const text = (norm[col] || '').toString().trim();
+          if (!text) continue;
+          levels.push({ level: lvl, title: key, description: text, indicators: [] });
+        }
+
+        const existing = await prisma.competency.findUnique({ where: { name } });
+        let compId = existing?.id;
+        if (!existing) {
+          const created = await prisma.competency.create({
+            data: { name, type, family, definition, description: null }
+          });
+          compId = created.id;
+        } else {
+          await prisma.competency.update({ where: { id: compId }, data: { type, family, definition } });
+          await prisma.competencyLevel.deleteMany({ where: { competencyId: compId } });
+        }
+
+        if (levels.length > 0) {
+          await prisma.competencyLevel.createMany({
+            data: levels.map(l => ({
+              competencyId: compId,
+              level: l.level,
+              title: l.title,
+              description: l.description,
+              indicators: l.indicators
+            }))
+          });
+        }
+        success++;
+      } catch (e) {
+        errors.push(e.message);
+      }
+    }
+
+    try { fs.unlinkSync(filePath); } catch {}
+    res.json({ message: `Competency upload completed. ${success} successful, ${errors.length} errors.`, errors: errors.slice(0, 10) });
+  } catch (err) {
+    try { fs.unlinkSync(filePath); } catch {}
+    console.error('Competency XLSX upload error:', err);
+    res.status(500).json({ message: err.message || 'Internal server error' });
   }
 });
 

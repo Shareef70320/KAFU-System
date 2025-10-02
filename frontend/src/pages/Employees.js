@@ -545,7 +545,7 @@ const Employees = () => {
                         <button 
                           className="text-gray-400 hover:text-blue-600 p-1" 
                           title="Edit"
-                          onClick={() => navigate(`/employees/edit/${employee.id}`)}
+                          onClick={() => navigate(`/employees/edit/${employee.sid || employee.id}`)}
                         >
                           <Edit className="h-4 w-4" />
                         </button>

@@ -88,7 +88,14 @@ const AssessorDashboard = () => {
     mutationFn: async (requestId) => {
       const response = await api.put(`/competency-reviews/requests/${requestId}/assign`, {
         assessorId: currentSid,
-        scheduledDate: new Date().toISOString().split('T')[0] // Today's date
+        scheduledDate: (() => {
+          // Use local timezone to avoid date shifting issues
+          const today = new Date();
+          const year = today.getFullYear();
+          const month = String(today.getMonth() + 1).padStart(2, '0');
+          const day = String(today.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        })() // Today's date
       });
       return response.data;
     },

@@ -72,7 +72,9 @@ const JobEvaluation = () => {
           3: evaluation.regulatory_responsibility,
           4: evaluation.revenue_budget_impact,
           5: evaluation.talent_scarcity,
-          6: evaluation.number_of_reportees
+          6: evaluation.number_of_reportees,
+          criticality_level: evaluation.criticality_level,
+          weighted_score: evaluation.weighted_score
         };
       });
       setEvaluations(evaluationsMap);
@@ -111,14 +113,14 @@ const JobEvaluation = () => {
   };
 
   const getScoreColor = (score) => {
-    if (score > 4) return 'text-red-600 bg-red-100';
-    if (score >= 3) return 'text-yellow-600 bg-yellow-100';
+    if (score >= 450) return 'text-red-600 bg-red-100';
+    if (score > 300) return 'text-yellow-600 bg-yellow-100';
     return 'text-green-600 bg-green-100';
   };
 
   const getScoreLabel = (score) => {
-    if (score > 4) return 'High';
-    if (score >= 3) return 'Medium';
+    if (score >= 450) return 'High';
+    if (score > 300) return 'Medium';
     return 'Low';
   };
 
@@ -179,7 +181,7 @@ const JobEvaluation = () => {
 
         const response = await api.post('/job-evaluations', {
           jobId: selectedJob.id,
-          evaluatorId: 'admin', // You can make this dynamic later
+          evaluatorId: 'EMP2778', // Default evaluator for job evaluations
           decisionMakingPower: evaluation[1] || 0,
           riskOfAbsence: evaluation[2] || 0,
           regulatoryResponsibility: evaluation[3] || 0,
@@ -253,8 +255,9 @@ const JobEvaluation = () => {
         {/* Jobs List */}
         <div className="space-y-4">
           {filteredJobs.map((job) => {
+            const evaluation = evaluations[job.id];
             const weightedScore = calculateWeightedScore(job.id);
-            const scoreLabel = getScoreLabel(weightedScore);
+            const scoreLabel = evaluation?.criticality_level || getScoreLabel(weightedScore);
             const scoreColor = getScoreColor(weightedScore);
 
             return (
@@ -402,7 +405,7 @@ const JobEvaluation = () => {
                     </div>
                     <div className="text-right">
                       <div className={`inline-flex px-3 py-1 text-lg font-bold rounded-full ${getScoreColor(calculateWeightedScore(selectedJob.id))}`}>
-                        {calculateWeightedScore(selectedJob.id)} - {getScoreLabel(calculateWeightedScore(selectedJob.id))}
+                        {calculateWeightedScore(selectedJob.id)} - {evaluations[selectedJob.id]?.criticality_level || getScoreLabel(calculateWeightedScore(selectedJob.id))}
                       </div>
                     </div>
                   </div>

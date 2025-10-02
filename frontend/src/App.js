@@ -19,6 +19,9 @@ import JobCompetencyMapping from './pages/JobCompetencyMapping';
 import AddMapping from './pages/AddMapping';
 import JobCriticality from './pages/JobCriticality';
 import JobEvaluation from './pages/JobEvaluation';
+import DevelopmentPaths from './pages/DevelopmentPaths';
+import PathDetails from './pages/PathDetails';
+import LDInterventions from './pages/LDInterventions';
 import Assessors from './pages/Assessors';
 import Assessments from './pages/Assessments';
 import NewAssessments from './pages/NewAssessments';
@@ -31,6 +34,7 @@ import MyCompetencies from './pages/user/MyCompetencies';
 import UserAssessments from './pages/user/UserAssessments';
 import Reviews from './pages/user/Reviews';
 import UserDashboard from './pages/user/UserDashboard';
+import DevelopmentTimeline from './pages/user/DevelopmentTimeline';
 import PhotoUpload from './pages/PhotoUpload';
 // Manager Routes
 import ManagerDashboard from './pages/manager/ManagerDashboard';
@@ -66,7 +70,7 @@ function App() {
                 <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
                 <Route path="groups" element={<AdminRoute><Groups /></AdminRoute>} />
                 <Route path="employees" element={<AdminRoute><Employees /></AdminRoute>} />
-                <Route path="employees/edit/:id" element={<AdminRoute><EditEmployee /></AdminRoute>} />
+                <Route path="employees/edit/:sid" element={<AdminRoute><EditEmployee /></AdminRoute>} />
                 <Route path="competencies" element={<AdminRoute><Competencies /></AdminRoute>} />
                 <Route path="competencies/edit/:id" element={<AdminRoute><EditCompetency /></AdminRoute>} />
                 <Route path="jobs" element={<AdminRoute><Jobs /></AdminRoute>} />
@@ -76,6 +80,9 @@ function App() {
                 <Route path="job-criticality" element={<AdminRoute><JobCriticality /></AdminRoute>} />
                 <Route path="job-evaluation" element={<AdminRoute><JobEvaluation /></AdminRoute>} />
                 <Route path="assessors" element={<AdminRoute><Assessors /></AdminRoute>} />
+                <Route path="development-paths" element={<AdminRoute><DevelopmentPaths /></AdminRoute>} />
+                <Route path="development-paths/:id" element={<AdminRoute><PathDetails /></AdminRoute>} />
+                <Route path="ld-interventions" element={<AdminRoute><LDInterventions /></AdminRoute>} />
                 <Route path="assessor-dashboard" element={<AssessorDashboard />} />
                 <Route path="assessments" element={<AdminRoute><NewAssessments /></AdminRoute>} />
                 <Route path="question-bank" element={<AdminRoute><QuestionBank /></AdminRoute>} />
@@ -88,6 +95,7 @@ function App() {
                 <Route path="user/profile" element={<UserRoute><UserProfile /></UserRoute>} />
                 <Route path="user/competencies" element={<UserRoute><MyCompetencies /></UserRoute>} />
                 <Route path="user/assessments" element={<UserRoute><UserAssessments /></UserRoute>} />
+                <Route path="user/development" element={<UserRoute><DevelopmentTimeline /></UserRoute>} />
                 <Route path="user/reviews" element={<UserRoute><Reviews /></UserRoute>} />
                 <Route path="user/team" element={<UserRoute><TeamEmployees /></UserRoute>} />
                 <Route path="user/jobs" element={<UserRoute><TeamJobs /></UserRoute>} />

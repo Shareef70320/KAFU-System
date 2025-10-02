@@ -13,29 +13,29 @@ router.get('/', async (req, res) => {
     const assessments = await prisma.$queryRaw`
       SELECT 
         a.id,
-        a.name as title,
+        a.title,
         a.description,
-        a.competency_id,
-        a.competency_level_id,
-        a.is_active,
-        a.time_limit,
-        a.passing_score,
-        a.max_attempts,
-        a.created_by,
-        a.created_at,
-        a.updated_at,
+        a."competencyId" as competency_id,
+        a."competencyLevelId" as competency_level_id,
+        a."isActive" as is_active,
+        a."timeLimit" as time_limit,
+        a."passingScore" as passing_score,
+        a."maxAttempts" as max_attempts,
+        a."createdBy" as created_by,
+        a."createdAt" as created_at,
+        a."updatedAt" as updated_at,
         c.name as competency_name,
         c.type as competency_type,
         c.family as competency_family,
-        cl.level as level_name,
+        cl."level" as level_name,
         cl.title as level_title,
-        COUNT(aq.question_id)::int as question_count
+        COUNT(aq."questionId")::int as question_count
       FROM assessments a
-      LEFT JOIN competencies c ON a.competency_id = c.id
-      LEFT JOIN competency_levels cl ON a.competency_level_id = cl.id
-      LEFT JOIN assessment_questions aq ON a.id = aq.assessment_id
-      GROUP BY a.id, a.name, c.name, c.type, c.family, cl.level, cl.title
-      ORDER BY a.created_at DESC
+      LEFT JOIN competencies c ON a."competencyId" = c.id
+      LEFT JOIN competency_levels cl ON a."competencyLevelId" = cl.id
+      LEFT JOIN assessment_questions aq ON a.id = aq."assessmentId"
+      GROUP BY a.id, a.title, c.name, c.type, c.family, cl."level", cl.title
+      ORDER BY a."createdAt" DESC
       LIMIT ${parseInt(limit)} OFFSET ${offset}
     `;
 
@@ -68,25 +68,25 @@ router.get('/:id', async (req, res) => {
     const assessment = await prisma.$queryRaw`
       SELECT 
         a.id,
-        a.name as title,
+        a.title,
         a.description,
-        a.competency_id,
-        a.competency_level_id,
-        a.is_active,
-        a.time_limit,
-        a.passing_score,
-        a.max_attempts,
-        a.created_by,
-        a.created_at,
-        a.updated_at,
+        a."competencyId" as competency_id,
+        a."competencyLevelId" as competency_level_id,
+        a."isActive" as is_active,
+        a."timeLimit" as time_limit,
+        a."passingScore" as passing_score,
+        a."maxAttempts" as max_attempts,
+        a."createdBy" as created_by,
+        a."createdAt" as created_at,
+        a."updatedAt" as updated_at,
         c.name as competency_name,
         c.type as competency_type,
         c.family as competency_family,
-        cl.level as level_name,
+        cl."level" as level_name,
         cl.title as level_title
       FROM assessments a
-      LEFT JOIN competencies c ON a.competency_id = c.id
-      LEFT JOIN competency_levels cl ON a.competency_level_id = cl.id
+      LEFT JOIN competencies c ON a."competencyId" = c.id
+      LEFT JOIN competency_levels cl ON a."competencyLevelId" = cl.id
       WHERE a.id = ${id}
     `;
 
@@ -102,12 +102,12 @@ router.get('/:id', async (req, res) => {
         q.type,
         q.points,
         q.explanation,
-        aq.order as question_order,
+        aq."order" as question_order,
         aq.points as question_points
       FROM assessment_questions aq
-      JOIN questions q ON aq.question_id = q.id
-      WHERE aq.assessment_id = ${id}
-      ORDER BY aq.order
+      JOIN questions q ON aq."questionId" = q.id
+      WHERE aq."assessmentId" = ${id}
+      ORDER BY aq."order"
     `;
 
     res.json({
@@ -139,9 +139,9 @@ router.post('/', async (req, res) => {
 
     const assessment = await prisma.$queryRaw`
       INSERT INTO assessments (
-        name, description, competency_id, competency_level_id, 
-        time_limit, passing_score, max_attempts, created_by, 
-        is_active, created_at, updated_at
+        title, description, "competencyId", "competencyLevelId", 
+        "timeLimit", "passingScore", "maxAttempts", "createdBy", 
+        "isActive", "createdAt", "updatedAt"
       ) VALUES (
         ${title}, ${description || null}, ${competencyId}, ${competencyLevelId || null},
         ${timeLimit || null}, ${passingScore || 70.0}, ${maxAttempts || null}, ${createdBy || null},
@@ -177,41 +177,17 @@ router.put('/:id', async (req, res) => {
     const updateFields = [];
     const updateValues = [];
 
-    if (title !== undefined) {
-      updateFields.push(`name = $${updateValues.length + 1}`);
-      updateValues.push(title);
-    }
-    if (description !== undefined) {
-      updateFields.push(`description = $${updateValues.length + 1}`);
-      updateValues.push(description);
-    }
-    if (competencyId !== undefined) {
-      updateFields.push(`competency_id = $${updateValues.length + 1}`);
-      updateValues.push(competencyId);
-    }
-    if (competencyLevelId !== undefined) {
-      updateFields.push(`competency_level_id = $${updateValues.length + 1}`);
-      updateValues.push(competencyLevelId);
-    }
-    if (timeLimit !== undefined) {
-      updateFields.push(`time_limit = $${updateValues.length + 1}`);
-      updateValues.push(timeLimit);
-    }
-    if (passingScore !== undefined) {
-      updateFields.push(`passing_score = $${updateValues.length + 1}`);
-      updateValues.push(passingScore);
-    }
-    if (maxAttempts !== undefined) {
-      updateFields.push(`max_attempts = $${updateValues.length + 1}`);
-      updateValues.push(maxAttempts);
-    }
-    if (isActive !== undefined) {
-      updateFields.push(`is_active = $${updateValues.length + 1}`);
-      updateValues.push(isActive);
-    }
+    if (title !== undefined) { updateFields.push(`title = $${updateValues.length + 1}`); updateValues.push(title); }
+    if (description !== undefined) { updateFields.push(`description = $${updateValues.length + 1}`); updateValues.push(description); }
+    if (competencyId !== undefined) { updateFields.push(`"competencyId" = $${updateValues.length + 1}`); updateValues.push(competencyId); }
+    if (competencyLevelId !== undefined) { updateFields.push(`"competencyLevelId" = $${updateValues.length + 1}`); updateValues.push(competencyLevelId); }
+    if (timeLimit !== undefined) { updateFields.push(`"timeLimit" = $${updateValues.length + 1}`); updateValues.push(timeLimit); }
+    if (passingScore !== undefined) { updateFields.push(`"passingScore" = $${updateValues.length + 1}`); updateValues.push(passingScore); }
+    if (maxAttempts !== undefined) { updateFields.push(`"maxAttempts" = $${updateValues.length + 1}`); updateValues.push(maxAttempts); }
+    if (isActive !== undefined) { updateFields.push(`"isActive" = $${updateValues.length + 1}`); updateValues.push(isActive); }
 
-    updateFields.push(`updated_at = NOW()`);
-    updateValues.push(parseInt(id));
+    updateFields.push(`"updatedAt" = NOW()`);
+    updateValues.push(id);
 
     const query = `
       UPDATE assessments
@@ -222,10 +198,7 @@ router.put('/:id', async (req, res) => {
 
     const updatedAssessment = await prisma.$queryRawUnsafe(query, ...updateValues);
 
-    res.json({
-      success: true,
-      assessment: updatedAssessment[0]
-    });
+    res.json({ success: true, assessment: updatedAssessment[0] });
   } catch (error) {
     console.error('Error updating assessment:', error);
     res.status(500).json({ success: false, error: 'Failed to update assessment' });
@@ -238,19 +211,12 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
 
     // First delete related assessment questions
-    await prisma.$queryRaw`
-      DELETE FROM assessment_questions WHERE assessment_id = ${id}
-    `;
+    await prisma.$queryRaw`DELETE FROM assessment_questions WHERE "assessmentId" = ${id}`;
 
     // Then delete the assessment
-    const deletedAssessment = await prisma.$queryRaw`
-      DELETE FROM assessments WHERE id = ${id} RETURNING *
-    `;
+    const deletedAssessment = await prisma.$queryRaw`DELETE FROM assessments WHERE id = ${id} RETURNING *`;
 
-    res.json({
-      success: true,
-      assessment: deletedAssessment[0]
-    });
+    res.json({ success: true, assessment: deletedAssessment[0] });
   } catch (error) {
     console.error('Error deleting assessment:', error);
     res.status(500).json({ success: false, error: 'Failed to delete assessment' });
@@ -263,8 +229,8 @@ router.get('/stats/overview', async (req, res) => {
     const stats = await prisma.$queryRaw`
       SELECT 
         COUNT(*) as total,
-        COUNT(CASE WHEN is_active = true THEN 1 END) as active,
-        COUNT(CASE WHEN is_active = false THEN 1 END) as inactive
+        COUNT(CASE WHEN "isActive" = true THEN 1 END) as active,
+        COUNT(CASE WHEN "isActive" = false THEN 1 END) as inactive
       FROM assessments
     `;
 
@@ -273,16 +239,12 @@ router.get('/stats/overview', async (req, res) => {
         c.name as competency_name,
         COUNT(a.id) as assessment_count
       FROM competencies c
-      LEFT JOIN assessments a ON c.id = a.competency_id
+      LEFT JOIN assessments a ON c.id = a."competencyId"
       GROUP BY c.id, c.name
       ORDER BY assessment_count DESC
     `;
 
-    res.json({
-      success: true,
-      stats: stats[0],
-      competencyStats: competencyStats || []
-    });
+    res.json({ success: true, stats: stats[0], competencyStats: competencyStats || [] });
   } catch (error) {
     console.error('Error fetching assessment statistics:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch statistics' });

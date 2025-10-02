@@ -16,6 +16,7 @@ import {
   BookOpen,
   Briefcase,
   Link,
+  Layers,
   User,
   Upload,
   Target,
@@ -74,6 +75,8 @@ const Layout = () => {
     { name: 'Assessments', href: '/assessments', icon: Target },
     { name: 'Question Bank', href: '/question-bank', icon: BookOpen },
     { name: 'Photo Upload', href: '/photo-upload', icon: Upload },
+    { name: 'Development Paths', href: '/development-paths', icon: Layers },
+    { name: 'L&D Interventions', href: '/ld-interventions', icon: BookOpen },
   ];
 
   // Base user navigation (for all users)
@@ -83,6 +86,7 @@ const Layout = () => {
     { name: 'My Competencies', href: '/user/competencies', icon: BookOpen },
     { name: 'Assessments', href: '/user/assessments', icon: UserCheck },
     { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
+    { name: 'My Development', href: '/user/development', icon: Layers },
     { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
   ];
 

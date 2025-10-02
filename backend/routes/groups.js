@@ -9,36 +9,59 @@ const router = express.Router();
 // Authentication disabled for now
 // router.use(authenticateToken);
 
-// Get all groups
+// Get all groups with member counts (employees)
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '' } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    const where = {
-      ...(search && {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } }
-        ]
-      })
-    };
+    const whereClause = search
+      ? `WHERE g.name ILIKE '%' || $1 || '%' OR g.description ILIKE '%' || $1 || '%'
+         `
+      : '';
+    const params = search ? [search, parseInt(limit), offset] : [parseInt(limit), offset];
 
-    const [groups, total] = await Promise.all([
-      prisma.group.findMany({
-        where,
-        include: {
-          users: {
-            where: { isActive: true },
-            select: { id: true, firstName: true, lastName: true, email: true, role: true }
-          }
-        },
-        skip,
-        take: parseInt(limit),
-        orderBy: { createdAt: 'desc' }
-      }),
-      prisma.group.count({ where })
-    ]);
+    const listQuery = `
+      SELECT g.id, g.name, g.description, g."createdAt", g."updatedAt",
+             COALESCE(mc.member_count, 0)::int AS member_count,
+             COALESCE(preview.members, '[]'::json) AS preview_members
+      FROM groups g
+      LEFT JOIN (
+        SELECT gm.group_id, COUNT(*) AS member_count
+        FROM group_members gm
+        GROUP BY gm.group_id
+      ) mc ON mc.group_id = g.id
+      LEFT JOIN LATERAL (
+        SELECT json_agg(row_to_json(t)) AS members
+        FROM (
+          SELECT e.id, e.sid, e.first_name, e.last_name, e.photo_url
+          FROM group_members gm2
+          JOIN employees e ON e.id = gm2.employee_id
+          WHERE gm2.group_id = g.id
+          ORDER BY e.first_name, e.last_name
+          LIMIT 6
+        ) t
+      ) preview ON true
+      ${whereClause}
+      ORDER BY g."createdAt" DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*)::int AS count
+      FROM groups g
+      ${whereClause}
+    `;
+
+    const groups = search
+      ? await prisma.$queryRawUnsafe(listQuery, ...params)
+      : await prisma.$queryRawUnsafe(listQuery, ...params);
+
+    const totalRows = search
+      ? await prisma.$queryRawUnsafe(countQuery, search)
+      : await prisma.$queryRawUnsafe(countQuery);
+
+    const total = totalRows[0]?.count || 0;
 
     res.json({
       groups,
@@ -55,24 +78,24 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get group by ID
+// Get group by ID with members (employees)
 router.get('/:id', async (req, res) => {
   try {
-    const group = await prisma.group.findUnique({
-      where: { id: req.params.id },
-      include: {
-        users: {
-          where: { isActive: true },
-          select: { id: true, firstName: true, lastName: true, email: true, role: true }
-        }
-      }
-    });
-
-    if (!group) {
+    const { id } = req.params;
+    const groupRows = await prisma.$queryRawUnsafe(
+      'SELECT id, name, description, "createdAt", "updatedAt" FROM groups WHERE id = $1', id
+    );
+    if (groupRows.length === 0) {
       return res.status(404).json({ message: 'Group not found' });
     }
-
-    res.json({ group });
+    const members = await prisma.$queryRawUnsafe(
+      `SELECT e.id, e.sid, e.first_name, e.last_name, e.email, e.job_title, e.job_code, e.division, e.location
+       FROM group_members gm
+       JOIN employees e ON e.id = gm.employee_id
+       WHERE gm.group_id = $1
+       ORDER BY e.first_name, e.last_name`, id
+    );
+    res.json({ group: { ...groupRows[0], members } });
   } catch (error) {
     console.error('Get group error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -92,26 +115,19 @@ router.post('/', [
 
     const { name, description } = req.body;
 
-    // Check if group exists
-    const existingGroup = await prisma.group.findUnique({
-      where: { name }
-    });
-
-    if (existingGroup) {
+    // Check if name exists
+    const existing = await prisma.$queryRawUnsafe('SELECT id FROM groups WHERE name = $1', name);
+    if (existing.length > 0) {
       return res.status(400).json({ message: 'Group with this name already exists' });
     }
 
-    const group = await prisma.group.create({
-      data: {
-        name,
-        description: description || null
-      }
-    });
-
-    res.status(201).json({
-      message: 'Group created successfully',
-      group
-    });
+    const id = `GRP-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const insertQuery = `
+      INSERT INTO groups (id, name, description, "createdAt", "updatedAt")
+      VALUES ($1, $2, $3, NOW(), NOW())
+      RETURNING id, name, description, "createdAt", "updatedAt"`;
+    const rows = await prisma.$queryRawUnsafe(insertQuery, id, name, description || null);
+    res.status(201).json({ message: 'Group created successfully', group: rows[0] });
   } catch (error) {
     console.error('Create group error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -209,9 +225,9 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Add users to group
-router.post('/:id/users', [
-  body('userIds').isArray().notEmpty()
+// Assign employees to group
+router.post('/:id/members', [
+  body('employeeIds').isArray().notEmpty()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -220,60 +236,54 @@ router.post('/:id/users', [
     }
 
     const { id } = req.params;
-    const { userIds } = req.body;
+    const { employeeIds } = req.body;
 
-    // Check if group exists
-    const group = await prisma.group.findUnique({
-      where: { id }
-    });
+    const group = await prisma.$queryRawUnsafe('SELECT id FROM groups WHERE id = $1', id);
 
-    if (!group) {
+    if (group.length === 0) {
       return res.status(404).json({ message: 'Group not found' });
     }
 
-    // Update users to assign them to the group
-    await prisma.user.updateMany({
-      where: {
-        id: { in: userIds },
-        isActive: true
-      },
-      data: { groupId: id }
-    });
+    // Insert memberships, ignore duplicates
+    for (const empId of employeeIds) {
+      await prisma.$queryRawUnsafe(
+        'INSERT INTO group_members (group_id, employee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        id,
+        empId
+      );
+    }
 
-    // Get updated group with users
-    const updatedGroup = await prisma.group.findUnique({
-      where: { id },
-      include: {
-        users: {
-          where: { isActive: true },
-          select: { id: true, firstName: true, lastName: true, email: true, role: true }
-        }
-      }
-    });
+    const members = await prisma.$queryRawUnsafe(
+      `SELECT e.id, e.sid, e.first_name, e.last_name, e.email, e.job_title, e.job_code, e.division, e.location
+       FROM group_members gm JOIN employees e ON e.id = gm.employee_id
+       WHERE gm.group_id = $1
+       ORDER BY e.first_name, e.last_name`, id
+    );
 
     res.json({
-      message: 'Users added to group successfully',
-      group: updatedGroup
+      message: 'Members added to group successfully',
+      group: { id, members }
     });
   } catch (error) {
-    console.error('Add users to group error:', error);
+    console.error('Add members to group error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// Remove user from group
-router.delete('/:id/users/:userId', requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
+// Remove employee from group
+router.delete('/:id/members/:employeeId', requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const { id, employeeId } = req.params;
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: { groupId: null }
-    });
+    await prisma.$queryRawUnsafe(
+      'DELETE FROM group_members WHERE group_id = $1 AND employee_id = $2',
+      id,
+      employeeId
+    );
 
-    res.json({ message: 'User removed from group successfully' });
+    res.json({ message: 'Member removed from group successfully' });
   } catch (error) {
-    console.error('Remove user from group error:', error);
+    console.error('Remove member from group error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

@@ -30,14 +30,14 @@ router.get('/', async (req, res) => {
         q.id,
         q.text,
         q.type,
-        q.competency_id,
-        q.competency_level_id,
+        q."competencyId" as competency_id,
+        q."competencyLevelId" as competency_level_id,
         q.points::int as points,
         q.explanation,
-        q.is_active,
-        q.created_by,
-        q.created_at,
-        q.updated_at,
+        q."isActive" as is_active,
+        q."createdBy" as created_by,
+        q."createdAt" as created_at,
+        q."updatedAt" as updated_at,
         c.name as competency_name,
         c.type as competency_type,
         c.family as competency_family,
@@ -45,11 +45,11 @@ router.get('/', async (req, res) => {
         cl.title as level_title,
         COUNT(qo.id)::int as option_count
       FROM questions q
-      LEFT JOIN competencies c ON q.competency_id = c.id
-      LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
-      LEFT JOIN question_options qo ON q.id = qo.question_id
+      LEFT JOIN competencies c ON q."competencyId" = c.id
+      LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
+      LEFT JOIN question_options qo ON q.id = qo."questionId"
       GROUP BY q.id, c.name, c.type, c.family, cl.level, cl.title
-      ORDER BY q.created_at DESC
+      ORDER BY q."createdAt" DESC
       LIMIT ${parseInt(limit)} OFFSET ${offset}
     `;
 
@@ -87,8 +87,8 @@ router.get('/:id', async (req, res) => {
         cl.level as level_name,
         cl.title as level_title
       FROM questions q
-      LEFT JOIN competencies c ON q.competency_id = c.id
-      LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
+      LEFT JOIN competencies c ON q."competencyId" = c.id
+      LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
       WHERE q.id = ${id}
     `;
 
@@ -101,11 +101,11 @@ router.get('/:id', async (req, res) => {
       SELECT 
         id,
         text,
-        is_correct,
-        order_index
+        "isCorrect" as is_correct,
+        "order" as order_index
       FROM question_options
-      WHERE question_id = ${id}
-      ORDER BY order_index
+      WHERE "questionId" = ${id}
+      ORDER BY "order"
     `;
 
     res.json({
@@ -168,11 +168,11 @@ router.put('/:id', async (req, res) => {
       SET 
         text = ${text},
         type = ${type},
-        competency_id = ${competencyId},
-        competency_level_id = ${competencyLevelId || null},
+        "competencyId" = ${competencyId},
+        "competencyLevelId" = ${competencyLevelId || null},
         points = ${points},
         explanation = ${explanation || null},
-        updated_at = NOW()
+        "updatedAt" = NOW()
       WHERE id = ${id}
       RETURNING *
     `;
@@ -183,14 +183,14 @@ router.put('/:id', async (req, res) => {
 
     // Delete existing options
     await prisma.$queryRaw`
-      DELETE FROM question_options WHERE question_id = ${id}
+      DELETE FROM question_options WHERE "questionId" = ${id}
     `;
 
     // Add correct answer for True/False questions
     if (type === 'TRUE_FALSE' && correctAnswer) {
       await prisma.$queryRaw`
         INSERT INTO question_options (
-          id, question_id, text, is_correct, "order", created_at, updated_at
+          id, "questionId", text, "isCorrect", "order", "createdAt", "updatedAt"
         ) VALUES (
           gen_random_uuid()::text, ${id}, ${correctAnswer}, true, 1, NOW(), NOW()
         )
@@ -202,7 +202,7 @@ router.put('/:id', async (req, res) => {
       for (const option of options) {
         await prisma.$queryRaw`
           INSERT INTO question_options (
-            id, question_id, text, is_correct, "order", created_at, updated_at
+            id, "questionId", text, "isCorrect", "order", "createdAt", "updatedAt"
           ) VALUES (
             gen_random_uuid()::text, ${id}, ${option.text}, ${option.isCorrect}, 
             ${option.orderIndex}, NOW(), NOW()
@@ -238,9 +238,9 @@ router.post('/', async (req, res) => {
     // Create question
     const question = await prisma.$queryRaw`
       INSERT INTO questions (
-        id, text, type, competency_id, competency_level_id, 
-        points, explanation, is_active, created_by, 
-        created_at, updated_at
+        id, text, type, "competencyId", "competencyLevelId", 
+        points, explanation, "isActive", "createdBy", 
+        "createdAt", "updatedAt"
       ) VALUES (
         gen_random_uuid()::text, ${text}, ${type}, ${competencyId}, ${competencyLevelId || null},
         ${points || 1}, ${explanation || null}, true, ${createdBy || null},
@@ -256,7 +256,7 @@ router.post('/', async (req, res) => {
         const option = options[i];
         await prisma.$queryRaw`
           INSERT INTO question_options (
-            id, question_id, text, is_correct, order_index, created_at, updated_at
+            id, "questionId", text, "isCorrect", "order", "createdAt", "updatedAt"
           ) VALUES (
             gen_random_uuid()::text, ${questionId}, ${option.text}, 
             ${option.isCorrect || false}, ${i + 1}, NOW(), NOW()
@@ -302,11 +302,11 @@ router.put('/:id', async (req, res) => {
       updateValues.push(type);
     }
     if (competencyId !== undefined) {
-      updateFields.push(`competency_id = $${updateValues.length + 1}`);
+      updateFields.push(`"competencyId" = $${updateValues.length + 1}`);
       updateValues.push(competencyId);
     }
     if (competencyLevelId !== undefined) {
-      updateFields.push(`competency_level_id = $${updateValues.length + 1}`);
+      updateFields.push(`"competencyLevelId" = $${updateValues.length + 1}`);
       updateValues.push(competencyLevelId);
     }
     if (points !== undefined) {
@@ -318,11 +318,11 @@ router.put('/:id', async (req, res) => {
       updateValues.push(explanation);
     }
     if (isActive !== undefined) {
-      updateFields.push(`is_active = $${updateValues.length + 1}`);
+      updateFields.push(`"isActive" = $${updateValues.length + 1}`);
       updateValues.push(isActive);
     }
 
-    updateFields.push(`updated_at = NOW()`);
+    updateFields.push(`"updatedAt" = NOW()`);
     updateValues.push(id);
 
     const query = `
@@ -338,7 +338,7 @@ router.put('/:id', async (req, res) => {
     if (options && options.length > 0) {
       // Delete existing options
       await prisma.$queryRaw`
-        DELETE FROM question_options WHERE question_id = ${id}
+        DELETE FROM question_options WHERE "questionId" = ${id}
       `;
 
       // Create new options
@@ -346,7 +346,7 @@ router.put('/:id', async (req, res) => {
         const option = options[i];
         await prisma.$queryRaw`
           INSERT INTO question_options (
-            id, question_id, text, is_correct, order_index, created_at, updated_at
+            id, "questionId", text, "isCorrect", "order", "createdAt", "updatedAt"
           ) VALUES (
             gen_random_uuid()::text, ${id}, ${option.text}, 
             ${option.isCorrect || false}, ${i + 1}, NOW(), NOW()
@@ -396,8 +396,8 @@ router.get('/stats/overview', async (req, res) => {
     const stats = await prisma.$queryRaw`
       SELECT 
         COUNT(*) as total,
-        COUNT(CASE WHEN is_active = true THEN 1 END) as active,
-        COUNT(CASE WHEN is_active = false THEN 1 END) as inactive
+        COUNT(CASE WHEN "isActive" = true THEN 1 END) as active,
+        COUNT(CASE WHEN "isActive" = false THEN 1 END) as inactive
       FROM questions
     `;
 
@@ -406,7 +406,7 @@ router.get('/stats/overview', async (req, res) => {
         c.name as competency_name,
         COUNT(q.id) as question_count
       FROM competencies c
-      LEFT JOIN questions q ON c.id = q.competency_id
+      LEFT JOIN questions q ON c.id = q."competencyId"
       GROUP BY c.id, c.name
       ORDER BY question_count DESC
     `;
@@ -417,7 +417,7 @@ router.get('/stats/overview', async (req, res) => {
         cl.title as level_title,
         COUNT(q.id) as question_count
       FROM competency_levels cl
-      LEFT JOIN questions q ON cl.id = q.competency_level_id
+      LEFT JOIN questions q ON cl.id = q."competencyLevelId"
       GROUP BY cl.id, cl.level, cl.title
       ORDER BY question_count DESC
     `;
@@ -558,9 +558,9 @@ router.post('/upload-csv', upload.single('csvFile'), async (req, res) => {
         // Create question
         const question = await prisma.$queryRaw`
           INSERT INTO questions (
-            id, text, type, competency_id, competency_level_id, 
-            points, explanation, is_active, created_by, 
-            created_at, updated_at
+            id, text, type, "competencyId", "competencyLevelId", 
+            points, explanation, "isActive", "createdBy", 
+            "createdAt", "updatedAt"
           ) VALUES (
             gen_random_uuid()::text, ${questionData.text}, ${questionData.type}, 
             ${competencyId}, ${competencyLevelId},
@@ -575,7 +575,7 @@ router.post('/upload-csv', upload.single('csvFile'), async (req, res) => {
         if (questionData.type === 'TRUE_FALSE' && questionData.correctAnswer) {
           await prisma.$queryRaw`
             INSERT INTO question_options (
-              id, question_id, text, is_correct, "order", created_at, updated_at
+              id, "questionId", text, "isCorrect", "order", "createdAt", "updatedAt"
             ) VALUES (
               gen_random_uuid()::text, ${questionId}, ${questionData.correctAnswer}, true, 1, NOW(), NOW()
             )
@@ -587,7 +587,7 @@ router.post('/upload-csv', upload.single('csvFile'), async (req, res) => {
           for (const option of questionData.options) {
             await prisma.$queryRaw`
               INSERT INTO question_options (
-                id, question_id, text, is_correct, "order", created_at, updated_at
+                id, "questionId", text, "isCorrect", "order", "createdAt", "updatedAt"
               ) VALUES (
                 gen_random_uuid()::text, ${questionId}, ${option.text}, ${option.isCorrect}, 
                 ${option.orderIndex}, NOW(), NOW()

@@ -32,18 +32,18 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { definition, weight } = req.body;
 
-    // Validate input
-    if (weight !== undefined && (weight < 0 || weight > 1)) {
+    // Validate input: expect 0..100 integer
+    if (weight !== undefined && (isNaN(weight) || weight < 0 || weight > 100)) {
       return res.status(400).json({
         success: false,
-        message: 'Weight must be between 0 and 1'
+        message: 'Weight must be between 0 and 100'
       });
     }
 
     const updatedCriteria = await prisma.$queryRaw`
       UPDATE job_criticality_criteria 
       SET definition = ${definition || ''}, 
-          weight = ${weight !== undefined ? weight : 0},
+          weight = ${weight !== undefined ? parseInt(weight) : 0},
           updated_at = NOW()
       WHERE id = ${parseInt(id)}
       RETURNING *
@@ -80,9 +80,9 @@ router.put('/bulk', async (req, res) => {
       prisma.$queryRaw`
         UPDATE job_criticality_criteria 
         SET definition = ${criterion.definition || ''}, 
-            weight = ${criterion.weight !== undefined ? criterion.weight : 0},
+            weight = ${criterion.weight !== undefined ? parseInt(criterion.weight) : 0},
             updated_at = NOW()
-        WHERE id = ${criterion.id}
+        WHERE id = ${parseInt(criterion.id)}
         RETURNING *
       `
     );

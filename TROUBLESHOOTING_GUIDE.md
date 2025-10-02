@@ -789,3 +789,70 @@ curl -s 'http://localhost:5001/api/user-assessments/settings/COMPETENCY_ID?userI
 # 3. Buttons should be disabled for competencies with 0 attempts left
 # 4. Buttons should show remaining attempts for available competencies
 ```
+
+## 🔧 **Real-Time Calculation Issues Fix**
+
+### **Problem:** 
+Frontend calculations not updating when user changes input values (e.g., weighted scores remain static despite rating changes)
+
+### **Root Cause:** 
+Frontend relying on backend data instead of calculating live values for unsaved changes
+
+### **Symptoms:**
+- Weighted scores don't update when changing ratings
+- Criticality levels show wrong values despite correct backend data
+- User changes input but calculations remain static
+- Only updates after saving to backend
+
+### **Solution:**
+```bash
+# 1. Fix frontend calculation logic
+# In frontend/src/pages/JobEvaluation.js, change:
+
+# ❌ Wrong: Only use backend data (no real-time updates)
+# const weightedScore = evaluation?.weighted_score || calculateWeightedScore(job.id);
+
+# ✅ Correct: Always calculate live for real-time updates
+# const weightedScore = calculateWeightedScore(job.id);
+
+# ✅ Use backend criticality_level for saved evaluations, fallback to live calculation
+# const scoreLabel = evaluation?.criticality_level || getScoreLabel(weightedScore);
+
+# 2. Update thresholds to match backend
+# const getScoreLabel = (score) => {
+#   if (score >= 450) return 'High';    // ✅ Updated from > 4
+#   if (score > 300) return 'Medium';   // ✅ Updated from >= 3
+#   return 'Low';
+# };
+
+# 3. Deploy changes
+# docker-compose build frontend && docker-compose up -d frontend
+```
+
+### **Key Principles:**
+1. **Real-time calculations** for unsaved changes
+2. **Backend data** for saved evaluations  
+3. **Consistent thresholds** between frontend and backend
+4. **Hybrid approach** - best of both worlds
+
+### **Prevention:**
+- Always calculate live values for user input changes
+- Use backend data only for saved/persisted values
+- Keep frontend and backend thresholds synchronized
+- Test real-time updates during development
+
+### **Verification:**
+```bash
+# Test real-time updates
+# 1. Go to Job Evaluation page
+# 2. Change rating values for any job
+# 3. Weighted score should update immediately
+# 4. Criticality level should update immediately
+# 5. Save evaluation - should show backend criticality_level
+# 6. Make unsaved changes - should show calculated criticality
+
+# Check thresholds consistency
+# Frontend: >=450 High, >300 Medium, <=300 Low
+# Backend: >=450 High, >300 Medium, <=300 Low
+# Should match exactly
+```

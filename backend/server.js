@@ -23,6 +23,8 @@ const uploadRoutes = require('./routes/upload');
 const photoRoutes = require('./routes/photos');
 const assessorManagementRoutes = require('./routes/assessorManagement');
 const performanceReviewRoutes = require('./routes/performanceReviews');
+const developmentPathRoutes = require('./routes/developmentPaths');
+const ldInterventionRoutes = require('./routes/ldInterventions');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -61,6 +63,8 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/assessor-management', assessorManagementRoutes);
 app.use('/api/competency-reviews', performanceReviewRoutes);
+app.use('/api/development-paths', developmentPathRoutes);
+app.use('/api/ld-interventions', ldInterventionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

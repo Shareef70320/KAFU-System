@@ -119,20 +119,23 @@ const JobCriticality = () => {
   };
 
   const handleWeightChange = (criteriaId, value) => {
-    const weight = Math.max(0, Math.min(1, parseFloat(value) || 0));
+    // Accept 0..100 integers
+    const numeric = parseInt(value, 10);
+    const weight = Number.isFinite(numeric) ? Math.max(0, Math.min(100, numeric)) : 0;
     setEditData(prev => ({ ...prev, weight }));
   };
 
   const getTotalWeight = () => {
-    return criteria.reduce((total, c) => total + parseFloat(c.weight || 0), 0);
+    // weights are stored 0..100 in DB
+    return criteria.reduce((total, c) => total + (parseFloat(c.weight || 0)), 0);
   };
 
   const getWeightStatus = () => {
     const total = getTotalWeight();
     if (total === 0) return { status: 'empty', message: 'No weights assigned' };
-    if (total < 1) return { status: 'under', message: `Total weight: ${(total * 100).toFixed(1)}% (under 100%)` };
-    if (total === 1) return { status: 'perfect', message: `Total weight: ${(total * 100).toFixed(1)}% (perfect!)` };
-    return { status: 'over', message: `Total weight: ${(total * 100).toFixed(1)}% (over 100%)` };
+    if (total < 100) return { status: 'under', message: `Total weight: ${total.toFixed(1)}% (under 100%)` };
+    if (total === 100) return { status: 'perfect', message: `Total weight: ${total.toFixed(1)}% (perfect!)` };
+    return { status: 'over', message: `Total weight: ${total.toFixed(1)}% (over 100%)` };
   };
 
   const weightStatus = getWeightStatus();
@@ -177,7 +180,7 @@ const JobCriticality = () => {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-gray-900">{(getTotalWeight() * 100).toFixed(1)}%</div>
+                <div className="text-2xl font-bold text-gray-900">{getTotalWeight().toFixed(1)}%</div>
                 <div className="text-sm text-gray-500">Total Weight</div>
               </div>
             </div>
@@ -202,7 +205,7 @@ const JobCriticality = () => {
                         <h3 className="text-lg font-semibold text-gray-900">{criterion.name}</h3>
                         <div className="flex items-center space-x-2 mt-1">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${getColorClasses(criterion.color)}`}>
-                            Weight: {(parseFloat(criterion.weight || 0) * 100).toFixed(1)}%
+                            Weight: {(parseFloat(criterion.weight || 0)).toFixed(1)}%
                           </span>
                         </div>
                       </div>
@@ -257,19 +260,19 @@ const JobCriticality = () => {
                         />
                       </div>
                       <div>
-                        <Label htmlFor={`weight-${criterion.id}`}>Weight (0-1)</Label>
+                        <Label htmlFor={`weight-${criterion.id}`}>Weight (0-100)</Label>
                         <Input
                           id={`weight-${criterion.id}`}
                           type="number"
                           min="0"
-                          max="1"
-                          step="0.01"
-                          value={editData.weight || 0}
+                          max="100"
+                          step="1"
+                          value={editData.weight ?? 0}
                           onChange={(e) => handleWeightChange(criterion.id, e.target.value)}
                           className="mt-1"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Enter a weight between 0 and 1 (e.g., 0.15 for 15%)
+                          Enter a weight between 0 and 100 (e.g., 15 for 15%)
                         </p>
                       </div>
                     </div>
@@ -290,12 +293,12 @@ const JobCriticality = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <h4 className="text-sm font-medium text-gray-700">Weight</h4>
-                          <p className="text-lg font-semibold text-gray-900">{(parseFloat(criterion.weight || 0) * 100).toFixed(1)}%</p>
+                          <p className="text-lg font-semibold text-gray-900">{(parseFloat(criterion.weight || 0)).toFixed(1)}%</p>
                         </div>
                         <div className="w-16 bg-gray-200 rounded-full h-2">
                           <div 
                             className={`h-2 rounded-full ${getColorClasses(criterion.color).split(' ')[0]}`}
-                            style={{ width: `${parseFloat(criterion.weight || 0) * 100}%` }}
+                            style={{ width: `${parseFloat(criterion.weight || 0)}%` }}
                           ></div>
                         </div>
                       </div>

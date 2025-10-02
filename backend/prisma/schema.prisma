@@ -40,6 +40,7 @@ model Employee {
   // Relations
   competencyAssessments CompetencyAssessment[]
   employeeAssessments EmployeeAssessment[]
+  jobEvaluations     JobEvaluation[]
   
   // Self-referencing relationship for line manager
   lineManager       Employee? @relation("LineManager", fields: [line_manager_sid], references: [sid])
@@ -242,6 +243,7 @@ model Job {
 
   // Relationship with competencies
   jobCompetencies JobCompetency[]
+  jobEvaluations  JobEvaluation[]
 
   @@map("jobs")
 }
@@ -278,6 +280,29 @@ model JobCriticalityCriteria {
   updated_at  DateTime @updatedAt @map("updated_at")
 
   @@map("job_criticality_criteria")
+}
+
+model JobEvaluation {
+  id                      String   @id @default(cuid())
+  jobId                   String
+  evaluatorId             String
+  decisionMakingPower     Int      @map("decision_making_power")
+  riskOfAbsence           Int      @map("risk_of_absence")
+  regulatoryResponsibility Int     @map("regulatory_responsibility")
+  revenueBudgetImpact     Int      @map("revenue_budget_impact")
+  talentScarcity          Int      @map("talent_scarcity")
+  numberOfReportees       Int      @map("number_of_reportees")
+  weightedScore           Float    @map("weighted_score")
+  criticalityLevel        String   @map("criticality_level")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  evaluator Employee @relation(fields: [evaluatorId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId])
+  @@map("job_evaluations")
 }
 
 // Assessment System Models

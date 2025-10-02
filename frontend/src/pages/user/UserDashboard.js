@@ -17,11 +17,13 @@ import {
   AlertCircle,
   Users,
   Briefcase,
-  UserCheck
+  UserCheck,
+  Layers
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
+import EmployeePhoto from '../../components/EmployeePhoto';
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -194,23 +196,44 @@ const UserDashboard = () => {
   return (
     <div className="space-y-6">
       {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-lg p-6 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Welcome back, {employeeData?.first_name}!</h1>
-            <p className="text-green-100 mt-2">
-              {employeeData?.job_title} • {employeeData?.division} • {employeeData?.unit}
-            </p>
-            {isManager && (
-              <div className="flex items-center mt-2">
-                <Users className="h-4 w-4 mr-1" />
-                <span className="text-green-100 text-sm">Manager • {teamStats?.totalEmployees || 0} direct reports</span>
+      <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-lg p-6 text-white relative overflow-hidden">
+        {/* subtle glow */}
+        <div className="absolute -top-10 -right-10 h-40 w-40 bg-white/10 rounded-full blur-3xl" />
+        <div className="flex items-center justify-between relative">
+          {/* Left: Fancy profile photo + intro */}
+          <div className="flex items-center gap-6 pr-4">
+            <div className="relative">
+              {/* gradient ring */}
+              <div className="p-[3px] rounded-full bg-gradient-to-tr from-amber-400 via-emerald-300 to-cyan-400 shadow-lg">
+                <EmployeePhoto
+                  sid={employeeData?.sid}
+                  firstName={employeeData?.first_name}
+                  lastName={employeeData?.last_name}
+                  size="medium"
+                  className="rounded-full"
+                  cropType="head"
+                />
               </div>
-            )}
+              {/* status dot */}
+              <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-green-400 ring-2 ring-green-700" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold">Welcome back, {employeeData?.first_name}!</h1>
+              <p className="text-green-100 mt-2">
+                {employeeData?.job_title} • {employeeData?.division} • {employeeData?.unit}
+              </p>
+              {isManager && (
+                <div className="flex items-center mt-2">
+                  <Users className="h-4 w-4 mr-1" />
+                  <span className="text-green-100 text-sm">Manager • {teamStats?.totalEmployees || 0} direct reports</span>
+                </div>
+              )}
+            </div>
           </div>
+          {/* Right: quick facts */}
           <div className="text-right">
             <p className="text-green-100">SID: {employeeData?.sid}</p>
-            <p className="text-green-100">Grade: {employeeData?.grade}</p>
+            <p className="text-green-100">Grade: {employeeData?.grade || 'N/A'}</p>
           </div>
         </div>
       </div>
@@ -329,6 +352,21 @@ const UserDashboard = () => {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* My Development Paths Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center">
+              <Layers className="h-6 w-6 mr-2 text-green-600" />
+              My Development Paths
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">View your assigned paths timeline</div>
+              <Button variant="outline" onClick={() => navigate('/user/development')}>View Timeline</Button>
+            </div>
+          </CardContent>
+        </Card>
         {/* Recent Activity */}
         <Card>
           <CardHeader>

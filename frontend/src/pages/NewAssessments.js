@@ -67,7 +67,7 @@ const NewAssessments = () => {
   // Fetch assessments from API
   const { data: assessmentsData, isLoading, error } = useQuery({
     queryKey: ['new-assessments'],
-    queryFn: () => api.get('/new-assessments?page=1&limit=1000').then(res => res.data),
+    queryFn: () => api.get('/assessments?page=1&limit=1000').then(res => res.data),
     retry: 1,
     keepPreviousData: true,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -90,7 +90,7 @@ const NewAssessments = () => {
     if (searchInput.trim()) {
       const searchLower = searchInput.toLowerCase();
       filtered = filtered.filter(assessment => 
-        assessment.name?.toLowerCase().includes(searchLower) ||
+        assessment.title?.toLowerCase().includes(searchLower) ||
         assessment.description?.toLowerCase().includes(searchLower) ||
         assessment.competency_name?.toLowerCase().includes(searchLower)
       );
@@ -112,7 +112,7 @@ const NewAssessments = () => {
   // Create assessment mutation
   const createAssessmentMutation = useMutation({
     mutationFn: async (assessmentData) => {
-      const response = await api.post('/new-assessments', assessmentData);
+      const response = await api.post('/assessments', assessmentData);
       return response.data;
     },
     onSuccess: () => {
@@ -136,7 +136,7 @@ const NewAssessments = () => {
   // Update assessment mutation
   const updateAssessmentMutation = useMutation({
     mutationFn: async ({ id, data }) => {
-      const response = await api.put(`/new-assessments/${id}`, data);
+      const response = await api.put(`/assessments/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -161,7 +161,7 @@ const NewAssessments = () => {
   // Delete assessment mutation
   const deleteAssessmentMutation = useMutation({
     mutationFn: async (assessmentId) => {
-      await api.delete(`/new-assessments/${assessmentId}`);
+      await api.delete(`/assessments/${assessmentId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['new-assessments']);
@@ -214,7 +214,7 @@ const NewAssessments = () => {
   const handleEditAssessment = (assessment) => {
     setSelectedAssessment(assessment);
     // Seed edit state
-    setEditName(assessment.name || '');
+    setEditName(assessment.title || '');
     setEditDescription(assessment.description || '');
     setEditCompetencyId(assessment.competency_id || '');
     setEditApplyToAll(Boolean(assessment.apply_to_all));
@@ -224,7 +224,7 @@ const NewAssessments = () => {
     setEditAllowMultipleAttempts(Boolean(assessment.allow_multiple_attempts));
     setEditMaxAttempts(assessment.max_attempts || 3);
     setEditShowTimer(Boolean(assessment.show_timer));
-    setEditTimeLimitMinutes(assessment.time_limit_minutes || 30);
+    setEditTimeLimitMinutes(assessment.time_limit || 30);
     setEditForceTimeLimit(Boolean(assessment.force_time_limit));
     setEditShowDashboard(Boolean(assessment.show_dashboard));
     setEditShowCorrectAnswers(Boolean(assessment.show_correct_answers));
@@ -407,7 +407,7 @@ const NewAssessments = () => {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900">{assessment.name}</h3>
+                        <h3 className="text-lg font-semibold text-gray-900">{assessment.title}</h3>
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           assessment.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                         }`}>
@@ -427,7 +427,7 @@ const NewAssessments = () => {
                         </span>
                         <span className="flex items-center">
                           <Clock className="h-3 w-3 mr-1" />
-                          {assessment.time_limit_minutes} min
+                          {assessment.time_limit} min
                         </span>
                         <span className="flex items-center">
                           <RotateCcw className="h-3 w-3 mr-1" />

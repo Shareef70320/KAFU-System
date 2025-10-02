@@ -226,6 +226,41 @@ docker-compose down && docker-compose build && docker-compose up -d
 
 ---
 
+## 🎯 **Pattern 11: Real-Time Calculation Issues**
+
+### **Symptoms:**
+- Frontend calculations not updating when user changes input values
+- Weighted scores remain static despite rating changes
+- Criticality levels showing wrong values despite correct backend data
+
+### **Root Cause:**
+Frontend relying on backend data instead of calculating live values for unsaved changes
+
+### **Solution:**
+```javascript
+// ❌ Wrong: Only use backend data (no real-time updates)
+const weightedScore = evaluation?.weighted_score || calculateWeightedScore(job.id);
+
+// ✅ Correct: Always calculate live for real-time updates
+const weightedScore = calculateWeightedScore(job.id);
+
+// ✅ Use backend criticality_level for saved evaluations, fallback to live calculation
+const scoreLabel = evaluation?.criticality_level || getScoreLabel(weightedScore);
+```
+
+### **Key Principles:**
+1. **Real-time calculations** for unsaved changes
+2. **Backend data** for saved evaluations
+3. **Consistent thresholds** between frontend and backend
+4. **Hybrid approach** - best of both worlds
+
+### **Verification:**
+- Change rating values → weighted score updates immediately
+- Save evaluation → shows backend criticality_level
+- Unsaved changes → shows calculated criticality
+
+---
+
 ## 🎯 **Success Metrics**
 
 - **API Response:** Should return 1,254 employees
@@ -233,9 +268,10 @@ docker-compose down && docker-compose build && docker-compose up -d
 - **Statistics:** Total employees = 1,254
 - **Performance:** API responds in < 1 second
 - **Data Quality:** All fields populated from CSV
+- **Real-time Updates:** Calculations update immediately on input changes
 
 ---
 
-**Last Updated:** September 8, 2024 - 5:45 PM  
+**Last Updated:** January 15, 2025 - 2:30 PM  
 **Status:** All patterns tested and working ✅
 

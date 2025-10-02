@@ -22,7 +22,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 
 const EditEmployee = () => {
-  const { id } = useParams();
+  const { sid } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -52,9 +52,9 @@ const EditEmployee = () => {
 
   // Fetch employee data
   const { data: employee, isLoading, error } = useQuery({
-    queryKey: ['employee', id],
-    queryFn: () => api.get(`/employees/${id}`).then(res => res.data),
-    enabled: !!id,
+    queryKey: ['employee', sid],
+    queryFn: () => api.get(`/employees/${sid}`).then(res => res.data),
+    enabled: !!sid,
     retry: 1,
   });
 
@@ -98,9 +98,9 @@ const EditEmployee = () => {
 
   // Update employee mutation
   const updateEmployeeMutation = useMutation({
-    mutationFn: (data) => api.put(`/employees/${id}`, data),
+    mutationFn: (data) => api.put(`/employees/${employee?.id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['employee', id]);
+      queryClient.invalidateQueries(['employee', sid]);
       queryClient.invalidateQueries(['employees']);
       toast({
         title: "Success",
