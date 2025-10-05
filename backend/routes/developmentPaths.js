@@ -154,7 +154,7 @@ router.get('/:id/assignments', async (req, res) => {
     const employees = await prisma.$queryRawUnsafe(
       `SELECT e.id, e.sid, e.first_name, e.last_name, e.email, e.photo_url
        FROM path_assignments pa
-       JOIN employees e ON e.id = pa.employee_id
+       JOIN employees e ON e.sid = pa.employee_id
        WHERE pa.path_id = $1 AND pa.employee_id IS NOT NULL
        ORDER BY e.first_name`, id
     );
@@ -228,13 +228,13 @@ router.get('/:id', async (req, res) => {
 router.post('/:id/interventions', async (req, res) => {
   try {
     const { id } = req.params;
-    const { intervention_type_id, title, description, instructor, location, start_date, end_date, duration_hours } = req.body;
+    const { intervention_type_id, title, description, instructor, location, start_date, end_date, duration_hours, managed_by } = req.body;
     if (!intervention_type_id || !title) return res.status(400).json({ message: 'intervention_type_id and title are required' });
     const iid = `PI-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
     const rows = await prisma.$queryRawUnsafe(
-      `INSERT INTO path_interventions (id, path_id, intervention_type, intervention_name, description, start_date, end_date, duration_hours, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8::int, NOW(), NOW()) RETURNING *`,
-      iid, id, intervention_type_id, title, description || null, start_date || null, end_date || null, duration_hours || null
+      `INSERT INTO path_interventions (id, path_id, intervention_type, intervention_name, description, start_date, end_date, duration_hours, managed_by, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8::int, $9, NOW(), NOW()) RETURNING *`,
+      iid, id, intervention_type_id, title, description || null, start_date || null, end_date || null, duration_hours || null, managed_by || null
     );
     res.status(201).json({ message: 'Intervention created', intervention: rows[0] });
   } catch (err) {
@@ -247,21 +247,19 @@ router.post('/:id/interventions', async (req, res) => {
 router.put('/interventions/:iid', async (req, res) => {
   try {
     const { iid } = req.params;
-    const { intervention_type_id, title, description, instructor, location, start_date, end_date, duration_hours, order_index } = req.body;
+    const { intervention_type, intervention_name, description, start_date, end_date, duration_hours, managed_by } = req.body;
     const rows = await prisma.$queryRawUnsafe(
       `UPDATE path_interventions SET 
-        intervention_type_id = COALESCE($2, intervention_type_id),
-        title = COALESCE($3, title),
+        intervention_type = COALESCE($2, intervention_type),
+        intervention_name = COALESCE($3, intervention_name),
         description = COALESCE($4, description),
-        instructor = COALESCE($5, instructor),
-        location = COALESCE($6, location),
-        start_date = COALESCE($7::date, start_date),
-        end_date = COALESCE($8::date, end_date),
-        duration_hours = COALESCE($9::int, duration_hours),
-        order_index = COALESCE($10, order_index),
+        start_date = COALESCE($5::date, start_date),
+        end_date = COALESCE($6::date, end_date),
+        duration_hours = COALESCE($7::int, duration_hours),
+        managed_by = COALESCE($8, managed_by),
         updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      iid, intervention_type_id || null, title || null, description || null, instructor || null, location || null, start_date || null, end_date || null, duration_hours || null, order_index || null
+      iid, intervention_type || null, intervention_name || null, description || null, start_date || null, end_date || null, duration_hours || null, managed_by || null
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Intervention not found' });
     res.json({ message: 'Intervention updated', intervention: rows[0] });

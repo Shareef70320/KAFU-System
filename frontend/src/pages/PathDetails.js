@@ -5,8 +5,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import DatePicker from '../components/ui/date-picker';
-import { Calendar, Layers, Plus, GripVertical, GraduationCap, Briefcase, Users, Target, BookOpen } from 'lucide-react';
+import { Calendar, Layers, Plus, GripVertical, GraduationCap, Briefcase, Users, Target, BookOpen, Edit } from 'lucide-react';
 import api from '../lib/api';
 
 const PathDetails = () => {
@@ -14,9 +15,14 @@ const PathDetails = () => {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [edit, setEdit] = useState({ name: '', description: '', start_date: '', end_date: '' });
+  const [editingIntervention, setEditingIntervention] = useState(null);
+  const [editInterventionForm, setEditInterventionForm] = useState({
+    category_id: '', intervention_type: '', intervention_name: '', description: '', 
+    start_date: '', end_date: '', duration_hours: '', managed_by: ''
+  });
   const emptyIntervention = { 
     intervention_type_id: '', title: '', description: '', instructor: '', location: '', 
-    start_date: '', end_date: '', duration_hours: '', notes: '' 
+    start_date: '', end_date: '', duration_hours: '', notes: '', managed_by: ''
   };
   const [newIntv, setNewIntv] = useState({ ...emptyIntervention });
   const [pendingList, setPendingList] = useState([]);
@@ -42,10 +48,17 @@ const PathDetails = () => {
     },
   });
 
+  // Fetch employees for managed_by dropdown
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: async () => (await api.get('/employees?page=1&limit=10000')).data,
+  });
+
   const path = data?.path;
   const interventions = useMemo(() => data?.interventions || [], [data]);
   const categories = categoriesData?.categories || [];
   const types = typesData?.types || [];
+  const employees = employeesData?.employees || [];
 
   // Filter types based on selected category
   const filteredTypes = selectedCategory 
@@ -75,7 +88,10 @@ const PathDetails = () => {
 
   const updatePath = useMutation({
     mutationFn: (payload) => api.put(`/development-paths/${id}`, payload),
-    onSuccess: () => qc.invalidateQueries(['path-detail', id]),
+    onSuccess: () => {
+      qc.invalidateQueries(['path-detail', id]);
+      navigate('/development-paths');
+    },
     onError: () => {
       // fallback notification
       alert('Failed to save path details. Please try again.');
@@ -224,12 +240,38 @@ const PathDetails = () => {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => updateIntv.mutate({ iid: iv.id, payload: { intervention_name: prompt('Title', iv.intervention_name) || iv.intervention_name } })}>Edit</Button>
+                      <Button variant="outline" size="sm" onClick={() => {
+                        setEditingIntervention(iv);
+                        // Find the category for this intervention type
+                        const interventionType = types.find(type => type.id === iv.intervention_type);
+                        setEditInterventionForm({
+                          category_id: interventionType?.category_id || '',
+                          intervention_type: iv.intervention_type || '',
+                          intervention_name: iv.intervention_name || '',
+                          description: iv.description || '',
+                          start_date: iv.start_date ? iv.start_date.split('T')[0] : '',
+                          end_date: iv.end_date ? iv.end_date.split('T')[0] : '',
+                          duration_hours: iv.duration_hours || '',
+                          managed_by: iv.managed_by || ''
+                        });
+                      }}>
+                        <Edit className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => deleteIntv.mutate(iv.id)}>Delete</Button>
                     </div>
                   </div>
                   <div className="text-xs text-gray-600 mt-1">{iv.description || '—'}</div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-2"><Calendar className="h-3 w-3" /> {iv.start_date || 'N/A'} → {iv.end_date || 'N/A'} • {iv.duration_hours || 0}h</div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-2">
+                    <Calendar className="h-3 w-3" /> 
+                    {iv.start_date ? iv.start_date.split('T')[0] : 'N/A'} → {iv.end_date ? iv.end_date.split('T')[0] : 'N/A'} • {iv.duration_hours || 0}h
+                    {iv.managed_by && (
+                      <>
+                        <span className="mx-2">•</span>
+                        <span className="text-blue-600">Managed by: {employees.find(emp => emp.sid === iv.managed_by)?.first_name} {employees.find(emp => emp.sid === iv.managed_by)?.last_name}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -323,6 +365,19 @@ const PathDetails = () => {
               <div>
                 <Label>Duration (hours)</Label>
                 <Input type="number" className="mt-1" value={newIntv.duration_hours} onChange={e => setNewIntv({ ...newIntv, duration_hours: e.target.value ? parseInt(e.target.value) || 0 : '' })} />
+              </div>
+              <div>
+                <Label>Manage By</Label>
+                <select 
+                  className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                  value={newIntv.managed_by} 
+                  onChange={e => setNewIntv({ ...newIntv, managed_by: e.target.value })}
+                >
+                  <option value="">Select Employee</option>
+                  {employees.map(emp => (
+                    <option key={emp.sid} value={emp.sid}>{emp.first_name} {emp.last_name} ({emp.sid})</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex items-center justify-between mt-4">
@@ -468,6 +523,19 @@ const PathDetails = () => {
                       <Label>Duration (hours)</Label>
                       <Input type="number" className="mt-1" value={p.duration_hours} onChange={e => setPendingList(list => list.map((it,i)=> i===idx? { ...it, duration_hours: e.target.value ? parseInt(e.target.value) || 0 : '' }: it))} />
                     </div>
+                    <div>
+                      <Label>Manage By</Label>
+                      <select 
+                        className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                        value={p.managed_by || ''} 
+                        onChange={e => setPendingList(list => list.map((it,i)=> i===idx? { ...it, managed_by: e.target.value }: it))}
+                      >
+                        <option value="">Select Employee</option>
+                        {employees.map(emp => (
+                          <option key={emp.sid} value={emp.sid}>{emp.first_name} {emp.last_name} ({emp.sid})</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 ))}
                 <div className="flex items-center justify-between">
@@ -484,6 +552,138 @@ const PathDetails = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Intervention Modal */}
+      <Dialog open={!!editingIntervention} onOpenChange={() => setEditingIntervention(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Intervention</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Category</Label>
+              <select 
+                className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                value={editInterventionForm.category_id || ''} 
+                onChange={e => {
+                  const categoryId = e.target.value;
+                  setEditInterventionForm({ 
+                    ...editInterventionForm, 
+                    category_id: categoryId,
+                    intervention_type: '' // Reset type when category changes
+                  });
+                }}
+              >
+                <option value="">Select Category</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Intervention Type</Label>
+              <select 
+                className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                value={editInterventionForm.intervention_type || ''} 
+                onChange={e => setEditInterventionForm({ ...editInterventionForm, intervention_type: e.target.value })}
+                disabled={!editInterventionForm.category_id}
+              >
+                <option value="">Select Type</option>
+                {types
+                  .filter(type => type.category_id === editInterventionForm.category_id)
+                  .map(type => (
+                    <option key={type.id} value={type.id}>{type.name}</option>
+                  ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <Label>Intervention Name</Label>
+              <Input 
+                value={editInterventionForm.intervention_name} 
+                onChange={e => setEditInterventionForm({ ...editInterventionForm, intervention_name: e.target.value })}
+                placeholder="e.g., Financial Analysis Workshop"
+              />
+            </div>
+            <div className="col-span-2">
+              <Label>Description</Label>
+              <textarea 
+                className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                rows={3}
+                value={editInterventionForm.description} 
+                onChange={e => setEditInterventionForm({ ...editInterventionForm, description: e.target.value })}
+                placeholder="Detailed description of the intervention"
+              />
+            </div>
+            <div>
+              <Label>Start Date</Label>
+              <DatePicker 
+                value={editInterventionForm.start_date} 
+                onChange={(date) => setEditInterventionForm({ 
+                  ...editInterventionForm, 
+                  start_date: date 
+                })}
+                placeholder="Select start date"
+              />
+            </div>
+            <div>
+              <Label>End Date</Label>
+              <DatePicker 
+                value={editInterventionForm.end_date} 
+                onChange={(date) => setEditInterventionForm({ 
+                  ...editInterventionForm, 
+                  end_date: date 
+                })}
+                placeholder="Select end date"
+              />
+            </div>
+            <div>
+              <Label>Duration (hours)</Label>
+              <Input 
+                type="number" 
+                value={editInterventionForm.duration_hours} 
+                onChange={e => setEditInterventionForm({ ...editInterventionForm, duration_hours: e.target.value })}
+                placeholder="e.g., 8"
+              />
+            </div>
+            <div>
+              <Label>Manage By</Label>
+              <select 
+                className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                value={editInterventionForm.managed_by} 
+                onChange={e => setEditInterventionForm({ ...editInterventionForm, managed_by: e.target.value })}
+              >
+                <option value="">Select Employee</option>
+                {employees.map(emp => (
+                  <option key={emp.sid} value={emp.sid}>{emp.first_name} {emp.last_name} ({emp.sid})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingIntervention(null)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                const payload = { ...editInterventionForm };
+                // Convert empty strings to null for dates
+                if (payload.start_date === '') payload.start_date = null;
+                if (payload.end_date === '') payload.end_date = null;
+                if (payload.duration_hours === '') payload.duration_hours = null;
+                
+                updateIntv.mutate({ 
+                  iid: editingIntervention.id, 
+                  payload 
+                });
+                setEditingIntervention(null);
+              }}
+              disabled={updateIntv.isPending}
+            >
+              {updateIntv.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -7,11 +7,14 @@ import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import DatePicker from '../components/ui/date-picker';
 import { Plus, Users, Calendar, Layers } from 'lucide-react';
+import { useUser } from '../contexts/UserContext';
+import EmployeePhoto from '../components/EmployeePhoto';
 import api from '../lib/api';
 
 const DevelopmentPaths = () => {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { currentSid } = useUser();
   const [showCreate, setShowCreate] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [activePath, setActivePath] = useState(null);
@@ -70,12 +73,15 @@ const DevelopmentPaths = () => {
   const assignMutation = useMutation({
     mutationFn: ({ id, employeeIds, groupId }) => api.put(`/development-paths/${id}/assign`, {
       employee_ids: Array.from(employeeIds),
-      group_id: groupId || null
+      group_id: groupId || null,
+      assigned_by: currentSid || 'admin'
     }),
     onSuccess: () => {
+      qc.invalidateQueries(['development-paths']);
       setShowAssign(false);
       setSelectedEmployees(new Set());
       setSelectedGroupId('');
+      navigate('/development-paths');
     }
   });
 
@@ -92,7 +98,7 @@ const DevelopmentPaths = () => {
     try {
       const res = await api.get(`/development-paths/${path.id}/assignments`);
       const emps = res.data?.employees || [];
-      setSelectedEmployees(new Set(emps.map(e => e.id)));
+      setSelectedEmployees(new Set(emps.map(e => e.sid)));
       const groups = res.data?.groups || [];
       setSelectedGroupId(groups[0]?.id || '');
     } catch (e) {
@@ -204,12 +210,19 @@ const DevelopmentPaths = () => {
                 <Input placeholder="Search by name, SID, email..." value={assignSearch} onChange={e => setAssignSearch(e.target.value)} className="mt-1 mb-3" />
                 <div className="border rounded-md divide-y max-h-[55vh] overflow-y-auto">
                   {filteredEmployees.map(emp => (
-                    <label key={emp.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                      <div className="min-w-0">
+                    <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                      <EmployeePhoto 
+                        sid={emp.sid}
+                        firstName={emp.first_name}
+                        lastName={emp.last_name}
+                        size="small"
+                        className="flex-shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-900 truncate">{emp.first_name} {emp.last_name} {emp.sid ? `(SID: ${emp.sid})` : ''}</p>
                         <p className="text-xs text-gray-500 truncate">{emp.email} • {emp.job_title || 'N/A'} • {emp.location || 'N/A'}</p>
                       </div>
-                      <input type="checkbox" className="h-4 w-4" checked={selectedEmployees.has(emp.id)} onChange={() => toggleEmployee(emp.id)} />
+                      <input type="checkbox" className="h-4 w-4 flex-shrink-0" checked={selectedEmployees.has(emp.sid)} onChange={() => toggleEmployee(emp.sid)} />
                     </label>
                   ))}
                 </div>
@@ -225,7 +238,42 @@ const DevelopmentPaths = () => {
                   </select>
                   <p className="text-xs text-gray-500 mt-1">If a group is selected, employees are optional.</p>
                 </div>
-                <div className="text-sm text-gray-600 mb-2">Selected employees: {selectedEmployees.size}</div>
+                <div className="text-sm text-gray-600 mb-3">Selected employees: {selectedEmployees.size}</div>
+                
+                {/* Selected Employees Group Avatar */}
+                {selectedEmployees.size > 0 && (
+                  <div className="mb-4">
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Selected Employees</Label>
+                    <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-md border">
+                      {Array.from(selectedEmployees).map(sid => {
+                        const emp = employeesData?.find(e => e.sid === sid);
+                        if (!emp) return null;
+                        return (
+                          <div key={sid} className="flex items-center gap-2 bg-white px-2 py-1 rounded-full border shadow-sm">
+                            <EmployeePhoto 
+                              sid={emp.sid}
+                              firstName={emp.first_name}
+                              lastName={emp.last_name}
+                              size="small"
+                              className="flex-shrink-0"
+                            />
+                            <span className="text-xs font-medium text-gray-700 truncate max-w-[100px]">
+                              {emp.first_name} {emp.last_name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleEmployee(sid)}
+                              className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
                 <Button className="w-full loyverse-button" disabled={assignMutation.isPending} onClick={() => assignMutation.mutate({ id: activePath.id, employeeIds: selectedEmployees, groupId: selectedGroupId })}>
                   {assignMutation.isPending ? 'Assigning...' : 'Save Assignment'}
                 </Button>
