@@ -208,7 +208,7 @@ router.get('/:id', async (req, res) => {
     if (pathRows.length === 0) return res.status(404).json({ message: 'Path not found' });
 
     const interventions = await prisma.$queryRawUnsafe(
-      'SELECT * FROM path_interventions WHERE path_id = $1 ORDER BY order_index ASC, created_at ASC', id
+      'SELECT * FROM path_interventions WHERE path_id = $1 ORDER BY created_at ASC', id
     );
 
     const counts = await prisma.$queryRawUnsafe(`
@@ -228,13 +228,13 @@ router.get('/:id', async (req, res) => {
 router.post('/:id/interventions', async (req, res) => {
   try {
     const { id } = req.params;
-    const { intervention_type_id, title, description, instructor, location, start_date, end_date, duration_hours, order_index } = req.body;
+    const { intervention_type_id, title, description, instructor, location, start_date, end_date, duration_hours } = req.body;
     if (!intervention_type_id || !title) return res.status(400).json({ message: 'intervention_type_id and title are required' });
     const iid = `PI-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
     const rows = await prisma.$queryRawUnsafe(
-      `INSERT INTO path_interventions (id, path_id, intervention_type_id, title, description, instructor, location, start_date, end_date, duration_hours, order_index, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, $10::int, COALESCE($11,0), NOW(), NOW()) RETURNING *`,
-      iid, id, intervention_type_id, title, description || null, instructor || null, location || null, start_date || null, end_date || null, duration_hours || null, order_index
+      `INSERT INTO path_interventions (id, path_id, intervention_type, intervention_name, description, start_date, end_date, duration_hours, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8::int, NOW(), NOW()) RETURNING *`,
+      iid, id, intervention_type_id, title, description || null, start_date || null, end_date || null, duration_hours || null
     );
     res.status(201).json({ message: 'Intervention created', intervention: rows[0] });
   } catch (err) {

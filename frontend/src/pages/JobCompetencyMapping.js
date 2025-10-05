@@ -18,12 +18,12 @@ import {
   Eye,
   Users,
   Briefcase,
+  X,
   CheckCircle,
   AlertCircle,
   ChevronDown,
   ChevronUp,
   Target,
-  X,
   Info,
   Star,
   Award,
@@ -45,6 +45,11 @@ const JobCompetencyMapping = () => {
   // State for competency details modal
   const [selectedCompetency, setSelectedCompetency] = useState(null);
   const [showCompetencyModal, setShowCompetencyModal] = useState(false);
+  
+  // State for edit modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingMapping, setEditingMapping] = useState(null);
+  
 
   // Fetch jobs - get all jobs without pagination
   const { data: jobsData } = useQuery({
@@ -148,11 +153,42 @@ const JobCompetencyMapping = () => {
     }
   });
 
+  // Update mapping mutation
+  const updateMappingMutation = useMutation({
+    mutationFn: async ({ id, data }) => {
+      await api.put(`/job-competencies/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['jobCompetencies']);
+      setShowEditModal(false);
+      setEditingMapping(null);
+    }
+  });
+
   const handleDeleteMapping = (mappingId) => {
     if (window.confirm('Are you sure you want to delete this competency from the job profile?')) {
       deleteMappingMutation.mutate(mappingId);
     }
   };
+
+  const handleEditMapping = (mapping) => {
+    setEditingMapping(mapping);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateMapping = (e) => {
+    e.preventDefault();
+    if (editingMapping) {
+      updateMappingMutation.mutate({
+        id: editingMapping.id,
+        data: {
+          requiredLevel: editingMapping.requiredLevel,
+          isRequired: editingMapping.isRequired
+        }
+      });
+    }
+  };
+
 
   // Handle competency click to show details
   const handleCompetencyClick = async (competency, requiredLevel) => {
@@ -453,7 +489,7 @@ const JobCompetencyMapping = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/edit-job-profile/${profile.job.id}`)}
+                          onClick={() => navigate(`/edit-mapping/${profile.job.id}`)}
                           className="flex items-center space-x-1"
                         >
                           <Edit className="h-4 w-4" />
@@ -477,10 +513,12 @@ const JobCompetencyMapping = () => {
                           {profile.competencies.map((comp) => (
                             <div
                               key={comp.id}
-                              onClick={() => handleCompetencyClick(comp.competency, comp.requiredLevel)}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-all duration-200 group"
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border hover:bg-gray-100 hover:border-gray-300 transition-all duration-200 group"
                             >
-                              <div className="flex-1">
+                              <div 
+                                className="flex-1 cursor-pointer"
+                                onClick={() => handleCompetencyClick(comp.competency, comp.requiredLevel)}
+                              >
                                 <div className="flex items-center space-x-2 mb-1">
                                   <BookOpen className="h-4 w-4 text-green-600" />
                                   <span className="font-medium text-sm text-gray-900 group-hover:text-blue-600">
@@ -492,8 +530,24 @@ const JobCompetencyMapping = () => {
                                   {comp.requiredLevel}
                                 </Badge>
                               </div>
-                              <div className="text-gray-400 group-hover:text-blue-500">
-                                <Eye className="h-4 w-4" />
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditMapping(comp);
+                                  }}
+                                  className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <div 
+                                  className="text-gray-400 group-hover:text-blue-500 cursor-pointer"
+                                  onClick={() => handleCompetencyClick(comp.competency, comp.requiredLevel)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -662,6 +716,102 @@ const JobCompetencyMapping = () => {
                     Close
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Mapping Modal */}
+        {showEditModal && editingMapping && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+              <div className="flex items-center justify-between p-6 border-b">
+                <h2 className="text-xl font-semibold">Edit Competency Mapping</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingMapping(null);
+                  }}
+                >
+                  <X className="h-6 w-6" />
+                </Button>
+              </div>
+              <div className="p-6">
+                <form onSubmit={handleUpdateMapping} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Competency
+                    </label>
+                    <div className="p-3 bg-gray-50 rounded-lg border">
+                      <div className="flex items-center space-x-2">
+                        <BookOpen className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-gray-900">
+                          {editingMapping.competency.name}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Required Level
+                    </label>
+                    <Select
+                      value={editingMapping.requiredLevel}
+                      onValueChange={(value) => setEditingMapping({
+                        ...editingMapping,
+                        requiredLevel: value
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BASIC">Basic</SelectItem>
+                        <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
+                        <SelectItem value="ADVANCED">Advanced</SelectItem>
+                        <SelectItem value="MASTERY">Mastery</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="isRequired"
+                      checked={editingMapping.isRequired}
+                      onChange={(e) => setEditingMapping({
+                        ...editingMapping,
+                        isRequired: e.target.checked
+                      })}
+                      className="rounded border-gray-300"
+                    />
+                    <label htmlFor="isRequired" className="text-sm font-medium text-gray-700">
+                      Required Competency
+                    </label>
+                  </div>
+                  
+                  <div className="flex justify-end space-x-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowEditModal(false);
+                        setEditingMapping(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={updateMappingMutation.isPending}
+                    >
+                      {updateMappingMutation.isPending ? 'Updating...' : 'Update Mapping'}
+                    </Button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>

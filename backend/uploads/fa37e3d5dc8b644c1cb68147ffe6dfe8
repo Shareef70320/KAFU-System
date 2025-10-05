@@ -1,0 +1,2 @@
+competency_name,competency_level,question_text,option1,option2,option3,option4,option1_is_correct,option2_is_correct,option3_is_correct,option4_is_correct
+Learning and Development Planning,BASIC,What is the primary purpose of learning and development planning?,To increase employee salaries,To identify skill gaps and create training plans,To reduce training costs,To eliminate training programs,false,true,false,false

@@ -91,7 +91,6 @@ router.get('/competency/:competencyId', async (req, res) => {
         ac.id,
         ac.assessor_sid,
         ac.competency_level,
-        ac.is_active,
         e.first_name,
         e.last_name,
         e.email,

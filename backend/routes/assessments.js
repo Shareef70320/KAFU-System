@@ -134,17 +134,29 @@ router.post('/', async (req, res) => {
       timeLimit,
       passingScore,
       maxAttempts,
-      createdBy
+      createdBy,
+      numberOfQuestions,
+      shuffleQuestions,
+      allowMultipleAttempts,
+      showTimer,
+      forceTimeLimit,
+      showDashboard,
+      showCorrectAnswers,
+      showIncorrectAnswers
     } = req.body;
 
     const assessment = await prisma.$queryRaw`
       INSERT INTO assessments (
-        title, description, "competencyId", "competencyLevelId", 
+        id, title, description, "competencyId", "competencyLevelId", 
         "timeLimit", "passingScore", "maxAttempts", "createdBy", 
+        "numberOfQuestions", "shuffleQuestions", "allowMultipleAttempts",
+        "showTimer", "forceTimeLimit", "showDashboard", "showCorrectAnswers", "showIncorrectAnswers",
         "isActive", "createdAt", "updatedAt"
       ) VALUES (
-        ${title}, ${description || null}, ${competencyId}, ${competencyLevelId || null},
+        gen_random_uuid()::text, ${title}, ${description || null}, ${competencyId}, ${competencyLevelId},
         ${timeLimit || null}, ${passingScore || 70.0}, ${maxAttempts || null}, ${createdBy || null},
+        ${numberOfQuestions || 10}, ${shuffleQuestions || true}, ${allowMultipleAttempts || true},
+        ${showTimer || true}, ${forceTimeLimit || false}, ${showDashboard || true}, ${showCorrectAnswers || true}, ${showIncorrectAnswers || true},
         true, NOW(), NOW()
       ) RETURNING *
     `;

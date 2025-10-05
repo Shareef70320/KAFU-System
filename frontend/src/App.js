@@ -17,6 +17,7 @@ import Jobs from './pages/Jobs';
 import EditJob from './pages/EditJob';
 import JobCompetencyMapping from './pages/JobCompetencyMapping';
 import AddMapping from './pages/AddMapping';
+import EditMapping from './pages/EditMapping';
 import JobCriticality from './pages/JobCriticality';
 import JobEvaluation from './pages/JobEvaluation';
 import DevelopmentPaths from './pages/DevelopmentPaths';
@@ -77,6 +78,7 @@ function App() {
                 <Route path="jobs/edit/:id" element={<AdminRoute><EditJob /></AdminRoute>} />
                 <Route path="job-competency-mapping" element={<AdminRoute><JobCompetencyMapping /></AdminRoute>} />
                 <Route path="add-mapping" element={<AdminRoute><AddMapping /></AdminRoute>} />
+                <Route path="edit-mapping/:jobId" element={<AdminRoute><EditMapping /></AdminRoute>} />
                 <Route path="job-criticality" element={<AdminRoute><JobCriticality /></AdminRoute>} />
                 <Route path="job-evaluation" element={<AdminRoute><JobEvaluation /></AdminRoute>} />
                 <Route path="assessors" element={<AdminRoute><Assessors /></AdminRoute>} />

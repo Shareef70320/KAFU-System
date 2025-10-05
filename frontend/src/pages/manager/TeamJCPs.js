@@ -60,10 +60,32 @@ const TeamJCPs = () => {
         const jcpsResponse = await api.get('/job-competencies');
         const allJcps = jcpsResponse.data.mappings;
         
+        // Filter JCPs for team members and group by job
         const teamJcps = allJcps.filter(mapping => 
           hierarchyMembers.some(emp => emp.job_code === mapping.job.code)
         );
-        setJcps(teamJcps);
+        
+        // Group mappings by job
+        const groupedJcps = teamJcps.reduce((acc, mapping) => {
+          const jobCode = mapping.job.code;
+          if (!acc[jobCode]) {
+            acc[jobCode] = {
+              id: mapping.job.id,
+              jobTitle: mapping.job.title,
+              jobCode: mapping.job.code,
+              job: mapping.job,
+              competencies: []
+            };
+          }
+          acc[jobCode].competencies.push({
+            competencyName: mapping.competency.name,
+            level: mapping.requiredLevel,
+            competency: mapping.competency
+          });
+          return acc;
+        }, {});
+        
+        setJcps(Object.values(groupedJcps));
       }
     } catch (error) {
       console.error('Error fetching JCPs:', error);

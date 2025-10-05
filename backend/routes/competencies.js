@@ -371,6 +371,35 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get all competency levels
+router.get('/levels', async (req, res) => {
+  try {
+    const levels = await prisma.$queryRaw`
+      SELECT id, level, title, description, indicators
+      FROM competency_levels
+      ORDER BY 
+        CASE level
+          WHEN 'BASIC' THEN 1
+          WHEN 'INTERMEDIATE' THEN 2
+          WHEN 'ADVANCED' THEN 3
+          WHEN 'MASTERY' THEN 4
+          ELSE 5
+        END
+    `;
+
+    res.json({
+      success: true,
+      levels: levels
+    });
+  } catch (error) {
+    console.error('Error fetching competency levels:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch competency levels'
+    });
+  }
+});
+
 // Get single competency with all details
 router.get('/:id', async (req, res) => {
   try {

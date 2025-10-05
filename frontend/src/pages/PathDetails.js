@@ -218,13 +218,13 @@ const PathDetails = () => {
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                       <GripVertical className="h-4 w-4 text-gray-400" />
-                      {iv.title}
+                      {iv.intervention_name}
                       <span className="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded">
-                        {getInterventionTypeName(iv.intervention_type_id)}
+                        {iv.intervention_type || 'Unknown Type'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => updateIntv.mutate({ iid: iv.id, payload: { title: prompt('Title', iv.title) || iv.title } })}>Edit</Button>
+                      <Button variant="outline" size="sm" onClick={() => updateIntv.mutate({ iid: iv.id, payload: { intervention_name: prompt('Title', iv.intervention_name) || iv.intervention_name } })}>Edit</Button>
                       <Button variant="outline" size="sm" onClick={() => deleteIntv.mutate(iv.id)}>Delete</Button>
                     </div>
                   </div>

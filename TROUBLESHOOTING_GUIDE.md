@@ -856,3 +856,166 @@ Frontend relying on backend data instead of calculating live values for unsaved 
 # Backend: >=450 High, >300 Medium, <=300 Low
 # Should match exactly
 ```
+
+## 🔧 **"Failed to create assessment" Error Fix**
+
+### **Problem:** 
+"Create New Assessment" page shows "Failed to create assessment" error when saving
+
+### **Root Cause:** 
+1. Database `NOT NULL` constraint on `competencyId` field conflicts with "Apply to All Competencies" feature
+2. Invalid foreign key reference for `competencyLevelId`
+
+### **Symptoms:**
+- Backend logs show: `Failing row contains (null, null, null, ...)`
+- Error code: `23502` (NOT NULL constraint violation)
+- Assessment creation fails for both specific competencies and "Apply to All"
+
+### **Solution:**
+```bash
+# 1. Make competencyId nullable in database
+docker-compose exec postgres psql -U kafu_user -d kafu_system -c "ALTER TABLE assessments ALTER COLUMN \"competencyId\" DROP NOT NULL;"
+
+# 2. Fix backend SQL query to handle null values properly
+# In backend/routes/assessments.js, change:
+# ${competencyId || null}, ${competencyLevelId || null}
+# to:
+# ${competencyId}, ${competencyLevelId}
+
+# 3. Copy updated code to container
+docker cp backend/routes/assessments.js kafu-backend:/app/routes/assessments.js
+
+# 4. Restart backend
+docker-compose restart backend
+
+# 5. Test with valid competency level ID
+curl -X POST "http://localhost:5001/api/assessments" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Test Assessment",
+    "competencyId": null,
+    "competencyLevelId": "VALID_LEVEL_ID",
+    "timeLimit": 30,
+    "passingScore": 70,
+    "maxAttempts": 3,
+    "createdBy": "admin"
+  }'
+```
+
+### **Prevention:**
+- Always check database constraints when implementing nullable fields
+- Use valid foreign key references in API tests
+- Test both specific competency and "Apply to All" scenarios
+- Verify database schema matches application requirements
+
+### **Verification:**
+```bash
+# Test assessment creation
+curl -X POST "http://localhost:5001/api/assessments" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test", "competencyId": null, "competencyLevelId": "VALID_ID", "createdBy": "admin"}'
+# Should return: {"success":true,"assessment":{...}}
+
+# Test in frontend:
+# 1. Go to Assessments page
+# 2. Click "Create Assessment"
+# 3. Fill in required fields
+# 4. Check "Apply to All Competencies" or select specific competency
+# 5. Click "Create Assessment"
+# 6. Should succeed without errors
+```
+
+## 🔧 **Assessor Management Page Error After Assessment Fix**
+
+### **Problem:** 
+After fixing assessment creation, Assessor Management page shows "Failed to fetch assessor mappings" error
+
+### **Root Cause:** 
+1. Missing database tables (`review_requests`, `performance_reviews`, etc.)
+2. Non-existent column `is_active` in `assessor_competencies` table
+
+### **Symptoms:**
+- Assessor Management page shows error after assessment fix
+- Backend logs show: `column ac.is_active does not exist`
+- Error code: `42703` (undefined column)
+
+### **Solution:**
+```bash
+# 1. Create missing performance review tables
+docker cp create_performance_review_tables.sql kafu-postgres:/tmp/
+docker-compose exec postgres psql -U kafu_user -d kafu_system -f /tmp/create_performance_review_tables.sql
+
+# 2. Fix assessors route to remove non-existent column
+# In backend/routes/assessors.js, remove:
+# ac.is_active,
+# from the SELECT query
+
+# 3. Copy updated code to container
+docker cp backend/routes/assessors.js kafu-backend:/app/routes/assessors.js
+
+# 4. Restart backend
+docker-compose restart backend
+
+# 5. Test both pages
+curl -s "http://localhost:5001/api/assessors" | jq '.success'
+curl -s "http://localhost:5001/api/assessments" | jq '.success'
+```
+
+### **Prevention:**
+- Always test all related pages after making database changes
+- Check for missing tables when restoring from backups
+- Remove references to non-existent columns in SQL queries
+- Verify all API endpoints work after fixes
+
+### **Verification:**
+```bash
+# Test Assessor Management
+curl -s "http://localhost:5001/api/assessors" | jq '.success'
+# Should return: true
+
+# Test Assessment Creation
+curl -X POST "http://localhost:5001/api/assessments" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test", "competencyId": null, "competencyLevelId": "VALID_ID", "createdBy": "admin"}'
+# Should return: {"success":true,"assessment":{...}}
+
+# Test in frontend:
+# 1. Go to Assessor Management page - should load without errors
+# 2. Go to Assessments page - should still work correctly
+# 3. Both pages should function independently
+```
+
+---
+
+## Assessment Updates Not Saving Fix
+
+**Issue**: Assessment updates not being saved in the frontend.
+
+**Root Cause**: 
+- Frontend validation logic was checking for `competencyId` even when "Apply to All Competencies" was selected
+- Data format mismatch between frontend and backend (snake_case vs camelCase)
+
+**Solution**:
+1. Updated frontend validation to handle `applyToAllCompetencies` checkbox
+2. Fixed backend API to return consistent camelCase field names
+3. Updated frontend `handleUpdateAssessment` to prepare data correctly
+
+**Files Modified**: 
+- `frontend/src/pages/Assessments.js` (validation logic)
+- `backend/routes/assessments.js` (API response format)
+
+**Verification**:
+```bash
+# Test API update
+curl -X PUT "http://localhost:5001/api/assessments/{id}" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Updated Title", "timeLimit": 60}'
+
+# Should return: {"success":true,"assessment":{...}}
+
+# Test in frontend:
+# 1. Go to Assessment Management page
+# 2. Edit an existing assessment
+# 3. Save changes - should work without errors
+# 4. Verify changes are persisted
+```

@@ -544,7 +544,7 @@ router.post('/upload-csv', upload.single('csvFile'), async (req, res) => {
         // Look up competency level ID if provided
         if (questionData.competencyLevel) {
           const level = await prisma.$queryRaw`
-            SELECT id FROM competency_levels WHERE level = ${questionData.competencyLevel} LIMIT 1
+            SELECT id FROM competency_levels WHERE level = ${questionData.competencyLevel}::"CompetencyLevelType" LIMIT 1
           `;
           
           if (level && level.length > 0) {
@@ -562,7 +562,7 @@ router.post('/upload-csv', upload.single('csvFile'), async (req, res) => {
             points, explanation, "isActive", "createdBy", 
             "createdAt", "updatedAt"
           ) VALUES (
-            gen_random_uuid()::text, ${questionData.text}, ${questionData.type}, 
+            gen_random_uuid()::text, ${questionData.text}, ${questionData.type}::"QuestionType", 
             ${competencyId}, ${competencyLevelId},
             ${questionData.points}, ${questionData.explanation}, true, 'admin',
             NOW(), NOW()
