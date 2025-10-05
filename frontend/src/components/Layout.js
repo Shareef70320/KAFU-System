@@ -86,7 +86,7 @@ const Layout = () => {
     { name: 'My Competencies', href: '/user/competencies', icon: BookOpen },
     { name: 'Assessments', href: '/user/assessments', icon: UserCheck },
     { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
-    { name: 'My Development', href: '/user/development', icon: Layers },
+    { name: 'My Development Paths', href: '/user/my-development-paths', icon: Layers },
     { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
   ];
 

@@ -1,5 +1,8 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const prisma = new PrismaClient();
 const router = express.Router();
 
@@ -224,6 +227,57 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Storage for attachments (reusing backend/uploads)
+const uploadDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `attachment-${Date.now()}-${Math.random().toString(36).slice(2,8)}${path.extname(file.originalname)}`)
+});
+const upload = multer({ storage });
+
+// List comments for an intervention
+router.get('/interventions/:iid/comments', async (req, res) => {
+  try {
+    const { iid } = req.params;
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT c.*, e.first_name, e.last_name
+       FROM path_intervention_comments c
+       LEFT JOIN employees e ON e.sid = c.author_sid
+       WHERE c.intervention_id = $1
+       ORDER BY c.created_at DESC`, iid
+    );
+    res.json({ comments: rows });
+  } catch (err) {
+    console.error('List intervention comments error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Create comment with optional attachment
+router.post('/interventions/:iid/comments', upload.single('attachment'), async (req, res) => {
+  try {
+    const { iid } = req.params;
+    const { author_sid, comment } = req.body;
+    if (!author_sid || (!comment && !req.file)) {
+      return res.status(400).json({ message: 'author_sid and at least comment or attachment are required' });
+    }
+    const id = `PIC-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const attachmentUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const rows = await prisma.$queryRawUnsafe(
+      `INSERT INTO path_intervention_comments (id, intervention_id, author_sid, comment, attachment_url, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *`,
+      id, iid, author_sid, comment || null, attachmentUrl
+    );
+    res.status(201).json({ message: 'Comment added', comment: rows[0] });
+  } catch (err) {
+    console.error('Create intervention comment error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Create intervention
 router.post('/:id/interventions', async (req, res) => {
   try {
@@ -286,9 +340,8 @@ router.delete('/interventions/:iid', async (req, res) => {
 router.get('/user/:sid', async (req, res) => {
   try {
     const { sid } = req.params;
-    const empRows = await prisma.$queryRawUnsafe('SELECT id, sid, first_name, last_name FROM employees WHERE sid = $1', sid);
+    const empRows = await prisma.$queryRawUnsafe('SELECT sid, first_name, last_name FROM employees WHERE sid = $1', sid);
     if (empRows.length === 0) return res.json({ assignments: [] });
-    const empId = empRows[0].id;
 
     const rows = await prisma.$queryRawUnsafe(`
       SELECT pa.id as assignment_id, p.*
@@ -296,7 +349,7 @@ router.get('/user/:sid', async (req, res) => {
       JOIN development_paths p ON p.id = pa.path_id
       WHERE pa.employee_id = $1
       ORDER BY p.start_date NULLS LAST, p.created_at DESC
-    `, empId);
+    `, sid);
     res.json({ assignments: rows });
   } catch (err) {
     console.error('Get user assignments error:', err);

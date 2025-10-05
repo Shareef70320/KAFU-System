@@ -35,7 +35,9 @@ import MyCompetencies from './pages/user/MyCompetencies';
 import UserAssessments from './pages/user/UserAssessments';
 import Reviews from './pages/user/Reviews';
 import UserDashboard from './pages/user/UserDashboard';
-import DevelopmentTimeline from './pages/user/DevelopmentTimeline';
+// removed DevelopmentTimeline
+import MyDevelopmentPaths from './pages/user/MyDevelopmentPaths';
+import PathDetailsUser from './pages/user/PathDetailsUser';
 import PhotoUpload from './pages/PhotoUpload';
 // Manager Routes
 import ManagerDashboard from './pages/manager/ManagerDashboard';
@@ -97,7 +99,9 @@ function App() {
                 <Route path="user/profile" element={<UserRoute><UserProfile /></UserRoute>} />
                 <Route path="user/competencies" element={<UserRoute><MyCompetencies /></UserRoute>} />
                 <Route path="user/assessments" element={<UserRoute><UserAssessments /></UserRoute>} />
-                <Route path="user/development" element={<UserRoute><DevelopmentTimeline /></UserRoute>} />
+                {/* removed user/development route */}
+                <Route path="user/my-development-paths" element={<UserRoute><MyDevelopmentPaths /></UserRoute>} />
+                <Route path="user/my-development-paths/:id" element={<UserRoute><PathDetailsUser /></UserRoute>} />
                 <Route path="user/reviews" element={<UserRoute><Reviews /></UserRoute>} />
                 <Route path="user/team" element={<UserRoute><TeamEmployees /></UserRoute>} />
                 <Route path="user/jobs" element={<UserRoute><TeamJobs /></UserRoute>} />
