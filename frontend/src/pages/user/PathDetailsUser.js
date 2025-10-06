@@ -51,26 +51,34 @@ const PathDetailsUser = () => {
 
   return (
     <div className="p-4">
-      <div className="mb-4">
-        <h2 className="text-xl font-semibold text-gray-900">{path?.name}</h2>
-        <p className="text-sm text-gray-600">{path?.description}</p>
-        <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-          <Calendar className="h-4 w-4" />
-          <span>{path?.start_date ? new Date(path.start_date).toLocaleDateString() : 'N/A'} → {path?.end_date ? new Date(path.end_date).toLocaleDateString() : 'N/A'}</span>
+      <div className="rounded-lg overflow-hidden ring-1 ring-gray-100 mb-4">
+        <div className="h-1 w-full bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500" />
+        <div className="px-4 py-3 bg-white">
+          <h2 className="text-lg font-semibold text-gray-900">{path?.name}</h2>
+          <p className="text-sm text-gray-700 mt-1">{path?.description}</p>
+          <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+            <Calendar className="h-4 w-4 text-sky-600" />
+            <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-700 ring-1 ring-sky-100">{path?.start_date ? new Date(path.start_date).toLocaleDateString() : 'N/A'}</span>
+            <span className="text-gray-400">→</span>
+            <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">{path?.end_date ? new Date(path.end_date).toLocaleDateString() : 'N/A'}</span>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
         {interventions.map(iv => (
-          <Card key={iv.id}>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold text-gray-900">{iv.intervention_name} <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded">{iv.intervention_type || 'Unknown Type'}</span></CardTitle>
+          <Card key={iv.id} className="ring-1 ring-gray-100 border-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-semibold text-gray-900">{iv.intervention_name} <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded ring-1 ring-emerald-100">{iv.intervention_type || 'Unknown Type'}</span></CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-sm text-gray-600 mb-3">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  <span>{iv.start_date ? iv.start_date.split('T')[0] : 'N/A'} → {iv.end_date ? iv.end_date.split('T')[0] : 'N/A'} • {iv.duration_hours || 0}h</span>
+                <div className="flex items-center gap-2 text-xs">
+                  <Calendar className="h-4 w-4 text-sky-600" />
+                  <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-700 ring-1 ring-sky-100">{iv.start_date ? iv.start_date.split('T')[0] : 'N/A'}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">{iv.end_date ? iv.end_date.split('T')[0] : 'N/A'}</span>
+                  <span className="ml-2 px-2 py-0.5 rounded bg-gray-50 text-gray-700 ring-1 ring-gray-200">{iv.duration_hours || 0}h</span>
                 </div>
                 {iv.description && <div className="mt-2">{iv.description}</div>}
               </div>
@@ -87,7 +95,7 @@ const PathDetailsUser = () => {
                     value={newComments[iv.id]?.text || ''}
                     onChange={e => setNewComments(s => ({ ...s, [iv.id]: { ...(s[iv.id] || {}), text: e.target.value } }))}
                   />
-                  <label className="inline-flex items-center gap-2 px-3 py-2 border rounded cursor-pointer text-sm text-gray-700 hover:bg-gray-50">
+                  <label className="inline-flex items-center gap-2 px-3 py-2 border rounded cursor-pointer text-sm text-gray-700 hover:bg-gray-50 ring-1 ring-gray-100">
                     <Paperclip className="h-4 w-4" /> Attach
                     <input type="file" className="hidden" onChange={e => setNewComments(s => ({ ...s, [iv.id]: { ...(s[iv.id] || {}), file: e.target.files?.[0] || null } }))} />
                   </label>

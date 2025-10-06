@@ -59,6 +59,10 @@ const PathDetails = () => {
   const categories = categoriesData?.categories || [];
   const types = typesData?.types || [];
   const employees = employeesData?.employees || [];
+  const { data: allCompetencies } = useQuery({
+    queryKey: ['all-competencies'],
+    queryFn: async () => (await api.get('/competencies?limit=1000')).data,
+  });
 
   // Filter types based on selected category
   const filteredTypes = selectedCategory 
@@ -122,6 +126,23 @@ const PathDetails = () => {
     onSuccess: () => qc.invalidateQueries(['path-detail', id])
   });
 
+  const LinkedCompetencies = ({ iid, allCompetencies }) => {
+    const { data } = useQuery({
+      queryKey: ['intv-comps', iid],
+      queryFn: async () => (await api.get(`/development-paths/interventions/${iid}/competencies`)).data,
+      enabled: !!iid,
+    });
+    const list = data?.competencies || [];
+    if (!list.length) return null;
+    return (
+      <div className="mt-2 flex flex-wrap gap-1">
+        {list.map(c => (
+          <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">{c.name}</span>
+        ))}
+      </div>
+    );
+  };
+
   const saveAllPending = async () => {
     // Save path details first
     await api.put(`/development-paths/${id}`, {
@@ -147,16 +168,24 @@ const PathDetails = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Layers className="h-6 w-6 text-green-600" /> {path.name}</h1>
-          <p className="text-gray-600">Edit path details and manage interventions</p>
+      <div className="rounded-lg overflow-hidden ring-1 ring-gray-100">
+        <div className="h-1 w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+        <div className="flex items-center justify-between px-4 py-3 bg-white">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2"><span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100"><Layers className="h-4 w-4" /></span> {path.name}</h1>
+            <div className="flex items-center gap-2 mt-1 text-xs">
+              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">{path.start_date ? path.start_date.split('T')[0] : 'N/A'}</span>
+              <span className="text-gray-400">→</span>
+              <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">{path.end_date ? path.end_date.split('T')[0] : 'N/A'}</span>
+            </div>
+          </div>
+          <div className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 ring-1 ring-gray-200">ID: {path.id}</div>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Path Details</CardTitle>
+      <Card className="ring-1 ring-gray-100 border-0">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold text-gray-900">Path Details</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -219,28 +248,26 @@ const PathDetails = () => {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Interventions</CardTitle>
+      <Card className="ring-1 ring-gray-100 border-0">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold text-gray-900">Interventions</CardTitle>
         </CardHeader>
         <CardContent>
           {/* Timeline view */}
           <div className="relative pl-8 mb-6">
-            <div className="absolute left-1 top-0 bottom-0 w-0.5 bg-gray-200" />
+            <div className="absolute left-1 top-0 bottom-0 w-0.5 bg-gradient-to-b from-emerald-300 via-teal-300 to-cyan-300" />
             {interventions.map((iv) => (
               <div key={iv.id} className="relative mb-5">
-                <div className="absolute -left-2 top-1 h-3.5 w-3.5 rounded-full bg-green-500 border-2 border-white shadow" />
-                <div className="ml-2 border rounded-md p-4 bg-white shadow-sm">
+                <div className="absolute -left-2 top-1 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-white shadow" />
+                <div className="ml-2 border rounded-md p-4 bg-white shadow-sm ring-1 ring-gray-100">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                       <GripVertical className="h-4 w-4 text-gray-400" />
                       {iv.intervention_name}
-                      <span className="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded">
-                        {iv.intervention_type || 'Unknown Type'}
-                      </span>
+                      <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded ring-1 ring-emerald-100">{iv.intervention_type || 'Unknown Type'}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => {
+                      <Button variant="outline" size="sm" className="hover:bg-emerald-50" onClick={() => {
                         setEditingIntervention(iv);
                         // Find the category for this intervention type
                         const interventionType = types.find(type => type.id === iv.intervention_type);
@@ -258,13 +285,16 @@ const PathDetails = () => {
                         <Edit className="h-3 w-3 mr-1" />
                         Edit
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => deleteIntv.mutate(iv.id)}>Delete</Button>
+                      <Button variant="outline" size="sm" className="hover:bg-rose-50" onClick={() => deleteIntv.mutate(iv.id)}>Delete</Button>
                     </div>
                   </div>
                   <div className="text-xs text-gray-600 mt-1">{iv.description || '—'}</div>
                   <div className="flex items-center gap-2 text-xs text-gray-500 mt-2">
-                    <Calendar className="h-3 w-3" /> 
-                    {iv.start_date ? iv.start_date.split('T')[0] : 'N/A'} → {iv.end_date ? iv.end_date.split('T')[0] : 'N/A'} • {iv.duration_hours || 0}h
+                    <Calendar className="h-3 w-3 text-emerald-600" /> 
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">{iv.start_date ? iv.start_date.split('T')[0] : 'N/A'}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">{iv.end_date ? iv.end_date.split('T')[0] : 'N/A'}</span>
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-gray-50 text-gray-700 ring-1 ring-gray-200">{iv.duration_hours || 0}h</span>
                     {iv.managed_by && (
                       <>
                         <span className="mx-2">•</span>
@@ -272,12 +302,14 @@ const PathDetails = () => {
                       </>
                     )}
                   </div>
+                  {/* Linked competencies chips */}
+                  <LinkedCompetencies iid={iv.id} allCompetencies={allCompetencies?.competencies || []} />
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="border rounded-lg p-4 bg-gray-50">
+          <div className="border rounded-lg p-4 bg-gray-50 ring-1 ring-gray-100">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label>Category</Label>
@@ -379,6 +411,18 @@ const PathDetails = () => {
                   ))}
                 </select>
               </div>
+              <div className="md:col-span-2">
+                <Label>Link Competencies</Label>
+                <select multiple className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm h-28"
+                  onChange={e => {
+                    const opts = Array.from(e.target.selectedOptions).map(o=>o.value);
+                    setNewIntv({ ...newIntv, competency_ids: opts });
+                  }}>
+                  {(allCompetencies?.competencies || []).map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex items-center justify-between mt-4">
               <span className="text-xs text-gray-500">Pending: {pendingList.length}</span>
@@ -441,8 +485,16 @@ const PathDetails = () => {
                   console.log('Creating intervention with payload:', newIntv);
                   
                   if (pendingList.length === 0) {
-                    // Immediate save if no batch is active
-                    createIntv.mutate(newIntv);
+                    // Immediate save
+                    createIntv.mutate(newIntv, {
+                      onSuccess: async (res) => {
+                        const created = res?.data?.intervention || res?.intervention;
+                        if (created && newIntv.competency_ids?.length) {
+                          await api.put(`/development-paths/interventions/${created.id}/competencies`, { competency_ids: newIntv.competency_ids });
+                          qc.invalidateQueries(['path-detail', id]);
+                        }
+                      }
+                    });
                   } else {
                     // Stage into batch when batch exists
                     setPendingList(list => [...list, { ...newIntv }]);

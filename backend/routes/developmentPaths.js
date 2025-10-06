@@ -278,6 +278,44 @@ router.post('/interventions/:iid/comments', upload.single('attachment'), async (
   }
 });
 
+// Get competencies linked to an intervention
+router.get('/interventions/:iid/competencies', async (req, res) => {
+  try {
+    const { iid } = req.params;
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT c.* FROM path_intervention_competencies pic
+       JOIN competencies c ON c.id = pic.competency_id
+       WHERE pic.intervention_id = $1
+       ORDER BY c.name`, iid
+    );
+    res.json({ competencies: rows });
+  } catch (err) {
+    console.error('List intervention competencies error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Replace competencies for an intervention
+router.put('/interventions/:iid/competencies', async (req, res) => {
+  try {
+    const { iid } = req.params;
+    const { competency_ids = [] } = req.body;
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('DELETE FROM path_intervention_competencies WHERE intervention_id = $1', iid);
+      for (const cid of competency_ids) {
+        await tx.$executeRawUnsafe(
+          'INSERT INTO path_intervention_competencies (intervention_id, competency_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          iid, cid
+        );
+      }
+    });
+    res.json({ message: 'Intervention competencies updated' });
+  } catch (err) {
+    console.error('Update intervention competencies error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Create intervention
 router.post('/:id/interventions', async (req, res) => {
   try {

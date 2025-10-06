@@ -124,25 +124,36 @@ const DevelopmentPaths = () => {
       {/* Paths grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {paths.map((p) => (
-          <Card key={p.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Layers className="h-5 w-5 text-green-600" /> {p.name}
-              </CardTitle>
+          <Card key={p.id} className="hover:shadow-lg transition-shadow border-0 ring-1 ring-gray-100 overflow-hidden">
+            <div className="h-1 w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold flex items-center gap-2 text-gray-900">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                    <Layers className="h-4 w-4" />
+                  </span>
+                  {p.name}
+                </CardTitle>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 ring-1 ring-gray-200">ID: {p.id}</span>
+              </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-600 mb-2">{p.description || '—'}</p>
-              <div className="flex items-center text-sm text-gray-500 gap-2 mb-3">
-                <Calendar className="h-4 w-4" />
-                <span>{p.start_date ? new Date(p.start_date).toLocaleDateString() : 'N/A'} → {p.end_date ? new Date(p.end_date).toLocaleDateString() : 'N/A'}</span>
+              <p className="text-sm text-gray-700 mb-3 line-clamp-2">{p.description || '—'}</p>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center text-xs text-gray-600 gap-2">
+                  <Calendar className="h-4 w-4 text-emerald-600" />
+                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">{p.start_date ? new Date(p.start_date).toLocaleDateString() : 'N/A'}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">{p.end_date ? new Date(p.end_date).toLocaleDateString() : 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">Emp {p.employee_assignments}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-100">Grp {p.group_assignments}</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Assignments</span>
-                <span className="font-medium text-gray-900">Emp: {p.employee_assignments} • Grp: {p.group_assignments}</span>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => navigate(`/development-paths/${p.id}`)}>Details</Button>
-                <Button variant="outline" onClick={() => openAssign(p)}><Users className="h-4 w-4 mr-2" />Assign</Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" className="border-emerald-200 hover:bg-emerald-50" onClick={() => navigate(`/development-paths/${p.id}`)}>Details</Button>
+                <Button variant="outline" className="border-cyan-200 hover:bg-cyan-50" onClick={() => openAssign(p)}><Users className="h-4 w-4 mr-2" />Assign</Button>
               </div>
             </CardContent>
           </Card>
