@@ -226,7 +226,45 @@ docker-compose down && docker-compose build && docker-compose up -d
 
 ---
 
-## 🎯 **Pattern 11: Real-Time Calculation Issues**
+## 🎯 **Pattern 11: Persisting New Fields In Existing Update APIs**
+
+### Symptoms:
+- Editing an entity saves most fields, but one field (e.g., `numberOfQuestions`) does not persist.
+- UI lists show old values even after a successful update toast.
+
+### Root Causes:
+- Frontend sends wrong key names (snake_case vs camelCase).
+- Backend `UPDATE` route doesn’t include the new field in its SET list.
+- Containers serving stale code due to cache.
+- Frontend query cache not invalidated/refetched after mutation.
+
+### Working Recipe:
+1) Align payload keys end-to-end
+   - Frontend must send camelCase keys the API expects, e.g. `numberOfQuestions`, `timeLimit`, `maxAttempts`.
+   - For “Apply to All”, send `applyToAll: true` and translate to `competencyId = null` server-side.
+
+2) Update backend route to save every setting
+   - In `backend/routes/assessments.js` add setters for:
+     `"numberOfQuestions"`, `"shuffleQuestions"`, `"allowMultipleAttempts"`, `"showTimer"`, `"forceTimeLimit"`, `"showDashboard"`, `"showCorrectAnswers"`, `"showIncorrectAnswers"`.
+   - Parse numbers safely: `parseInt(numberOfQuestions, 10)` with a sensible default.
+
+3) Cache-bust containers when code appears stale
+   - Backend: `docker-compose build backend --no-cache && docker-compose up -d backend`.
+   - Frontend (if UI still stale): rebuild with `--no-cache`.
+
+4) Force UI to pick up new data
+   - After mutation: `invalidateQueries(['new-assessments']);` then `refetchQueries` for the same key.
+
+5) Verify at both layers
+   - API: `curl -X PUT /api/assessments/:id -d '{"numberOfQuestions":12}'` → response reflects 12.
+   - DB: query `assessments."numberOfQuestions"` to confirm row updated.
+
+### Outcome:
+- Field persists reliably and assessment cards display the updated count immediately.
+
+---
+
+## 🎯 **Pattern 12: Real-Time Calculation Issues**
 
 ### **Symptoms:**
 - Frontend calculations not updating when user changes input values
