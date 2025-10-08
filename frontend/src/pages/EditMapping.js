@@ -31,9 +31,9 @@ const EditMapping = () => {
   // State for search and filters
   const [jobSearchTerm, setJobSearchTerm] = useState('');
   const [competencySearchTerm, setCompetencySearchTerm] = useState('');
-  const [selectedJobType, setSelectedJobType] = useState('');
-  const [selectedCompetencyType, setSelectedCompetencyType] = useState('');
-  const [selectedCompetencyFamily, setSelectedCompetencyFamily] = useState('');
+  const [selectedJobType, setSelectedJobType] = useState('all');
+  const [selectedCompetencyType, setSelectedCompetencyType] = useState('all');
+  const [selectedCompetencyFamily, setSelectedCompetencyFamily] = useState('all');
 
   // State for selected job and its competencies
   const [selectedJob, setSelectedJob] = useState(null);
@@ -130,15 +130,15 @@ const EditMapping = () => {
   const filteredJobs = jobsData?.jobs?.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(jobSearchTerm.toLowerCase()) ||
                          job.code.toLowerCase().includes(jobSearchTerm.toLowerCase());
-    const matchesType = !selectedJobType || job.division === selectedJobType;
+    const matchesType = !selectedJobType || selectedJobType === 'all' || job.division === selectedJobType;
     return matchesSearch && matchesType;
   }) || [];
 
   // Filter competencies based on search and filters
   const filteredCompetencies = competenciesData?.competencies?.filter(competency => {
     const matchesSearch = competency.name.toLowerCase().includes(competencySearchTerm.toLowerCase());
-    const matchesType = !selectedCompetencyType || competency.type === selectedCompetencyType;
-    const matchesFamily = !selectedCompetencyFamily || competency.family === selectedCompetencyFamily;
+    const matchesType = !selectedCompetencyType || selectedCompetencyType === 'all' || competency.type === selectedCompetencyType;
+    const matchesFamily = !selectedCompetencyFamily || selectedCompetencyFamily === 'all' || competency.family === selectedCompetencyFamily;
     return matchesSearch && matchesType && matchesFamily;
   }) || [];
 
@@ -194,10 +194,27 @@ const EditMapping = () => {
     ));
   };
 
+  // Create new mapping mutation
+  const createMappingMutation = useMutation({
+    mutationFn: async (data) => {
+      await api.post('/job-competencies', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['job-competencies']);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to create mapping",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handle saving changes
   const handleSaveChanges = async () => {
     try {
-      // Update existing mappings
+      // Process all job competencies
       for (const jc of jobCompetencies) {
         if (jc.mappingId) {
           // Update existing mapping
@@ -208,9 +225,15 @@ const EditMapping = () => {
               isRequired: jc.isRequired
             }
           });
+        } else {
+          // Create new mapping
+          await createMappingMutation.mutateAsync({
+            jobId: selectedJob.id,
+            competencyId: jc.competency.id,
+            requiredLevel: jc.level,
+            isRequired: jc.isRequired
+          });
         }
-        // Note: New mappings would need to be created via separate API call
-        // For now, we'll focus on updating existing ones
       }
 
       toast({
@@ -283,11 +306,11 @@ const EditMapping = () => {
           </div>
           <Button
             onClick={handleSaveChanges}
-            disabled={updateMappingMutation.isPending}
+            disabled={updateMappingMutation.isPending || createMappingMutation.isPending}
             className="flex items-center space-x-2"
           >
             <Save className="h-4 w-4" />
-            <span>{updateMappingMutation.isPending ? 'Saving...' : 'Save Changes'}</span>
+            <span>{(updateMappingMutation.isPending || createMappingMutation.isPending) ? 'Saving...' : 'Save Changes'}</span>
           </Button>
         </div>
 
@@ -326,7 +349,7 @@ const EditMapping = () => {
                           <SelectValue placeholder="All Types" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">All Types</SelectItem>
+                          <SelectItem value="all">All Types</SelectItem>
                           {competencyTypes.map(type => (
                             <SelectItem key={type} value={type}>{type}</SelectItem>
                           ))}
@@ -341,7 +364,7 @@ const EditMapping = () => {
                           <SelectValue placeholder="All Families" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">All Families</SelectItem>
+                          <SelectItem value="all">All Families</SelectItem>
                           {competencyFamilies.map(family => (
                             <SelectItem key={family} value={family}>{family}</SelectItem>
                           ))}

@@ -69,8 +69,8 @@ const NewAssessments = () => {
     queryKey: ['new-assessments'],
     queryFn: () => api.get('/assessments?page=1&limit=1000').then(res => res.data),
     retry: 1,
-    keepPreviousData: true,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    keepPreviousData: false,
+    staleTime: 0,
   });
 
   // Fetch competencies for filtering and selection
@@ -115,8 +115,9 @@ const NewAssessments = () => {
       const response = await api.post('/assessments', assessmentData);
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['new-assessments']);
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['new-assessments'] });
+      await queryClient.refetchQueries({ queryKey: ['new-assessments'], type: 'active' });
       toast({
         title: 'Success',
         description: 'Assessment created successfully!',
@@ -139,8 +140,9 @@ const NewAssessments = () => {
       const response = await api.put(`/assessments/${id}`, data);
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['new-assessments']);
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['new-assessments'] });
+      await queryClient.refetchQueries({ queryKey: ['new-assessments'], type: 'active' });
       toast({
         title: 'Updated',
         description: 'Assessment updated successfully!',
@@ -163,8 +165,9 @@ const NewAssessments = () => {
     mutationFn: async (assessmentId) => {
       await api.delete(`/assessments/${assessmentId}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['new-assessments']);
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['new-assessments'] });
+      await queryClient.refetchQueries({ queryKey: ['new-assessments'], type: 'active' });
       toast({
         title: 'Success',
         description: 'Assessment deleted successfully!',
@@ -214,21 +217,21 @@ const NewAssessments = () => {
   const handleEditAssessment = (assessment) => {
     setSelectedAssessment(assessment);
     // Seed edit state
-    setEditName(assessment.title || '');
+    setEditName(assessment.title || assessment.name || '');
     setEditDescription(assessment.description || '');
-    setEditCompetencyId(assessment.competency_id || '');
-    setEditApplyToAll(Boolean(assessment.apply_to_all));
-    setEditNumQuestions(assessment.num_questions || 10);
-    setEditIsActive(Boolean(assessment.is_active));
-    setEditShuffleQuestions(Boolean(assessment.shuffle_questions));
-    setEditAllowMultipleAttempts(Boolean(assessment.allow_multiple_attempts));
-    setEditMaxAttempts(assessment.max_attempts || 3);
-    setEditShowTimer(Boolean(assessment.show_timer));
-    setEditTimeLimitMinutes(assessment.time_limit || 30);
-    setEditForceTimeLimit(Boolean(assessment.force_time_limit));
-    setEditShowDashboard(Boolean(assessment.show_dashboard));
-    setEditShowCorrectAnswers(Boolean(assessment.show_correct_answers));
-    setEditShowIncorrectAnswers(Boolean(assessment.show_incorrect_answers));
+    setEditCompetencyId(assessment.competencyId || assessment.competency_id || '');
+    setEditApplyToAll(Boolean(assessment.applyToAll ?? assessment.apply_to_all ?? (assessment.competencyId === null)));
+    setEditNumQuestions(assessment.numberOfQuestions ?? assessment.num_questions ?? 10);
+    setEditIsActive(Boolean(assessment.isActive ?? assessment.is_active ?? true));
+    setEditShuffleQuestions(Boolean(assessment.shuffleQuestions ?? assessment.shuffle_questions ?? true));
+    setEditAllowMultipleAttempts(Boolean(assessment.allowMultipleAttempts ?? assessment.allow_multiple_attempts ?? true));
+    setEditMaxAttempts(assessment.maxAttempts ?? assessment.max_attempts ?? 3);
+    setEditShowTimer(Boolean(assessment.showTimer ?? assessment.show_timer ?? true));
+    setEditTimeLimitMinutes(assessment.timeLimit ?? assessment.time_limit ?? 30);
+    setEditForceTimeLimit(Boolean(assessment.forceTimeLimit ?? assessment.force_time_limit ?? false));
+    setEditShowDashboard(Boolean(assessment.showDashboard ?? assessment.show_dashboard ?? true));
+    setEditShowCorrectAnswers(Boolean(assessment.showCorrectAnswers ?? assessment.show_correct_answers ?? true));
+    setEditShowIncorrectAnswers(Boolean(assessment.showIncorrectAnswers ?? assessment.show_incorrect_answers ?? true));
     setShowEditAssessment(true);
   };
 
@@ -308,7 +311,7 @@ const NewAssessments = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Active Assessments</p>
                   <p className="text-2xl font-semibold text-gray-900">
-                    {assessments.filter(a => a.is_active).length}
+                    {assessments.filter(a => a.isActive ?? a.is_active).length}
                   </p>
                 </div>
               </div>
@@ -336,7 +339,7 @@ const NewAssessments = () => {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Total Questions</p>
                   <p className="text-2xl font-semibold text-gray-900">
-                    {assessments.reduce((sum, a) => sum + (a.question_count || 0), 0)}
+                    {assessments.reduce((sum, a) => sum + (a.questionCount ?? a.question_count ?? 0), 0)}
                   </p>
                 </div>
               </div>
@@ -409,12 +412,12 @@ const NewAssessments = () => {
                       <div className="flex items-center space-x-3 mb-2">
                         <h3 className="text-lg font-semibold text-gray-900">{assessment.title}</h3>
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          assessment.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          (assessment.isActive ?? assessment.is_active) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                         }`}>
-                          {assessment.is_active ? 'Active' : 'Inactive'}
+                          {(assessment.isActive ?? assessment.is_active) ? 'Active' : 'Inactive'}
                         </span>
                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                          {assessment.question_count || 0} Questions
+                          {assessment.numberOfQuestions ?? assessment.num_questions ?? assessment.questionCount ?? assessment.question_count ?? 0} Questions
                         </span>
                       </div>
                       {assessment.description && (
@@ -427,11 +430,11 @@ const NewAssessments = () => {
                         </span>
                         <span className="flex items-center">
                           <Clock className="h-3 w-3 mr-1" />
-                          {assessment.time_limit} min
+                          {assessment.timeLimit ?? assessment.time_limit ?? 0} min
                         </span>
                         <span className="flex items-center">
                           <RotateCcw className="h-3 w-3 mr-1" />
-                          {assessment.max_attempts} attempts
+                          {assessment.maxAttempts ?? assessment.max_attempts ?? 0} attempts
                         </span>
                         {assessment.shuffle_questions && (
                           <span className="flex items-center">
@@ -762,7 +765,7 @@ const NewAssessments = () => {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const data = {
-                    name: editName,
+                    title: editName,
                     description: editDescription,
                     competencyId: editApplyToAll ? null : editCompetencyId,
                     isActive: editIsActive,
@@ -770,12 +773,12 @@ const NewAssessments = () => {
                     allowMultipleAttempts: editAllowMultipleAttempts,
                     maxAttempts: editMaxAttempts,
                     showTimer: editShowTimer,
-                    timeLimitMinutes: editTimeLimitMinutes,
+                    timeLimit: editTimeLimitMinutes,
                     forceTimeLimit: editForceTimeLimit,
                     showDashboard: editShowDashboard,
                     showCorrectAnswers: editShowCorrectAnswers,
                     showIncorrectAnswers: editShowIncorrectAnswers,
-                    numQuestions: editNumQuestions,
+                    numberOfQuestions: editNumQuestions,
                     applyToAll: editApplyToAll,
                   };
                   updateAssessmentMutation.mutate({ id: selectedAssessment.id, data });

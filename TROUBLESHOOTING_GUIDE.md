@@ -1019,3 +1019,49 @@ curl -X PUT "http://localhost:5001/api/assessments/{id}" \
 # 3. Save changes - should work without errors
 # 4. Verify changes are persisted
 ```
+
+## Job Competency Profiles EditMapping Page Fix
+
+**Issue**: "Edit Profile" button in Job Competency Profiles page not working or showing blank page.
+
+**Root Cause**: 
+- Frontend container running old built code despite source code being correct
+- EditMapping component exists and is properly implemented, but wasn't deployed
+
+**Symptoms**:
+- Clicking "Edit Profile" button navigates to `/edit-mapping/{jobId}` but shows blank page
+- Backend API calls are successful (logs show 304 responses)
+- No JavaScript errors in browser console
+- EditMapping component is properly implemented with all required functionality
+
+**Solution**:
+```bash
+# 1. Rebuild frontend with latest code
+docker-compose build frontend --no-cache
+
+# 2. Restart frontend container
+docker-compose up -d frontend
+
+# 3. Verify EditMapping page loads correctly
+# Navigate to: http://localhost:3000/edit-mapping/{jobId}
+```
+
+**Prevention**:
+- Always rebuild frontend container after code changes
+- Use `--no-cache` flag to ensure latest code is deployed
+- Check container build timestamps when debugging frontend issues
+
+**Verification**:
+```bash
+# Test EditMapping API endpoint
+curl -s "http://localhost:5001/api/job-competencies?jobId={jobId}" | jq '.mappings | length'
+# Should return number of competency mappings for the job
+
+# Test in frontend:
+# 1. Go to Job Competency Profiles page
+# 2. Click "Edit Profile" on any job
+# 3. Should navigate to EditMapping page with job details and competencies
+# 4. Should be able to edit competency levels and requirements
+# 5. Should be able to add/remove competencies
+# 6. Should be able to save changes
+```

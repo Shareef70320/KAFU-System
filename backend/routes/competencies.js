@@ -327,7 +327,7 @@ router.get('/', async (req, res) => {
     };
 
     // Get competencies with relations
-    const competencies = await prisma.competency.findMany({
+    const competenciesRaw = await prisma.competency.findMany({
       where,
       include: {
         levels: {
@@ -352,6 +352,14 @@ router.get('/', async (req, res) => {
       skip,
       take
     });
+
+    // Normalize snake_case fields to camelCase for frontend
+    const competencies = competenciesRaw.map(c => ({
+      ...c,
+      relatedDivision: c.related_division || null,
+      relatedDocuments: c.related_documents || [],
+      assessmentCount: c._count?.assessments || 0
+    }));
 
     // Get total count for pagination
     const total = await prisma.competency.count({ where });
@@ -405,7 +413,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const competency = await prisma.competency.findUnique({
+    const compRaw = await prisma.competency.findUnique({
       where: { id },
       include: {
         levels: {
@@ -437,9 +445,15 @@ router.get('/:id', async (req, res) => {
       }
     });
 
-    if (!competency) {
+    if (!compRaw) {
       return res.status(404).json({ message: 'Competency not found' });
     }
+
+    const competency = {
+      ...compRaw,
+      relatedDivision: compRaw.related_division || null,
+      relatedDocuments: compRaw.related_documents || []
+    };
 
     res.json(competency);
   } catch (error) {
@@ -451,7 +465,7 @@ router.get('/:id', async (req, res) => {
 // Create new competency
 router.post('/', async (req, res) => {
   try {
-    const { name, type, family, definition, description, levels } = req.body;
+    const { name, type, family, definition, description, relatedDivision, relatedDocuments, levels } = req.body;
 
     // Check if competency name already exists
     const existingCompetency = await prisma.competency.findUnique({
@@ -470,6 +484,8 @@ router.post('/', async (req, res) => {
         family,
         definition,
         description,
+        related_division: relatedDivision || null,
+        related_documents: Array.isArray(relatedDocuments) ? relatedDocuments : [],
         levels: {
           create: levels?.map(level => ({
             level: level.level,
@@ -495,7 +511,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, type, family, definition, description, levels } = req.body;
+    const { name, type, family, definition, description, relatedDivision, relatedDocuments, levels } = req.body;
 
     // Check if competency exists
     const existingCompetency = await prisma.competency.findUnique({
@@ -525,7 +541,9 @@ router.put('/:id', async (req, res) => {
         type,
         family,
         definition,
-        description
+        description,
+        related_division: relatedDivision ?? undefined,
+        related_documents: Array.isArray(relatedDocuments) ? relatedDocuments : undefined
       },
       include: {
         levels: true

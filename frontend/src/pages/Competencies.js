@@ -572,6 +572,18 @@ const Competencies = () => {
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 mb-2">{competency.definition}</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      {competency.relatedDivision && (
+                        <span className="inline-flex px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-700">
+                          Division: {competency.relatedDivision}
+                        </span>
+                      )}
+                      {Array.isArray(competency.relatedDocuments) && competency.relatedDocuments.length > 0 && (
+                        <span className="inline-flex px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-700">
+                          Related Docs: {competency.relatedDocuments.length}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center space-x-4 text-xs text-gray-500">
                       <span 
                         className="flex items-center cursor-pointer hover:text-blue-600"
@@ -663,7 +675,7 @@ const Competencies = () => {
                   </div>
 
                   {/* Documents */}
-                  {competency.documents.length > 0 && (
+                  {(competency.documents.length > 0 || (Array.isArray(competency.relatedDocuments) && competency.relatedDocuments.length > 0)) && (
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Related Documents</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -678,6 +690,15 @@ const Competencies = () => {
                               <Download className="h-4 w-4" />
                             </button>
                           </div>
+                        ))}
+                        {Array.isArray(competency.relatedDocuments) && competency.relatedDocuments.map((url, idx) => (
+                          <a key={`rel-${idx}`} href={url} target="_blank" rel="noreferrer" className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100">
+                            <span className="text-lg">📄</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{url}</p>
+                              <p className="text-xs text-gray-500">Related Link</p>
+                            </div>
+                          </a>
                         ))}
                       </div>
                     </div>

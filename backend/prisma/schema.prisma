@@ -99,11 +99,13 @@ enum PayFrequency {
 
 model Competency {
   id                String    @id @default(cuid())
-  name              String    @unique
+  name              String
   type              CompetencyType
   family            String    // e.g., Finance, HR, Technical Services
   definition        String
   description       String?
+  related_division  String?   // Division from HR data
+  related_documents String[]  @default([]) // Array of related document references/URLs
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -117,6 +119,7 @@ model Competency {
   assessments_new   Assessment[]
   
   @@map("competencies")
+  @@unique([name, type, family])
 }
 
 model CompetencyLevel {
@@ -191,6 +194,21 @@ enum CompetencyType {
   BEHAVIORAL
   LEADERSHIP
   FUNCTIONAL
+  CERTIFICATION_AND_COMPLIANCE @map("CERTIFICATION_&_COMPLIANCE")
+  COMMERCIAL
+  FINANCE_AND_PROCUREMENT @map("FINANCE_&_PROCUREMENT")
+  FIRE
+  HR_AND_ADMIN @map("HR_&_ADMIN")
+  HSE
+  ICT
+  INTERNAL_AUDIT
+  LEGAL_AND_REGULATORY @map("LEGAL_&_REGULATORY")
+  MAINTENANCE
+  MEDIA
+  OPERATIONS
+  QUALITY
+  SECURITY
+  TECHNICAL_SERVICES
 }
 
 enum CompetencyLevelType {

@@ -15,21 +15,30 @@ router.get('/', async (req, res) => {
         a.id,
         a.title,
         a.description,
-        a."competencyId" as competency_id,
-        a."competencyLevelId" as competency_level_id,
-        a."isActive" as is_active,
-        a."timeLimit" as time_limit,
-        a."passingScore" as passing_score,
-        a."maxAttempts" as max_attempts,
-        a."createdBy" as created_by,
-        a."createdAt" as created_at,
-        a."updatedAt" as updated_at,
-        c.name as competency_name,
-        c.type as competency_type,
-        c.family as competency_family,
-        cl."level" as level_name,
-        cl.title as level_title,
-        COUNT(aq."questionId")::int as question_count
+        a."competencyId" as "competencyId",
+        a."competencyLevelId" as "competencyLevelId",
+        a."isActive" as "isActive",
+        a."timeLimit" as "timeLimit",
+        a."passingScore" as "passingScore",
+        a."maxAttempts" as "maxAttempts",
+        a."numberOfQuestions" as "numberOfQuestions",
+        a."shuffleQuestions" as "shuffleQuestions",
+        a."allowMultipleAttempts" as "allowMultipleAttempts",
+        a."showTimer" as "showTimer",
+        a."forceTimeLimit" as "forceTimeLimit",
+        a."showDashboard" as "showDashboard",
+        a."showCorrectAnswers" as "showCorrectAnswers",
+        a."showIncorrectAnswers" as "showIncorrectAnswers",
+        (a."competencyId" IS NULL) as "applyToAll",
+        a."createdBy" as "createdBy",
+        a."createdAt" as "createdAt",
+        a."updatedAt" as "updatedAt",
+        c.name as "competencyName",
+        c.type as "competencyType",
+        c.family as "competencyFamily",
+        cl."level" as "levelName",
+        cl.title as "levelTitle",
+        COUNT(aq."questionId")::int as "questionCount"
       FROM assessments a
       LEFT JOIN competencies c ON a."competencyId" = c.id
       LEFT JOIN competency_levels cl ON a."competencyLevelId" = cl.id
@@ -70,20 +79,29 @@ router.get('/:id', async (req, res) => {
         a.id,
         a.title,
         a.description,
-        a."competencyId" as competency_id,
-        a."competencyLevelId" as competency_level_id,
-        a."isActive" as is_active,
-        a."timeLimit" as time_limit,
-        a."passingScore" as passing_score,
-        a."maxAttempts" as max_attempts,
-        a."createdBy" as created_by,
-        a."createdAt" as created_at,
-        a."updatedAt" as updated_at,
-        c.name as competency_name,
-        c.type as competency_type,
-        c.family as competency_family,
-        cl."level" as level_name,
-        cl.title as level_title
+        a."competencyId" as "competencyId",
+        a."competencyLevelId" as "competencyLevelId",
+        a."isActive" as "isActive",
+        a."timeLimit" as "timeLimit",
+        a."passingScore" as "passingScore",
+        a."maxAttempts" as "maxAttempts",
+        a."numberOfQuestions" as "numberOfQuestions",
+        a."shuffleQuestions" as "shuffleQuestions",
+        a."allowMultipleAttempts" as "allowMultipleAttempts",
+        a."showTimer" as "showTimer",
+        a."forceTimeLimit" as "forceTimeLimit",
+        a."showDashboard" as "showDashboard",
+        a."showCorrectAnswers" as "showCorrectAnswers",
+        a."showIncorrectAnswers" as "showIncorrectAnswers",
+        (a."competencyId" IS NULL) as "applyToAll",
+        a."createdBy" as "createdBy",
+        a."createdAt" as "createdAt",
+        a."updatedAt" as "updatedAt",
+        c.name as "competencyName",
+        c.type as "competencyType",
+        c.family as "competencyFamily",
+        cl."level" as "levelName",
+        cl.title as "levelTitle"
       FROM assessments a
       LEFT JOIN competencies c ON a."competencyId" = c.id
       LEFT JOIN competency_levels cl ON a."competencyLevelId" = cl.id
@@ -175,6 +193,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('PUT /assessments/:id payload', req.body);
     const {
       title,
       description,
@@ -183,7 +202,16 @@ router.put('/:id', async (req, res) => {
       timeLimit,
       passingScore,
       maxAttempts,
-      isActive
+      isActive,
+      numberOfQuestions,
+      shuffleQuestions,
+      allowMultipleAttempts,
+      showTimer,
+      forceTimeLimit,
+      showDashboard,
+      showCorrectAnswers,
+      showIncorrectAnswers,
+      applyToAll
     } = req.body;
 
     const updateFields = [];
@@ -191,12 +219,30 @@ router.put('/:id', async (req, res) => {
 
     if (title !== undefined) { updateFields.push(`title = $${updateValues.length + 1}`); updateValues.push(title); }
     if (description !== undefined) { updateFields.push(`description = $${updateValues.length + 1}`); updateValues.push(description); }
-    if (competencyId !== undefined) { updateFields.push(`"competencyId" = $${updateValues.length + 1}`); updateValues.push(competencyId); }
+    // Handle competencyId with applyToAll support
+    if (applyToAll !== undefined) {
+      updateFields.push(`"competencyId" = $${updateValues.length + 1}`);
+      updateValues.push(applyToAll ? null : competencyId);
+    } else if (competencyId !== undefined) {
+      updateFields.push(`"competencyId" = $${updateValues.length + 1}`); updateValues.push(competencyId);
+    }
     if (competencyLevelId !== undefined) { updateFields.push(`"competencyLevelId" = $${updateValues.length + 1}`); updateValues.push(competencyLevelId); }
     if (timeLimit !== undefined) { updateFields.push(`"timeLimit" = $${updateValues.length + 1}`); updateValues.push(timeLimit); }
     if (passingScore !== undefined) { updateFields.push(`"passingScore" = $${updateValues.length + 1}`); updateValues.push(passingScore); }
     if (maxAttempts !== undefined) { updateFields.push(`"maxAttempts" = $${updateValues.length + 1}`); updateValues.push(maxAttempts); }
     if (isActive !== undefined) { updateFields.push(`"isActive" = $${updateValues.length + 1}`); updateValues.push(isActive); }
+    if (numberOfQuestions !== undefined) { 
+      const numQs = parseInt(numberOfQuestions, 10);
+      updateFields.push(`"numberOfQuestions" = $${updateValues.length + 1}`); 
+      updateValues.push(Number.isFinite(numQs) ? numQs : 10); 
+    }
+    if (shuffleQuestions !== undefined) { updateFields.push(`"shuffleQuestions" = $${updateValues.length + 1}`); updateValues.push(shuffleQuestions); }
+    if (allowMultipleAttempts !== undefined) { updateFields.push(`"allowMultipleAttempts" = $${updateValues.length + 1}`); updateValues.push(allowMultipleAttempts); }
+    if (showTimer !== undefined) { updateFields.push(`"showTimer" = $${updateValues.length + 1}`); updateValues.push(showTimer); }
+    if (forceTimeLimit !== undefined) { updateFields.push(`"forceTimeLimit" = $${updateValues.length + 1}`); updateValues.push(forceTimeLimit); }
+    if (showDashboard !== undefined) { updateFields.push(`"showDashboard" = $${updateValues.length + 1}`); updateValues.push(showDashboard); }
+    if (showCorrectAnswers !== undefined) { updateFields.push(`"showCorrectAnswers" = $${updateValues.length + 1}`); updateValues.push(showCorrectAnswers); }
+    if (showIncorrectAnswers !== undefined) { updateFields.push(`"showIncorrectAnswers" = $${updateValues.length + 1}`); updateValues.push(showIncorrectAnswers); }
 
     updateFields.push(`"updatedAt" = NOW()`);
     updateValues.push(id);
@@ -208,7 +254,9 @@ router.put('/:id', async (req, res) => {
       RETURNING *
     `;
 
+    console.log('ASSESSMENT UPDATE FIELDS:', updateFields);
     const updatedAssessment = await prisma.$queryRawUnsafe(query, ...updateValues);
+    console.log('Updated assessment row', updatedAssessment && updatedAssessment[0]);
 
     res.json({ success: true, assessment: updatedAssessment[0] });
   } catch (error) {

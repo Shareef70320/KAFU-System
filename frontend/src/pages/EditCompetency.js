@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
+// Use native selects for Type/Family, keep Select for level dropdown
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
 import { 
@@ -31,11 +32,36 @@ const EditCompetency = () => {
     type: 'TECHNICAL',
     family: '',
     definition: '',
+    relatedDivision: '',
+    relatedDocuments: [],
     isActive: true
   });
 
   const [levels, setLevels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [allFamilies, setAllFamilies] = useState([]);
+  const [allTypes, setAllTypes] = useState([
+    'TECHNICAL',
+    'NON_TECHNICAL',
+    'BEHAVIORAL',
+    'LEADERSHIP',
+    'FUNCTIONAL',
+    'CERTIFICATION_AND_COMPLIANCE',
+    'COMMERCIAL',
+    'FINANCE_AND_PROCUREMENT',
+    'FIRE',
+    'HR_AND_ADMIN',
+    'HSE',
+    'ICT',
+    'INTERNAL_AUDIT',
+    'LEGAL_AND_REGULATORY',
+    'MAINTENANCE',
+    'MEDIA',
+    'OPERATIONS',
+    'QUALITY',
+    'SECURITY',
+    'TECHNICAL_SERVICES'
+  ]);
 
   // Fetch competency data
   const { data: competency, isLoading: competencyLoading } = useQuery({
@@ -47,14 +73,35 @@ const EditCompetency = () => {
     enabled: !!id
   });
 
+  // Fetch all competencies once to derive families list
+  const { data: allComps } = useQuery({
+    queryKey: ['competencies-for-edit'],
+    queryFn: async () => {
+      const res = await api.get('/competencies', { params: { page: 1, limit: 1000 } });
+      return res.data?.competencies || [];
+    }
+  });
+
+  useEffect(() => {
+    if (allComps && Array.isArray(allComps)) {
+      const fams = Array.from(new Set(allComps.map(c => c.family).filter(Boolean))).sort();
+      setAllFamilies(fams);
+    }
+  }, [allComps]);
+
   // Update form data when competency loads
   useEffect(() => {
     if (competency) {
+      const normType = (competency.type || 'TECHNICAL').toString();
+      const normFamily = (competency.family || '').toString().trim();
+      const normDivision = (competency.relatedDivision || '').toString().trim();
       setFormData({
         name: competency.name || '',
-        type: competency.type || 'TECHNICAL',
-        family: competency.family || '',
+        type: normType,
+        family: normFamily,
         definition: competency.definition || '',
+        relatedDivision: normDivision,
+        relatedDocuments: Array.isArray(competency.relatedDocuments) ? competency.relatedDocuments : [],
         isActive: competency.isActive !== false
       });
       setLevels(competency.levels || []);
@@ -108,6 +155,33 @@ const EditCompetency = () => {
       indicators: []
     };
     setLevels(prev => [...prev, newLevel]);
+  };
+
+  // Document upload state
+  const [docTitle, setDocTitle] = useState('');
+  const [docType, setDocType] = useState('OTHER');
+  const [docVersion, setDocVersion] = useState('1.0');
+  const [docDescription, setDocDescription] = useState('');
+  const [docFile, setDocFile] = useState(null);
+
+  const handleUploadDocument = async (e) => {
+    e.preventDefault();
+    if (!docFile) return;
+    const form = new FormData();
+    form.append('document', docFile);
+    form.append('title', docTitle || docFile.name);
+    form.append('description', docDescription || '');
+    form.append('documentType', docType);
+    form.append('version', docVersion || '1.0');
+    try {
+      await api.post(`/competencies/${id}/documents`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast({ title: 'Uploaded', description: 'Document uploaded successfully' });
+      // refresh competency
+      queryClient.invalidateQueries(['competency', id]);
+      setDocTitle(''); setDocType('OTHER'); setDocVersion('1.0'); setDocDescription(''); setDocFile(null);
+    } catch (err) {
+      toast({ title: 'Upload failed', description: err.response?.data?.message || 'Error uploading document', variant: 'destructive' });
+    }
   };
 
   const removeLevel = (levelIndex) => {
@@ -190,7 +264,7 @@ const EditCompetency = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div>
                   <Label htmlFor="name">Competency Name</Label>
                   <Input
@@ -203,25 +277,50 @@ const EditCompetency = () => {
                 </div>
                 <div>
                   <Label htmlFor="type">Type</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value) => handleInputChange('type', value)}
+                  <select
+                    id="type"
+                    className="mt-1 block w-full h-10 border border-gray-300 rounded-md bg-white px-3 text-sm text-gray-900"
+                    value={formData.type || ''}
+                    onChange={(e) => handleInputChange('type', e.target.value)}
                   >
-                    <option value="TECHNICAL">Technical</option>
-                    <option value="NON_TECHNICAL">Non-Technical</option>
-                  </Select>
+                    {!formData.type && <option value="" disabled>Select Type</option>}
+                    {formData.type && !allTypes.includes(formData.type) && (
+                      <option value={formData.type}>{String(formData.type).replaceAll('_',' ')}</option>
+                    )}
+                    {allTypes.map(t => (
+                      <option key={t} value={t}>{t.replaceAll('_',' ')}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               
-              <div>
-                <Label htmlFor="family">Competency Family</Label>
-                <Input
-                  id="family"
-                  value={formData.family}
-                  onChange={(e) => handleInputChange('family', e.target.value)}
-                  placeholder="Enter competency family"
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <div>
+                  <Label htmlFor="family">Competency Family</Label>
+                  <select
+                    id="family"
+                    className="loyverse-input mt-1 w-full"
+                    value={formData.family}
+                    onChange={(e) => handleInputChange('family', e.target.value)}
+                  >
+                    {/* Ensure current value is selectable even if not in list */}
+                    {formData.family && !allFamilies.includes(formData.family) && (
+                      <option value={formData.family}>{formData.family}</option>
+                    )}
+                    {allFamilies.map(f => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="relatedDivision">Related Division</Label>
+                  <Input
+                    id="relatedDivision"
+                    value={formData.relatedDivision || ''}
+                    onChange={(e) => handleInputChange('relatedDivision', e.target.value)}
+                    placeholder="Select or type division"
+                  />
+                </div>
               </div>
 
               <div>
@@ -237,6 +336,27 @@ const EditCompetency = () => {
                 />
               </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="relatedDivision">Related Division</Label>
+                <Input
+                  id="relatedDivision"
+                  value={formData.relatedDivision || ''}
+                  onChange={(e) => handleInputChange('relatedDivision', e.target.value)}
+                  placeholder="Select or type division"
+                />
+              </div>
+              <div>
+                <Label htmlFor="relatedDocuments">Related Documents (comma-separated URLs)</Label>
+                <Input
+                  id="relatedDocuments"
+                  value={(formData.relatedDocuments || []).join(', ')}
+                  onChange={(e) => handleInputChange('relatedDocuments', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                  placeholder="https://doc1, https://doc2"
+                />
+              </div>
+            </div>
+
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
@@ -249,6 +369,66 @@ const EditCompetency = () => {
               </div>
             </CardContent>
           </Card>
+
+        {/* Documents Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Award className="h-5 w-5 mr-2 text-purple-600" />
+              Related Documents
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {competency?.documents?.length > 0 && (
+              <div className="space-y-2">
+                {competency.documents.map(doc => (
+                  <div key={doc.id} className="flex items-center justify-between border rounded p-2">
+                    <div className="text-sm truncate mr-2">
+                      <span className="font-medium">{doc.title}</span>
+                      <span className="text-gray-500 ml-2">{doc.documentType} • v{doc.version}</span>
+                    </div>
+                    <a href={`/${doc.filePath}`} target="_blank" rel="noreferrer" className="text-blue-600 text-sm">View</a>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleUploadDocument} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+              <div>
+                <Label htmlFor="docTitle">Title</Label>
+                <Input id="docTitle" value={docTitle} onChange={e=>setDocTitle(e.target.value)} placeholder="Document title" />
+              </div>
+              <div>
+                <Label htmlFor="docType">Type</Label>
+                <select id="docType" className="loyverse-input mt-1 w-full" value={docType} onChange={e=>setDocType(e.target.value)}>
+                  <option value="SOP">SOP</option>
+                  <option value="MANUAL">MANUAL</option>
+                  <option value="GUIDELINE">GUIDELINE</option>
+                  <option value="PROCEDURE">PROCEDURE</option>
+                  <option value="REFERENCE">REFERENCE</option>
+                  <option value="TRAINING_MATERIAL">TRAINING_MATERIAL</option>
+                  <option value="POLICY">POLICY</option>
+                  <option value="OTHER">OTHER</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="docVersion">Version</Label>
+                <Input id="docVersion" value={docVersion} onChange={e=>setDocVersion(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="docFile">File</Label>
+                <Input id="docFile" type="file" onChange={e=>setDocFile(e.target.files?.[0]||null)} />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="docDescription">Description</Label>
+                <Input id="docDescription" value={docDescription} onChange={e=>setDocDescription(e.target.value)} placeholder="Short description (optional)" />
+              </div>
+              <div className="md:col-span-2 flex justify-end">
+                <Button type="submit" disabled={!docFile}>Upload Document</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
           {/* Competency Levels */}
           <Card>

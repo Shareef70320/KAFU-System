@@ -9,6 +9,23 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 
 const prisma = new PrismaClient();
 const router = express.Router();
+function parseRelatedDocuments(value) {
+  if (!value) return [];
+  try {
+    // Accept JSON array string
+    if (typeof value === 'string' && value.trim().startsWith('[')) {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    }
+  } catch (e) {
+    // fallthrough to CSV parsing
+  }
+  // Accept comma/semicolon separated list
+  return String(value)
+    .split(/[,;\n]/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
 
 // Authentication disabled for now
 // router.use(authenticateToken);
@@ -36,13 +53,19 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'text/csv',
+      'application/csv',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     ];
     
-    if (allowedTypes.includes(file.mimetype)) {
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const isCsvFile = fileExtension === '.csv';
+    const isExcelFile = ['.xlsx', '.xls'].includes(fileExtension);
+    
+    if (allowedTypes.includes(file.mimetype) || isCsvFile || isExcelFile) {
       cb(null, true);
     } else {
+      console.log('File rejected:', { mimetype: file.mimetype, originalname: file.originalname, extension: fileExtension });
       cb(new Error('Only CSV and Excel files are allowed'), false);
     }
   }
@@ -192,21 +215,39 @@ router.post('/competencies', upload.single('file'), async (req, res) => {
     }
 
     const filePath = req.file.path;
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
     const results = [];
 
-    if (req.file.mimetype === 'text/csv' || path.extname(req.file.originalname).toLowerCase() === '.csv') {
+    let csvData = [];
+    if (req.file.mimetype === 'text/csv' || fileExtension === '.csv') {
       // Process CSV file
-      const csvData = await parseCSV(filePath);
+      csvData = await parseCSV(filePath);
+    } else if (fileExtension === '.xlsx' || fileExtension === '.xls') {
+      // Process Excel file
+      csvData = await parseExcel(filePath);
+    } else {
+      return res.status(400).json({ message: 'Only CSV and Excel files are supported for competency uploads' });
+    }
       
       for (const row of csvData) {
         try {
           // Map CSV columns to competency fields
+          const rawType = (row['Type'] || row['type'] || 'TECHNICAL').toString().trim().toUpperCase().replace(/\s+/g, '_');
+          const TYPE_ALIASES = {
+            'CERTIFICATION_&_COMPLIANCE': 'CERTIFICATION_AND_COMPLIANCE',
+            'FINANCE_&_PROCUREMENT': 'FINANCE_AND_PROCUREMENT',
+            'HR_&_ADMIN': 'HR_AND_ADMIN',
+            'LEGAL_&_REGULATORY': 'LEGAL_AND_REGULATORY'
+          };
+          const normalizedType = TYPE_ALIASES[rawType] || rawType;
           const competencyData = {
-            name: row['Competency Name'] || row['competency_name'] || row['Name'],
-            type: row['Type'] || row['type'] || 'TECHNICAL',
-            family: row['Family'] || row['family'] || 'General',
-            definition: row['Definition'] || row['definition'],
-            description: row['Description'] || row['description']
+            name: row['Competency Name'] || row['Competency Title'] || row['competency_name'] || row['Name'],
+            type: normalizedType,
+            family: row['Family'] || row['Competency Family'] || row['family'] || 'General',
+            definition: row['Definition'] || row['Competency Definition'] || row['definition'],
+            description: row['Description'] || row['description'],
+            related_division: (row['Related Division'] || row['related_division'] || null),
+            related_documents: parseRelatedDocuments(row['Related Documents'] || row['related_documents'])
           };
 
           // Validate required fields
@@ -219,16 +260,20 @@ router.post('/competencies', upload.single('file'), async (req, res) => {
             continue;
           }
 
-          // Check for duplicates
-          const existingCompetency = await prisma.competency.findUnique({
-            where: { name: competencyData.name }
+          // Check for duplicates based on name + type + family combination
+          const existingCompetency = await prisma.competency.findFirst({
+            where: {
+              name: competencyData.name,
+              type: competencyData.type,
+              family: competencyData.family
+            }
           });
 
           if (existingCompetency) {
             results.push({
               row: row,
               success: false,
-              error: 'Competency name already exists'
+              error: `Competency with same name, type, and family already exists: ${competencyData.name} (${competencyData.type}, ${competencyData.family})`
             });
             continue;
           }
@@ -236,18 +281,25 @@ router.post('/competencies', upload.single('file'), async (req, res) => {
           // Create competency with levels
           const levels = [];
           const levelTypes = ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'];
+          const csvLevelColumns = ['Basic', 'Intermediate', 'Advanced', 'Mastery'];
           
-          for (const levelType of levelTypes) {
-            const levelTitle = row[`${levelType} Title`] || row[`${levelType.toLowerCase()}_title`] || levelType;
-            const levelDescription = row[`${levelType} Description`] || row[`${levelType.toLowerCase()}_description`] || '';
-            const levelIndicators = row[`${levelType} Indicators`] || row[`${levelType.toLowerCase()}_indicators`] || '';
+          for (let i = 0; i < levelTypes.length; i++) {
+            const levelType = levelTypes[i];
+            const csvColumn = csvLevelColumns[i];
             
-            if (levelDescription) {
+            // Try different column name variations
+            const levelDescription = row[`${levelType} Description`] || 
+                                   row[`${levelType.toLowerCase()}_description`] || 
+                                   row[csvColumn] || 
+                                   row[`${csvColumn} Description`] || 
+                                   '';
+            
+            if (levelDescription && levelDescription.trim()) {
               levels.push({
                 level: levelType,
-                title: levelTitle,
-                description: levelDescription,
-                indicators: levelIndicators ? levelIndicators.split(';').map(ind => ind.trim()) : []
+                title: levelType,
+                description: levelDescription.trim(),
+                indicators: []
               });
             }
           }
@@ -278,9 +330,6 @@ router.post('/competencies', upload.single('file'), async (req, res) => {
           });
         }
       }
-    } else {
-      return res.status(400).json({ message: 'Only CSV files are supported for competency uploads' });
-    }
 
     // Clean up uploaded file
     fs.unlinkSync(filePath);
