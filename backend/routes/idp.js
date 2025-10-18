@@ -69,19 +69,37 @@ router.post('/', async (req, res) => {
     const gen = await prisma.$queryRaw`SELECT gen_random_uuid()::text as id`;
     const id = gen && gen[0] && gen[0].id ? gen[0].id : `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 
-    await prisma.$queryRaw`
-      INSERT INTO idp_entries (
-        id, employee_id, competency_id, required_level, employee_level, system_level, manager_level, 
-        intervention_id, intervention_type_id, custom_intervention_name, target_date, priority, 
-        status, notes, created_at, updated_at
-      )
-      VALUES (
-        ${id}, ${employeeId}, ${competencyId}, ${requiredLevel}, 
-        ${employeeLevel || null}, ${systemLevel || null}, ${managerLevel || null}, 
-        ${interventionId || null}, ${interventionTypeId || null}, ${customInterventionName || null}, 
-        ${targetDate ? new Date(targetDate) : null}, ${priority || 'MEDIUM'}, 'PLANNED', ${notes || null}, NOW(), NOW()
-      )
-    `;
+    // Check if new columns exist, if not use basic insert
+    try {
+      // Try to insert with all new columns first
+      await prisma.$queryRaw`
+        INSERT INTO idp_entries (
+          id, employee_id, competency_id, required_level, employee_level, system_level, manager_level, 
+          intervention_id, intervention_type_id, custom_intervention_name, target_date, priority, 
+          status, notes, created_at, updated_at
+        )
+        VALUES (
+          ${id}, ${employeeId}, ${competencyId}, ${requiredLevel}, 
+          ${employeeLevel || null}, ${systemLevel || null}, ${managerLevel || null}, 
+          ${interventionId || null}, ${interventionTypeId || null}, ${customInterventionName || null}, 
+          ${targetDate ? new Date(targetDate) : null}, ${priority || 'MEDIUM'}, 'PLANNED', ${notes || null}, NOW(), NOW()
+        )
+      `;
+    } catch (columnError) {
+      // If new columns don't exist, use basic insert
+      console.log('New columns not available, using basic insert:', columnError.message);
+      await prisma.$queryRaw`
+        INSERT INTO idp_entries (
+          id, employee_id, competency_id, required_level, employee_level, system_level, manager_level, 
+          intervention_id, status, notes, created_at, updated_at
+        )
+        VALUES (
+          ${id}, ${employeeId}, ${competencyId}, ${requiredLevel}, 
+          ${employeeLevel || null}, ${systemLevel || null}, ${managerLevel || null}, 
+          ${interventionId || null}, 'PLANNED', ${notes || null}, NOW(), NOW()
+        )
+      `;
+    }
 
     res.json({ 
       success: true, 
@@ -102,23 +120,39 @@ router.post('/', async (req, res) => {
 router.get('/:employeeId', async (req, res) => {
   try {
     const { employeeId } = req.params;
-    const rows = await prisma.$queryRaw`
-      SELECT 
-        i.*, 
-        c.name as competency_name,
-        ii.title as intervention_title,
-        ii.start_date as intervention_start_date,
-        ii.location as intervention_location,
-        it.name as intervention_type_name,
-        ic.name as intervention_category_name
-      FROM idp_entries i
-      JOIN competencies c ON c.id = i.competency_id
-      LEFT JOIN intervention_instances ii ON ii.id = i.intervention_id
-      LEFT JOIN intervention_types it ON it.id = i.intervention_type_id OR it.id = ii.intervention_type_id
-      LEFT JOIN intervention_categories ic ON ic.id = it.category_id
-      WHERE i.employee_id = ${employeeId}
-      ORDER BY i.created_at DESC
-    `;
+    // Try enhanced query first, fallback to basic query if columns don't exist
+    let rows;
+    try {
+      rows = await prisma.$queryRaw`
+        SELECT 
+          i.*, 
+          c.name as competency_name,
+          ii.title as intervention_title,
+          ii.start_date as intervention_start_date,
+          ii.location as intervention_location,
+          it.name as intervention_type_name,
+          ic.name as intervention_category_name
+        FROM idp_entries i
+        JOIN competencies c ON c.id = i.competency_id
+        LEFT JOIN intervention_instances ii ON ii.id = i.intervention_id
+        LEFT JOIN intervention_types it ON it.id = i.intervention_type_id OR it.id = ii.intervention_type_id
+        LEFT JOIN intervention_categories ic ON ic.id = it.category_id
+        WHERE i.employee_id = ${employeeId}
+        ORDER BY i.created_at DESC
+      `;
+    } catch (queryError) {
+      // Fallback to basic query if new columns don't exist
+      console.log('Enhanced query failed, using basic query:', queryError.message);
+      rows = await prisma.$queryRaw`
+        SELECT 
+          i.*, 
+          c.name as competency_name
+        FROM idp_entries i
+        JOIN competencies c ON c.id = i.competency_id
+        WHERE i.employee_id = ${employeeId}
+        ORDER BY i.created_at DESC
+      `;
+    }
     res.json({ success: true, idps: rows });
   } catch (error) {
     console.error('Error fetching IDPs:', error);
