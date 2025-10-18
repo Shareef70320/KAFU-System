@@ -112,7 +112,12 @@ app.use('/api/idp', idpRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    version: 'v4.7.2',
+    idpCompatibility: 'enabled'
+  });
 });
 
 // Error handling middleware
