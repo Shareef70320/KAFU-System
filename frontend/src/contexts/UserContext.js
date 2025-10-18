@@ -19,7 +19,7 @@ export const UserProvider = ({ children }) => {
     return role;
   });
   const [currentSid, setCurrentSid] = useState(() => {
-    const sid = localStorage.getItem('userSid') || '2255';
+    const sid = localStorage.getItem('userSid') || '2254';
     console.log('UserContext - Initializing currentSid from localStorage:', sid);
     return sid;
   });
