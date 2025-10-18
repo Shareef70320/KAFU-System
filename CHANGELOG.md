@@ -2,6 +2,43 @@
 
 All notable changes to the KAFU System project will be documented in this file.
 
+## [v4.7.0] - 2025-10-18 - "Enhanced IDP System Complete"
+
+### Added
+- **Complete IDP System**: Individual Development Plan creation and management
+- **Cascading Intervention Selection**: Categories → Types → Instances dropdown system
+- **Custom Intervention Naming**: Flexible naming when no specific instances exist
+- **Target Date Management**: Set completion deadlines for development plans
+- **Priority Level System**: LOW, MEDIUM, HIGH, CRITICAL priority management
+- **Beautiful UI Design**: Icons, gradients, and step-by-step visual guidance
+- **Enhanced Database Schema**: New columns for intervention_type_id, custom_intervention_name, target_date, priority
+- **IDP API Endpoints**: Complete CRUD operations for IDP management
+- **Manager IDP Interface**: Integrated into TeamEmployees page for seamless workflow
+
+### Enhanced
+- **User Experience**: Step-by-step IDP creation with visual indicators
+- **CORS Configuration**: Docker-friendly development setup
+- **Error Handling**: Comprehensive validation and user feedback
+- **Database Integration**: Proper foreign key constraints and indexes
+- **Date Handling**: Proper casting and validation for target dates
+- **SQL Query Optimization**: Efficient joins for intervention data
+- **Frontend State Management**: Enhanced React state handling
+- **Visual Design**: Professional gradients, icons, and responsive layout
+
+### Fixed
+- **CORS Issues**: Resolved Docker container communication problems
+- **Database Query Errors**: Fixed column reference issues in intervention joins
+- **Date Casting**: Proper conversion from string to Date objects
+- **Type Validation**: Enhanced input validation and error messages
+- **API Error Handling**: Improved error responses and logging
+
+### Technical
+- **New API Routes**: `/api/idp` for IDP operations
+- **Database Migration**: Enhanced `idp_entries` table schema
+- **CORS Configuration**: Development and production environment support
+- **Error Logging**: Comprehensive debugging and error tracking
+- **Code Quality**: Enhanced validation and type safety
+
 ## [v4.6.0] - 2025-10-14 - "Stable: Job-Based Competencies + Deletes"
 
 ### Added
