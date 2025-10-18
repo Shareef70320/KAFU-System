@@ -33,6 +33,7 @@ import UserLogin from './pages/UserLogin';
 import UserProfile from './pages/user/UserProfile';
 import MyCompetencies from './pages/user/MyCompetencies';
 import UserAssessments from './pages/user/UserAssessments';
+import MyIDP from './pages/user/MyIDP';
 import Reviews from './pages/user/Reviews';
 import UserDashboard from './pages/user/UserDashboard';
 // removed DevelopmentTimeline
@@ -99,6 +100,7 @@ function App() {
                 <Route path="user/profile" element={<UserRoute><UserProfile /></UserRoute>} />
                 <Route path="user/competencies" element={<UserRoute><MyCompetencies /></UserRoute>} />
                 <Route path="user/assessments" element={<UserRoute><UserAssessments /></UserRoute>} />
+                <Route path="user/my-idp" element={<UserRoute><MyIDP /></UserRoute>} />
                 {/* removed user/development route */}
                 <Route path="user/my-development-paths" element={<UserRoute><MyDevelopmentPaths /></UserRoute>} />
                 <Route path="user/my-development-paths/:id" element={<UserRoute><PathDetailsUser /></UserRoute>} />

@@ -85,6 +85,7 @@ const Layout = () => {
     { name: 'My Profile', href: '/user/profile', icon: User },
     { name: 'My Competencies', href: '/user/competencies', icon: BookOpen },
     { name: 'Assessments', href: '/user/assessments', icon: UserCheck },
+    { name: 'My IDP', href: '/user/my-idp', icon: Target },
     { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
     { name: 'My Development Paths', href: '/user/my-development-paths', icon: Layers },
     { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
@@ -173,6 +174,7 @@ const Layout = () => {
             <div className="hidden lg:flex items-center gap-2 text-gray-800">
               <Building2 className="h-5 w-5 text-green-600" />
               <span className="font-semibold">KAFU System</span>
+              <span className="ml-2 text-[10px] font-semibold text-red-600" data-testid="build-indicator">CHANGES ACTIVE</span>
             </div>
           </div>
           <div className="flex items-center gap-4">

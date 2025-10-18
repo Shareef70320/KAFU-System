@@ -173,7 +173,16 @@ const UserDashboard = () => {
     });
   };
 
-  if (employeeLoading || jcpLoading || managerLoading) {
+  // Fetch user's IDPs
+  const { data: idpData, isLoading: idpLoading } = useQuery({
+    queryKey: ['user-idps', currentSid],
+    queryFn: () => api.get(`/idp/${currentSid}`),
+    enabled: !!currentSid,
+  });
+
+  const idps = idpData?.idps || [];
+
+  if (employeeLoading || jcpLoading || managerLoading || idpLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
@@ -272,6 +281,23 @@ const UserDashboard = () => {
             <div className="text-3xl font-bold text-green-600">{dashboardData.assessments.available}</div>
             <p className="text-sm text-gray-500">available to take</p>
             <p className="text-xs text-gray-400 mt-1">Next due: {formatDate(dashboardData.assessments.nextDue)}</p>
+          </CardContent>
+        </Card>
+
+        {/* My IDP */}
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => navigate('/user/my-idp')}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center">
+              <Target className="h-5 w-5 mr-2 text-orange-600" />
+              My IDP
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-orange-600">{idps.length}</div>
+            <p className="text-sm text-gray-500">development plans</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {idps.filter(idp => idp.status === 'COMPLETED').length} completed
+            </p>
           </CardContent>
         </Card>
 
@@ -451,6 +477,18 @@ const UserDashboard = () => {
                 <div>
                   <div className="font-medium">Take Assessment</div>
                   <div className="text-sm text-gray-500">Complete competency assessments</div>
+                </div>
+              </Button>
+              
+              <Button 
+                onClick={() => navigate('/user/my-idp')}
+                className="h-16 flex items-center justify-start space-x-3 text-left"
+                variant="outline"
+              >
+                <Target className="h-6 w-6 text-orange-600" />
+                <div>
+                  <div className="font-medium">My IDP</div>
+                  <div className="text-sm text-gray-500">View your development plans</div>
                 </div>
               </Button>
               
