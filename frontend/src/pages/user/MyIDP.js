@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -38,18 +37,36 @@ const MyIDP = () => {
   const [sortOrder, setSortOrder] = useState('desc');
 
   // Fetch user's IDPs
-  const { data: idpData, isLoading, error, refetch } = useQuery({
-    queryKey: ['user-idps', currentSid],
-    queryFn: () => api.get(`/idp/${currentSid}`),
-    enabled: !!currentSid,
-  });
+  const [idps, setIdps] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const idps = idpData?.idps || [];
+  useEffect(() => {
+    const fetchIdps = async () => {
+      try {
+        setIsLoading(true);
+        console.log('Fetching IDPs for SID:', currentSid);
+        const response = await api.get(`/idp/${currentSid}`);
+        console.log('API Response:', response.data);
+        setIdps(response.data.idps || []);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching IDPs:', err);
+        setError(err.message);
+        setIdps([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (currentSid) {
+      fetchIdps();
+    }
+  }, [currentSid]);
 
   // Debug logging
   console.log('MyIDP Debug:', {
     currentSid,
-    idpData,
     idps,
     isLoading,
     error
