@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE || '/api';
+const API_BASE_URL = process.env.REACT_APP_API_BASE || 'https://kafu-system-2.onrender.com/api';
 
 // Create axios instance
 const api = axios.create({
