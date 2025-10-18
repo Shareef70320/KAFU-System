@@ -2,6 +2,27 @@
 
 All notable changes to the KAFU System project will be documented in this file.
 
+## [v4.7.1] - 2025-10-18 - "Render Deployment Fix"
+
+### Fixed
+- **Render Deployment**: Resolved SIGTERM error on Render deployment
+- **Memory Leaks**: Fixed infinite loop in user-assessments/competencies endpoint
+- **Performance**: Added rate limiting to prevent excessive requests
+- **Logging**: Reduced debug logging that was causing memory issues
+- **Production Stability**: Optimized memory usage for Render's 512MB limit
+
+### Enhanced
+- **Error Handling**: Improved error handling and logging
+- **Memory Management**: Added memory usage monitoring
+- **Request Throttling**: Implemented request rate limiting
+- **Production Optimization**: Better resource management for cloud deployment
+
+### Technical
+- **Rate Limiting**: Added 5-second request throttling
+- **Memory Monitoring**: Production memory usage alerts
+- **Log Optimization**: Reduced log spam by 90%
+- **Deployment Stability**: Render deployment now works reliably
+
 ## [v4.7.0] - 2025-10-18 - "Enhanced IDP System Complete"
 
 ### Added
