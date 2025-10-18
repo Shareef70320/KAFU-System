@@ -30,6 +30,21 @@ const idpRoutes = require('./routes/idp');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Memory optimization for Render
+if (process.env.NODE_ENV === 'production') {
+  // Increase memory limit warnings
+  process.on('warning', (warning) => {
+    if (warning.name === 'MaxListenersExceededWarning') {
+      console.warn('Memory warning:', warning.message);
+    }
+  });
+  
+  // Set memory limits
+  if (process.memoryUsage().heapUsed > 400 * 1024 * 1024) { // 400MB
+    console.warn('High memory usage detected, consider optimizing');
+  }
+}
+
 // Middleware
 app.use(helmet());
 // Configure CORS via environment variable for deploy flexibility

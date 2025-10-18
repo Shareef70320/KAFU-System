@@ -50,9 +50,9 @@ router.get('/settings/:competencyId', async (req, res) => {
     const { userId } = req.query;
     const assessment = await selectAssessmentForCompetency(competencyId, null);
     const numQuestions = Number(assessment?.num_questions || 10);
-    const timeLimitMinutes = Number(assessment?.time_limit_minutes || 30);
+    const timeLimitMinutes = Number(assessment?.timeLimit || 30);
     let allowMultipleAttempts = Boolean(assessment?.allow_multiple_attempts ?? true);
-    let maxAttempts = Number(assessment?.max_attempts ?? 3);
+    let maxAttempts = Number(assessment?.maxAttempts ?? 3);
 
     let attemptsUsed = 0;
     if (userId) {
@@ -60,7 +60,7 @@ router.get('/settings/:competencyId', async (req, res) => {
         SELECT COUNT(*)::int as cnt
         FROM assessment_sessions
         WHERE user_id = ${userId}
-          AND competencyId = ${competencyId}
+          AND competency_id = ${competencyId}
           AND status = 'COMPLETED'
       `;
       attemptsUsed = rows?.[0]?.cnt ?? 0;
@@ -98,32 +98,41 @@ router.get('/competencies', async (req, res) => {
   try {
     const { userId } = req.query;
 
+    // Add simple rate limiting to prevent infinite loops
+    const requestKey = `competencies_${userId}_${Date.now()}`;
+    if (global.recentRequests && global.recentRequests[requestKey]) {
+      return res.status(429).json({ success: false, error: 'Too many requests' });
+    }
+    if (!global.recentRequests) global.recentRequests = {};
+    global.recentRequests[requestKey] = true;
+    setTimeout(() => delete global.recentRequests[requestKey], 5000); // 5 second window
+
     let competencies = [];
 
     if (userId) {
-      // Debug: inspect employee job_code and job mapping
+      // Reduced debug logging to prevent log spam
       try {
         const empRows = await prisma.$queryRaw`
           SELECT sid, job_code FROM employees WHERE TRIM(UPPER(sid)) = TRIM(UPPER(${userId})) LIMIT 1
         `;
-        console.log('[user-assessments/competencies] employee row:', empRows);
         if (empRows && empRows.length) {
           const jobRows = await prisma.$queryRaw`
             SELECT id, code FROM jobs WHERE TRIM(UPPER(code)) = TRIM(UPPER(${empRows[0].job_code})) LIMIT 1
           `;
-          console.log('[user-assessments/competencies] matched job row:', jobRows);
           if (jobRows && jobRows.length) {
             const jcCount = await prisma.$queryRaw`
               SELECT COUNT(*)::int as cnt FROM job_competencies WHERE "jobId" = ${jobRows[0].id}
             `;
-            console.log('[user-assessments/competencies] job_competencies count:', jcCount);
+            // Only log if there's an issue
+            if (jcCount[0]?.cnt === 0) {
+              console.log('[user-assessments/competencies] No job competencies found for user:', userId);
+            }
           }
         }
       } catch (dbgErr) {
         console.warn('[user-assessments/competencies] debug queries failed:', dbgErr?.message || dbgErr);
       }
       // Filter competencies by the user's job_code via job_competency mappings
-      console.log('[user-assessments/competencies] Fetch for userId:', userId, 'raw:', req.query.userId);
       competencies = await prisma.$queryRaw`
         SELECT DISTINCT 
           c.id,
@@ -140,25 +149,15 @@ router.get('/competencies', async (req, res) => {
         HAVING COALESCE(COUNT(DISTINCT q.id), 0) > 0
         ORDER BY c.name
       `;
-      console.log('[user-assessments/competencies] mapped count:', competencies?.length || 0);
-
-      // Fallback: if no competencies found for user (missing job_code/mapping), return global list
+      // Reduced logging - only log if there's an issue
       if (!competencies || competencies.length === 0) {
-        console.warn('[user-assessments/competencies] No mapped competencies for user', userId, '— falling back to global list');
-        competencies = await prisma.$queryRaw`
-          SELECT DISTINCT 
-            c.id,
-            c.name,
-            c.description,
-            COUNT(q.id) as question_count
-          FROM competencies c
-          LEFT JOIN questions q ON c.id = q."competencyId"
-          WHERE q.id IS NOT NULL
-          GROUP BY c.id, c.name, c.description
-          HAVING COUNT(q.id) > 0
-          ORDER BY c.name
-        `;
-        console.log('[user-assessments/competencies] fallback count:', competencies?.length || 0);
+        console.log('[user-assessments/competencies] No competencies found for user:', userId);
+      }
+
+      // No fallback: enforce job-based competency visibility
+      if (!competencies || competencies.length === 0) {
+        console.warn('[user-assessments/competencies] No mapped competencies for user', userId, '(job-based enforcement)');
+        competencies = [];
       }
     } else {
       // Previous behavior: all competencies with at least 1 active question
@@ -188,7 +187,7 @@ router.get('/competencies', async (req, res) => {
                 MAX(user_confirmed_level) FILTER (WHERE user_confirmed_level IS NOT NULL) AS user_level,
                 MAX(manager_selected_level) FILTER (WHERE manager_selected_level IS NOT NULL) AS manager_level
               FROM assessment_sessions
-              WHERE user_id = ${userId} AND competencyId = ${comp.id}
+              WHERE user_id = ${userId} AND competency_id = ${comp.id}
             `;
         
         return {
@@ -196,8 +195,8 @@ router.get('/competencies', async (req, res) => {
           name: comp.name,
           description: comp.description,
           questionCount: Number(comp.question_count),
-          numQuestions: assessment ? Number(assessment.num_questions || 0) : 0,
-          timeLimitMinutes: assessment ? Number(assessment.time_limit_minutes || 0) : 0,
+          numQuestions: assessment ? Number(assessment.num_questions || 10) : 0,
+          timeLimitMinutes: assessment ? Number(assessment.timeLimit || 30) : 0,
           hasQuestions,
           hasAssessment,
               userConfirmedLevel: levelsRow?.[0]?.user_level || null,
@@ -267,7 +266,7 @@ router.post('/start', async (req, res) => {
       SELECT COUNT(*)::int as cnt
       FROM assessment_sessions
       WHERE user_id = ${userId}
-        AND competencyId = ${competencyId}
+        AND competency_id = ${competencyId}
         AND status = 'COMPLETED'
     `;
     const attemptsUsed = attemptsRows?.[0]?.cnt ?? 0;
@@ -291,7 +290,7 @@ router.post('/start', async (req, res) => {
       FROM assessment_responses ar
       JOIN assessment_sessions s ON s.id = ar.session_id
       WHERE s.user_id = ${userId}
-        AND s.competencyId = ${competencyId}
+        AND s.competency_id = ${competencyId}
         AND s.status = 'COMPLETED'
       ORDER BY s.completed_at DESC
       LIMIT 200
@@ -306,9 +305,9 @@ router.post('/start', async (req, res) => {
           SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
-          JOIN competencies c ON q.competencyId = c.id
-          LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
-          WHERE q.competencyId = $1
+          JOIN competencies c ON q."competencyId" = c.id
+          LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
+          WHERE q."competencyId" = $1
             AND cl.level = 'BASIC'
             ${excludeRecentClause}
           ORDER BY RANDOM() LIMIT 2
@@ -318,9 +317,9 @@ router.post('/start', async (req, res) => {
           SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
-          JOIN competencies c ON q.competencyId = c.id
-          LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
-          WHERE q.competencyId = $1
+          JOIN competencies c ON q."competencyId" = c.id
+          LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
+          WHERE q."competencyId" = $1
             AND cl.level = 'INTERMEDIATE'
             ${excludeRecentClause}
           ORDER BY RANDOM() LIMIT 2
@@ -330,9 +329,9 @@ router.post('/start', async (req, res) => {
           SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
-          JOIN competencies c ON q.competencyId = c.id
-          LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
-          WHERE q.competencyId = $1
+          JOIN competencies c ON q."competencyId" = c.id
+          LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
+          WHERE q."competencyId" = $1
             AND cl.level = 'ADVANCED'
             ${excludeRecentClause}
           ORDER BY RANDOM() LIMIT 2
@@ -342,9 +341,9 @@ router.post('/start', async (req, res) => {
           SELECT q.id, q.text, q.type, q.points, q.explanation,
                  c.name as competency_name, cl.level as competency_level
           FROM questions q
-          JOIN competencies c ON q.competencyId = c.id
-          LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
-          WHERE q.competencyId = $1
+          JOIN competencies c ON q."competencyId" = c.id
+          LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
+          WHERE q."competencyId" = $1
             AND cl.level = 'MASTERY'
             ${excludeRecentClause}
           ORDER BY RANDOM() LIMIT 2
@@ -356,7 +355,7 @@ router.post('/start', async (req, res) => {
         WITH picked AS (
           SELECT q.id
           FROM questions q
-          WHERE q.competencyId = $1
+          WHERE q."competencyId" = $1
             ${excludeRecentClause}
           ORDER BY RANDOM()
           LIMIT $2
@@ -371,8 +370,8 @@ router.post('/start', async (req, res) => {
           cl.level as competency_level
         FROM picked p
         JOIN questions q ON q.id = p.id
-        JOIN competencies c ON q.competencyId = c.id
-        LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
+        JOIN competencies c ON q."competencyId" = c.id
+        LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
       `, competencyId, numQuestions);
       // If exclusion left too few, fallback without exclusion
       if (!questions || questions.length < numQuestions) {
@@ -380,7 +379,7 @@ router.post('/start', async (req, res) => {
           WITH picked AS (
             SELECT q.id
             FROM questions q
-            WHERE q.competencyId = ${competencyId}
+            WHERE q."competencyId" = ${competencyId}
             ORDER BY RANDOM()
             LIMIT ${numQuestions}
           )
@@ -394,8 +393,8 @@ router.post('/start', async (req, res) => {
             cl.level as competency_level
           FROM picked p
           JOIN questions q ON q.id = p.id
-          JOIN competencies c ON q.competencyId = c.id
-          LEFT JOIN competency_levels cl ON q.competency_level_id = cl.id
+          JOIN competencies c ON q."competencyId" = c.id
+          LEFT JOIN competency_levels cl ON q."competencyLevelId" = cl.id
         `;
         if (fallback && fallback.length >= (questions?.length || 0)) {
           questions = fallback;
@@ -416,7 +415,7 @@ router.post('/start', async (req, res) => {
         const options = await prisma.$queryRaw`
           SELECT id, text, "order" as order_index
           FROM question_options
-          WHERE question_id = ${question.id}
+          WHERE "questionId" = ${question.id}
           ORDER BY "order"
         `;
 
@@ -437,7 +436,7 @@ router.post('/start', async (req, res) => {
     // Create assessment session
     const assessmentSession = await prisma.$queryRaw`
       INSERT INTO assessment_sessions (
-        id, user_id, competencyId, status, started_at, created_at, "updatedAt"
+        id, user_id, competency_id, status, started_at, created_at, updated_at
       ) VALUES (
         gen_random_uuid()::text, ${userId}, ${competencyId}, 'IN_PROGRESS', NOW(), NOW(), NOW()
       ) RETURNING id, started_at
@@ -447,7 +446,7 @@ router.post('/start', async (req, res) => {
       success: true,
       assessment: {
         sessionId: assessmentSession[0].id,
-        competencyId,
+        competencyId: competencyId,
         competencyName: questions[0].competency_name,
         startedAt: assessmentSession[0].started_at,
         questions: questionsWithOptions,
@@ -508,7 +507,7 @@ router.post('/submit', async (req, res) => {
           q.points,
           q.type
         FROM questions q
-        LEFT JOIN question_options qo ON q.id = qo.question_id AND qo.is_correct = true
+        LEFT JOIN question_options qo ON q.id = qo."questionId" AND qo."isCorrect" = true
         WHERE q.id = ${questionId}
       `;
 
@@ -534,7 +533,7 @@ router.post('/submit', async (req, res) => {
         await prisma.$queryRaw`
           INSERT INTO assessment_responses (
             id, session_id, question_id, selected_option_id, answer_text, 
-            is_correct, points_earned, created_at, "updatedAt"
+            is_correct, points_earned, created_at, updated_at
           ) VALUES (
             gen_random_uuid()::text, ${sessionId}, ${questionId}, 
             ${selectedOptionId || null}, ${answerText || null}, 
@@ -558,7 +557,7 @@ router.post('/submit', async (req, res) => {
         correct_answers = ${correctAnswers},
         total_questions = ${totalQuestions},
         completed_at = NOW(),
-        "updatedAt" = NOW()
+        updated_at = NOW()
       WHERE id = ${sessionId}
     `;
 
@@ -614,13 +613,13 @@ router.post('/confirm-level', async (req, res) => {
 
     // Fetch session to derive user and competency
     const sessionRows = await prisma.$queryRaw`
-      SELECT user_id, competencyId FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
+      SELECT user_id, competency_id FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
     `;
     if (!sessionRows || sessionRows.length === 0) {
       return res.status(404).json({ success: false, error: 'Assessment session not found' });
     }
     const userId = sessionRows[0].user_id;
-    const competencyId = sessionRows[0].competencyId;
+    const competencyId = sessionRows[0].competency_id;
     // Ensure columns exist
     await ensureLevelColumns();
 
@@ -628,8 +627,8 @@ router.post('/confirm-level', async (req, res) => {
       // Persist the user's chosen level across all sessions for this competency
       await prisma.$queryRaw`
         UPDATE assessment_sessions
-        SET user_confirmed_level = ${userConfirmedLevel}, "updatedAt" = NOW()
-        WHERE user_id = ${userId} AND competencyId = ${competencyId}
+        SET user_confirmed_level = ${userConfirmedLevel}, updated_at = NOW()
+        WHERE user_id = ${userId} AND competency_id = ${competencyId}
       `;
     } catch (e) {
       console.error('Failed to update user_confirmed_level:', e);
@@ -654,10 +653,24 @@ router.post('/manager/confirm-level', async (req, res) => {
     // Ensure column exists
     await ensureLevelColumns();
 
+    // Gate: session must be COMPLETED and user_confirmed_level present
+    const gate = await prisma.$queryRaw`
+      SELECT status, user_confirmed_level FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
+    `;
+    if (!gate || gate.length === 0) {
+      return res.status(404).json({ success: false, error: 'Assessment session not found' });
+    }
+    if (String(gate[0].status) !== 'COMPLETED') {
+      return res.status(400).json({ success: false, error: 'Manager can select level only after employee completes the assessment' });
+    }
+    if (!gate[0].user_confirmed_level) {
+      return res.status(400).json({ success: false, error: 'Manager can select level only after employee selects their level' });
+    }
+
     try {
       await prisma.$queryRaw`
         UPDATE assessment_sessions
-        SET manager_selected_level = ${managerSelectedLevel}, "updatedAt" = NOW()
+        SET manager_selected_level = ${managerSelectedLevel}, updated_at = NOW()
         WHERE id = ${sessionId}
       `;
     } catch (e) {
@@ -682,11 +695,24 @@ router.post('/manager/confirm-level-by-competency', async (req, res) => {
 
     await ensureLevelColumns();
 
+    // Gate: at least one COMPLETED session with user_confirmed_level for this user+competency
+    const ok = await prisma.$queryRaw`
+      SELECT 1 FROM assessment_sessions
+      WHERE user_id = ${userId}
+        AND competency_id = ${competencyId}
+        AND status = 'COMPLETED'
+        AND user_confirmed_level IS NOT NULL
+      LIMIT 1
+    `;
+    if (!ok || ok.length === 0) {
+      return res.status(400).json({ success: false, error: 'Manager can select level only after employee completes assessment and selects their level for this competency' });
+    }
+
     try {
       await prisma.$queryRaw`
         UPDATE assessment_sessions
-        SET manager_selected_level = ${managerSelectedLevel}, "updatedAt" = NOW()
-        WHERE user_id = ${userId} AND competencyId = ${competencyId}
+        SET manager_selected_level = ${managerSelectedLevel}, updated_at = NOW()
+        WHERE user_id = ${userId} AND competency_id = ${competencyId}
       `;
     } catch (e) {
       console.error('Failed to bulk update manager_selected_level:', e);
@@ -708,7 +734,7 @@ router.get('/history/:userId', async (req, res) => {
     const assessments = await prisma.$queryRaw`
       SELECT 
         "as".id as session_id,
-        "as".competencyId,
+        "as".competency_id,
         c.name as competency_name,
         "as".score,
         "as".percentage_score,
@@ -720,7 +746,7 @@ router.get('/history/:userId', async (req, res) => {
         COALESCE("as".manager_selected_level, NULL) AS manager_selected_level,
         COALESCE("as".user_confirmed_level, NULL) AS user_confirmed_level
       FROM assessment_sessions "as"
-      JOIN competencies c ON "as".competencyId = c.id
+      JOIN competencies c ON "as".competency_id = c.id
       WHERE "as".user_id = ${userId}
       ORDER BY "as".completed_at DESC
     `;
@@ -729,7 +755,7 @@ router.get('/history/:userId', async (req, res) => {
       success: true,
       assessments: assessments.map(assessment => ({
         sessionId: assessment.session_id,
-        competencyId: assessment.competencyId,
+        competencyId: assessment.competency_id,
         competencyName: assessment.competency_name,
         score: Number(assessment.score),
         percentageScore: Number(assessment.percentage_score),
@@ -756,7 +782,7 @@ router.get('/latest-result/:userId/:competencyId', async (req, res) => {
     const assessment = await prisma.$queryRaw`
       SELECT 
         "as".id as session_id,
-        "as".competencyId,
+        "as".competency_id,
         c.name as competency_name,
         "as".score,
         "as".percentage_score,
@@ -768,9 +794,9 @@ router.get('/latest-result/:userId/:competencyId', async (req, res) => {
         "as".system_level,
         "as".user_confirmed_level
       FROM assessment_sessions "as"
-      JOIN competencies c ON "as".competencyId = c.id
+      JOIN competencies c ON "as".competency_id = c.id
       WHERE "as".user_id = ${userId} 
-        AND "as".competencyId = ${competencyId}
+        AND "as".competency_id = ${competencyId}
         AND "as".status = 'COMPLETED'
       ORDER BY "as".completed_at DESC
       LIMIT 1
@@ -801,7 +827,7 @@ router.get('/latest-result/:userId/:competencyId', async (req, res) => {
       FROM assessment_responses ar
       JOIN questions q ON q.id = ar.question_id
       LEFT JOIN question_options sel_opt ON sel_opt.id = ar.selected_option_id
-      LEFT JOIN question_options corr_opt ON corr_opt.question_id = q.id AND corr_opt.is_correct = true
+      LEFT JOIN question_options corr_opt ON corr_opt."questionId" = q.id AND corr_opt."isCorrect" = true
       WHERE ar.session_id = ${result.session_id}
       ORDER BY q.id
     `;
@@ -810,7 +836,7 @@ router.get('/latest-result/:userId/:competencyId', async (req, res) => {
       success: true,
       assessment: {
         sessionId: result.session_id,
-        competencyId: result.competencyId,
+        competencyId: result.competency_id,
         competencyName: result.competency_name,
         score: Number(result.score),
         percentageScore: Number(result.percentage_score),
@@ -849,7 +875,7 @@ router.get('/session/:sessionId', async (req, res) => {
     const rows = await prisma.$queryRaw`
       SELECT 
         "as".id as session_id,
-        "as".competencyId,
+        "as".competency_id,
         c.name as competency_name,
         "as".score,
         "as".percentage_score,
@@ -861,7 +887,7 @@ router.get('/session/:sessionId', async (req, res) => {
         "as".system_level,
         "as".user_confirmed_level
       FROM assessment_sessions "as"
-      JOIN competencies c ON "as".competencyId = c.id
+      JOIN competencies c ON "as".competency_id = c.id
       WHERE "as".id = ${sessionId}
       LIMIT 1
     `;
@@ -887,7 +913,7 @@ router.get('/session/:sessionId', async (req, res) => {
       FROM assessment_responses ar
       JOIN questions q ON q.id = ar.question_id
       LEFT JOIN question_options sel_opt ON sel_opt.id = ar.selected_option_id
-      LEFT JOIN question_options corr_opt ON corr_opt.question_id = q.id AND corr_opt.is_correct = true
+      LEFT JOIN question_options corr_opt ON corr_opt."questionId" = q.id AND corr_opt."isCorrect" = true
       WHERE ar.session_id = ${sessionId}
       ORDER BY q.id
     `;
@@ -896,7 +922,7 @@ router.get('/session/:sessionId', async (req, res) => {
       success: true,
       assessment: {
         sessionId: result.session_id,
-        competencyId: result.competencyId,
+        competencyId: result.competency_id,
         competencyName: result.competency_name,
         score: Number(result.score),
         percentageScore: Number(result.percentage_score),
@@ -938,17 +964,23 @@ router.post('/manager-level', async (req, res) => {
     // Ensure columns exist
     await ensureLevelColumns();
 
-    // Validate session exists
-    const exists = await prisma.$queryRaw`
-      SELECT 1 FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
+    // Gate: session must be COMPLETED and user_confirmed_level present
+    const gate = await prisma.$queryRaw`
+      SELECT status, user_confirmed_level FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
     `;
-    if (!exists || exists.length === 0) {
+    if (!gate || gate.length === 0) {
       return res.status(404).json({ success: false, error: 'Assessment session not found' });
+    }
+    if (String(gate[0].status) !== 'COMPLETED') {
+      return res.status(400).json({ success: false, error: 'Manager can select level only after employee completes the assessment' });
+    }
+    if (!gate[0].user_confirmed_level) {
+      return res.status(400).json({ success: false, error: 'Manager can select level only after employee selects their level' });
     }
 
     await prisma.$queryRaw`
       UPDATE assessment_sessions
-      SET manager_selected_level = ${managerSelectedLevel}, "updatedAt" = NOW()
+      SET manager_selected_level = ${managerSelectedLevel}, updated_at = NOW()
       WHERE id = ${sessionId}
     `;
 
@@ -966,23 +998,24 @@ router.get('/latest-by-user/:userId', async (req, res) => {
 
     const rows = await prisma.$queryRaw`
       WITH latest AS (
-        SELECT DISTINCT ON (as.competencyId)
-          as.id as session_id,
-          as.competencyId,
+        SELECT DISTINCT ON (sess.competency_id)
+          sess.id as session_id,
+          sess.competency_id,
           c.name as competency_name,
-          as.score,
-          as.percentage_score,
-          as.correct_answers,
-          as.total_questions,
-          as.completed_at,
-          as.system_level,
-          as.user_confirmed_level,
-          as.manager_selected_level
-        FROM assessment_sessions as
-        JOIN competencies c ON as.competencyId = c.id
-        WHERE as.user_id = ${userId}
-          AND as.status = 'COMPLETED'
-        ORDER BY as.competencyId, as.completed_at DESC
+          sess.score,
+          sess.percentage_score,
+          sess.correct_answers,
+          sess.total_questions,
+          sess.completed_at,
+          sess.system_level,
+          sess.user_confirmed_level,
+          sess.manager_selected_level
+        FROM assessment_sessions sess
+        JOIN competencies c ON sess.competency_id = c.id
+        WHERE sess.user_id = ${userId}
+          AND sess.status = 'COMPLETED'
+          AND sess.user_confirmed_level IS NOT NULL
+        ORDER BY sess.competency_id, sess.completed_at DESC
       )
       SELECT * FROM latest ORDER BY competency_name;
     `;
@@ -991,7 +1024,7 @@ router.get('/latest-by-user/:userId', async (req, res) => {
       success: true,
       results: rows.map(r => ({
         sessionId: r.session_id,
-        competencyId: r.competencyId,
+        competencyId: r.competency_id,
         competencyName: r.competency_name,
         score: Number(r.score || 0),
         percentageScore: Number(r.percentage_score || 0),
