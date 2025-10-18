@@ -390,6 +390,68 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Bulk delete questions with optional filters
+router.post('/bulk-delete', async (req, res) => {
+  try {
+    const { competencyId, competencyLevelId, type, search } = req.body || {};
+
+    // Build WHERE conditions dynamically with proper parameterization
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (competencyId) {
+      conditions.push(`q."competencyId" = $${paramIndex}`);
+      params.push(competencyId);
+      paramIndex++;
+    }
+    if (competencyLevelId) {
+      conditions.push(`q."competencyLevelId" = $${paramIndex}`);
+      params.push(competencyLevelId);
+      paramIndex++;
+    }
+    if (type) {
+      conditions.push(`q.type = $${paramIndex}::"QuestionType"`);
+      params.push(type);
+      paramIndex++;
+    }
+    if (search && String(search).trim()) {
+      const searchTerm = `%${String(search).trim().toLowerCase()}%`;
+      conditions.push(`(lower(q.text) LIKE $${paramIndex} OR lower(coalesce(q.explanation,'')) LIKE $${paramIndex + 1})`);
+      params.push(searchTerm, searchTerm);
+      paramIndex += 2;
+    }
+    
+    const whereSql = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Collect IDs to delete
+    const toDelete = await prisma.$queryRawUnsafe(`
+      SELECT q.id FROM questions q ${whereSql}
+    `, ...params);
+
+    if (!toDelete || toDelete.length === 0) {
+      return res.json({ success: true, deleted: 0 });
+    }
+
+    const ids = toDelete.map(r => r.id);
+
+    // Delete options first
+    await prisma.$executeRawUnsafe(`
+      DELETE FROM question_options WHERE "questionId" = ANY($1::text[])
+    `, ids);
+
+    // Delete questions
+    const deleted = await prisma.$queryRawUnsafe(`
+      DELETE FROM questions WHERE id = ANY($1::text[]) RETURNING id
+    `, ids);
+
+    return res.json({ success: true, deleted: deleted.length });
+  } catch (error) {
+    console.error('Bulk delete error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to bulk delete questions' });
+  }
+});
+
 // Get question statistics
 router.get('/stats/overview', async (req, res) => {
   try {
@@ -528,9 +590,10 @@ router.post('/upload-csv', upload.single('csvFile'), async (req, res) => {
     let successCount = 0;
     for (const questionData of questions) {
       try {
-        // Look up competency ID from name
+        // Look up competency ID from name (case-insensitive, trimmed)
+        const compName = questionData.competencyName.trim();
         const competency = await prisma.$queryRaw`
-          SELECT id FROM competencies WHERE name = ${questionData.competencyName} LIMIT 1
+          SELECT id FROM competencies WHERE lower(trim(name)) = lower(trim(${compName})) LIMIT 1
         `;
         
         if (!competency || competency.length === 0) {
@@ -543,8 +606,9 @@ router.post('/upload-csv', upload.single('csvFile'), async (req, res) => {
         
         // Look up competency level ID if provided
         if (questionData.competencyLevel) {
+          const lvl = questionData.competencyLevel.toString().trim().toUpperCase();
           const level = await prisma.$queryRaw`
-            SELECT id FROM competency_levels WHERE level = ${questionData.competencyLevel}::"CompetencyLevelType" LIMIT 1
+            SELECT id FROM competency_levels WHERE level = ${lvl}::"CompetencyLevelType" LIMIT 1
           `;
           
           if (level && level.length > 0) {

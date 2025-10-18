@@ -22,7 +22,20 @@ import {
   ChevronRight,
   ChevronDown,
   Minus,
-  Plus
+  Plus,
+  Target,
+  Clock,
+  AlertCircle,
+  Star,
+  GraduationCap,
+  Briefcase,
+  Users2,
+  BookOpenCheck,
+  Zap,
+  PlusCircle,
+  Calendar as CalendarIcon,
+  FileText,
+  Lightbulb
 } from 'lucide-react';
 import EmployeePhoto from '../../components/EmployeePhoto';
 import api from '../../lib/api';
@@ -46,8 +59,59 @@ const TeamEmployees = () => {
   const [showAssessmentDetailModal, setShowAssessmentDetailModal] = useState(false);
   const [assessmentDetail, setAssessmentDetail] = useState(null);
   const [assessmentDetailLoading, setAssessmentDetailLoading] = useState(false);
+  const [assessmentAttempts, setAssessmentAttempts] = useState([]); // attempts for selected competency
+  const [selectedAttemptId, setSelectedAttemptId] = useState(null);
+  const [assessmentCounts, setAssessmentCounts] = useState({}); // { sid: number }
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [viewMode, setViewMode] = useState('tree'); // 'tree' or 'grid'
+  const [showAddIdpModal, setShowAddIdpModal] = useState(false);
+  const [idpForm, setIdpForm] = useState({ 
+    employeeId: '', 
+    competencyId: '', 
+    notes: '', 
+    interventionId: '',
+    interventionTypeId: '',
+    interventionCategoryId: '',
+    customInterventionName: '',
+    targetDate: '',
+    priority: 'MEDIUM'
+  });
+  const [instances, setInstances] = useState([]);
+  const [interventionTypes, setInterventionTypes] = useState([]);
+  const [interventionCategories, setInterventionCategories] = useState([]);
+  const [filteredTypes, setFilteredTypes] = useState([]);
+  const [filteredInstances, setFilteredInstances] = useState([]);
+  const [idps, setIdps] = useState([]);
+  const [assessmentsTab, setAssessmentsTab] = useState('assessments'); // 'assessments' | 'idps'
+
+  // Whether server already has a saved manager level for competency
+  const preloaded = (competencyId) => {
+    // This function will be evaluated against latest fetched assessments in the render section
+    // Keep as fallback; do not block saving based on local selection state
+    return false;
+  };
+
+  // Fetch assessment counts per employee (lightweight using history length)
+  const fetchAssessmentCounts = async (list) => {
+    try {
+      const sids = Array.from(new Set(list.map(e => e.sid).filter(Boolean)));
+      const results = await Promise.allSettled(
+        sids.map(sid => api.get(`/user-assessments/history/${sid}`))
+      );
+      const map = {};
+      results.forEach((r, idx) => {
+        const sid = sids[idx];
+        if (r.status === 'fulfilled') {
+          map[sid] = (r.value.data?.assessments || []).length;
+        } else {
+          map[sid] = 0;
+        }
+      });
+      setAssessmentCounts(prev => ({ ...prev, ...map }));
+    } catch (_) {
+      // ignore errors; leave counts as 0
+    }
+  };
 
   // Use dynamic SID from context
   const managerSid = currentSid;
@@ -56,6 +120,12 @@ const TeamEmployees = () => {
     fetchTeamEmployees();
     fetchJCPData();
   }, []);
+
+  useEffect(() => {
+    if (employees && employees.length) {
+      fetchAssessmentCounts(employees);
+    }
+  }, [employees]);
 
   useEffect(() => {
     filterEmployees();
@@ -169,11 +239,132 @@ const TeamEmployees = () => {
     try {
       setAssessmentsLoading(true);
       const resp = await api.get(`/user-assessments/history/${employee.sid}`);
-      setAssessments(resp.data.assessments || []);
+      const list = resp.data.assessments || [];
+      setAssessments(list);
+      // Preload existing manager levels per competency
+      const pre = list.reduce((acc, a) => {
+        if (a.managerSelectedLevel && !acc[a.competencyId]) acc[a.competencyId] = a.managerSelectedLevel;
+        return acc;
+      }, {});
+      setManagerLevels(pre);
+      // Load existing IDPs for this employee
+      try {
+        const idpResp = await api.get(`/idp/${employee.sid}`);
+        setIdps(idpResp.data.idps || []);
+      } catch (_) {
+        setIdps([]);
+      }
     } catch (e) {
       console.error('Failed to load assessments:', e);
     } finally {
       setAssessmentsLoading(false);
+    }
+  };
+
+  const loadInterventionInstances = async () => {
+    try {
+      const resp = await api.get('/ld-interventions/instances?status=PLANNED');
+      setInstances(resp.data.instances || []);
+    } catch (e) {
+      setInstances([]);
+    }
+  };
+
+  const loadInterventionTypes = async () => {
+    try {
+      const resp = await api.get('/ld-interventions/types?is_active=true');
+      setInterventionTypes(resp.data.types || []);
+    } catch (e) {
+      setInterventionTypes([]);
+    }
+  };
+
+  const loadInterventionCategories = async () => {
+    try {
+      const resp = await api.get('/ld-interventions/categories');
+      setInterventionCategories(resp.data.categories || []);
+    } catch (e) {
+      setInterventionCategories([]);
+    }
+  };
+
+  // Filter types based on selected category
+  const handleCategoryChange = (categoryId) => {
+    setIdpForm(prev => ({ 
+      ...prev, 
+      interventionCategoryId: categoryId,
+      interventionTypeId: '', // Reset type selection
+      interventionId: '' // Reset instance selection
+    }));
+    
+    if (categoryId) {
+      const filtered = interventionTypes.filter(type => type.category_id === categoryId);
+      setFilteredTypes(filtered);
+    } else {
+      setFilteredTypes([]);
+    }
+    setFilteredInstances([]);
+  };
+
+  // Filter instances based on selected type
+  const handleTypeChange = (typeId) => {
+    setIdpForm(prev => ({ 
+      ...prev, 
+      interventionTypeId: typeId,
+      interventionId: '' // Reset instance selection
+    }));
+    
+    if (typeId) {
+      const filtered = instances.filter(instance => instance.intervention_type_id === typeId);
+      setFilteredInstances(filtered);
+    } else {
+      setFilteredInstances([]);
+    }
+  };
+
+  const openAddIdp = async (employee, competencyId) => {
+    setIdpForm({ 
+      employeeId: employee.sid, 
+      competencyId, 
+      notes: '', 
+      interventionId: '',
+      interventionTypeId: '',
+      interventionCategoryId: '',
+      customInterventionName: '',
+      targetDate: '',
+      priority: 'MEDIUM'
+    });
+    await Promise.all([
+      loadInterventionInstances(), 
+      loadInterventionTypes(), 
+      loadInterventionCategories()
+    ]);
+    setShowAddIdpModal(true);
+  };
+
+  const saveIdp = async () => {
+    try {
+      await api.post('/idp', {
+        employeeId: idpForm.employeeId,
+        competencyId: idpForm.competencyId,
+        interventionId: idpForm.interventionId || null,
+        interventionTypeId: idpForm.interventionTypeId || null,
+        customInterventionName: idpForm.customInterventionName || null,
+        notes: idpForm.notes || '',
+        targetDate: idpForm.targetDate || null,
+        priority: idpForm.priority || 'MEDIUM'
+      });
+      toast({ title: 'IDP Created', description: 'Development plan saved and linked to intervention.' });
+      setShowAddIdpModal(false);
+      // Refresh IDPs list
+      try {
+        const idpResp = await api.get(`/idp/${idpForm.employeeId}`);
+        setIdps(idpResp.data.idps || []);
+      } catch (_) {
+        setIdps([]);
+      }
+    } catch (e) {
+      toast({ title: 'Error', description: e?.response?.data?.error || 'Failed to create IDP', variant: 'destructive' });
     }
   };
 
@@ -182,7 +373,7 @@ const TeamEmployees = () => {
     if (!level) return;
     try {
       await api.post('/user-assessments/manager/confirm-level-by-competency', {
-        employeeId: userId,
+        userId: userId,
         competencyId,
         managerSelectedLevel: level
       });
@@ -215,8 +406,12 @@ const TeamEmployees = () => {
     }
   };
 
-  const handleViewAssessmentDetails = async (sessionId) => {
+  const handleViewAssessmentDetails = async (sessionId, attempts = null) => {
     try {
+      if (attempts && Array.isArray(attempts)) {
+        setAssessmentAttempts(attempts);
+      }
+      setSelectedAttemptId(sessionId);
       setAssessmentDetail(null);
       setAssessmentDetailLoading(true);
       setShowAssessmentDetailModal(true);
@@ -369,11 +564,20 @@ const TeamEmployees = () => {
                       )}
                       <button
                         onClick={() => handleAssessmentsClick(node)}
-                        className="ml-2 flex items-center hover:bg-blue-50 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                        className={`ml-2 flex items-center px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                          (assessmentCounts[node.sid] || 0) > 0
+                            ? 'hover:bg-blue-50'
+                            : 'opacity-60 cursor-not-allowed bg-gray-50'
+                        }`}
                         title="View Assessments"
+                        disabled={(assessmentCounts[node.sid] || 0) === 0}
                       >
-                        <BarChart3 className="h-4 w-4 text-blue-600 mr-1" />
-                        <span className="text-xs text-blue-600 font-medium">Assessments</span>
+                        <BarChart3 className={`h-4 w-4 mr-1 ${
+                          (assessmentCounts[node.sid] || 0) > 0 ? 'text-blue-600' : 'text-gray-400'
+                        }`} />
+                        <span className={`text-xs font-medium ${
+                          (assessmentCounts[node.sid] || 0) > 0 ? 'text-blue-600' : 'text-gray-400'
+                        }`}>Assessments</span>
                       </button>
                     </div>
                     
@@ -641,11 +845,20 @@ const TeamEmployees = () => {
                         )}
                         <button
                           onClick={() => handleAssessmentsClick(employee)}
-                          className="ml-2 flex items-center hover:bg-blue-50 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                          className={`ml-2 flex items-center px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                            (assessmentCounts[employee.sid] || 0) > 0
+                              ? 'hover:bg-blue-50'
+                              : 'opacity-60 cursor-not-allowed bg-gray-50'
+                          }`}
                           title="View Assessments"
+                          disabled={(assessmentCounts[employee.sid] || 0) === 0}
                         >
-                          <BarChart3 className="h-4 w-4 text-blue-600 mr-1" />
-                          <span className="text-xs text-blue-600 font-medium">Assessments</span>
+                          <BarChart3 className={`h-4 w-4 mr-1 ${
+                            (assessmentCounts[employee.sid] || 0) > 0 ? 'text-blue-600' : 'text-gray-400'
+                          }`} />
+                          <span className={`text-xs font-medium ${
+                            (assessmentCounts[employee.sid] || 0) > 0 ? 'text-blue-600' : 'text-gray-400'
+                          }`}>Assessments</span>
                         </button>
                       </div>
                       
@@ -773,8 +986,15 @@ const TeamEmployees = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Assessments - {selectedEmployee.first_name} {selectedEmployee.last_name}
+              <h3 className="text-lg font-semibold text-black" style={{ color: '#000' }}>
+                {(() => {
+                  const employeeName = `${selectedEmployee.first_name} ${selectedEmployee.last_name}`;
+                  const manager = employees.find(e => e.sid === selectedEmployee.line_manager_sid);
+                  const managerLabel = manager
+                    ? `${manager.first_name} ${manager.last_name}`
+                    : (selectedEmployee.line_manager_sid || '—');
+                  return `Assessments - ${employeeName} (Manager: ${managerLabel}, Employee: ${selectedEmployee.sid})`;
+                })()}
               </h3>
               <button
                 onClick={() => setShowAssessmentsModal(false)}
@@ -783,9 +1003,126 @@ const TeamEmployees = () => {
                 <X className="h-6 w-6" />
               </button>
             </div>
+            {/* Tabs */}
+            <div className="px-6 pt-4">
+              <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => setAssessmentsTab('assessments')}
+                  className={`px-4 py-2 text-sm ${assessmentsTab==='assessments' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >Assessments</button>
+                <button
+                  onClick={() => setAssessmentsTab('idps')}
+                  className={`px-4 py-2 text-sm ${assessmentsTab==='idps' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >IDPs</button>
+              </div>
+            </div>
 
             <div className="p-6 overflow-y-auto max-h-[70vh]">
-              {assessmentsLoading ? (
+              {assessmentsTab === 'idps' ? (
+                <div>
+                  {(!idps || idps.length === 0) ? (
+                    <div className="text-center text-gray-500 py-8">
+                      <div className="text-lg font-medium mb-2">No IDPs Created Yet</div>
+                      <div className="text-sm text-gray-400">Individual Development Plans will appear here when created for competency gaps.</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {idps.map((idp) => (
+                        <div key={idp.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <h4 className="text-lg font-semibold text-gray-900">{idp.competency_name || 'Competency'}</h4>
+                                <span className={`px-2 py-1 text-xs rounded-full ${
+                                  idp.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                                  idp.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+                                  idp.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {idp.priority || 'MEDIUM'} Priority
+                                </span>
+                                <span className={`px-2 py-1 text-xs rounded-full ${
+                                  idp.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                                  idp.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                                  idp.status === 'PLANNED' ? 'bg-gray-100 text-gray-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {idp.status || 'PLANNED'}
+                                </span>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                  <div className="text-gray-500">Required Level</div>
+                                  <div className="font-medium">{idp.required_level || '—'}</div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Current Level</div>
+                                  <div className="font-medium">{idp.employee_level || '—'}</div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Manager Level</div>
+                                  <div className="font-medium">{idp.manager_level || '—'}</div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Target Date</div>
+                                  <div className="font-medium">
+                                    {idp.target_date ? new Date(idp.target_date).toLocaleDateString() : '—'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {idp.intervention_title && (
+                                <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                                  <div className="text-sm font-medium text-blue-900">Linked Intervention</div>
+                                  <div className="text-sm text-blue-700">{idp.intervention_title}</div>
+                                  {idp.intervention_type_name && (
+                                    <div className="text-xs text-blue-600 mt-1">
+                                      {idp.intervention_type_name} • {idp.intervention_category_name}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {idp.intervention_type_name && !idp.intervention_title && (
+                                <div className="mt-3 p-3 bg-green-50 rounded-lg">
+                                  <div className="text-sm font-medium text-green-900">Intervention Type</div>
+                                  <div className="text-sm text-green-700">{idp.intervention_type_name}</div>
+                                  <div className="text-xs text-green-600 mt-1">{idp.intervention_category_name}</div>
+                                </div>
+                              )}
+
+                              {idp.notes && (
+                                <div className="mt-3">
+                                  <div className="text-sm font-medium text-gray-700 mb-1">Action Plan</div>
+                                  <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">{idp.notes}</div>
+                                </div>
+                              )}
+
+                              <div className="mt-3 text-xs text-gray-500">
+                                Created: {idp.created_at ? new Date(idp.created_at).toLocaleDateString() : '—'}
+                                {idp.updated_at && idp.updated_at !== idp.created_at && (
+                                  <span> • Updated: {new Date(idp.updated_at).toLocaleDateString()}</span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-col gap-2 ml-4">
+                              <Button size="sm" variant="outline">
+                                Edit
+                              </Button>
+                              <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+              assessmentsLoading ? (
                 <div className="flex items-center justify-center h-40">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
                 </div>
@@ -801,65 +1138,378 @@ const TeamEmployees = () => {
                   }, {});
                   const groupEntries = Object.entries(groups);
                   return (
-                    <div className="space-y-4">
-                      {groupEntries.map(([compId, group]) => (
-                        <div key={compId} className="border border-gray-200 rounded-lg">
-                          <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-                            <div className="font-semibold text-gray-900">{group.name}</div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs text-gray-500 mr-2">{group.items.length} attempt{group.items.length > 1 ? 's' : ''}</div>
-                              <select
-                                value={managerLevels[compId] || ''}
-                                onChange={(e) => setManagerLevels(prev => ({ ...prev, [compId]: e.target.value }))}
-                                className={`border rounded-md px-2 py-1 text-sm transition-all duration-200 ${
-                                  managerLevels[compId] 
-                                    ? 'border-green-500 bg-green-50 text-green-800' 
-                                    : 'border-gray-300 hover:border-gray-400'
-                                }`}
-                              >
-                                <option value="">Set Manager Level</option>
-                                <option value="BASIC">BASIC</option>
-                                <option value="INTERMEDIATE">INTERMEDIATE</option>
-                                <option value="ADVANCED">ADVANCED</option>
-                                <option value="EXPERT">EXPERT</option>
-                              </select>
-                              <Button 
-                                size="sm" 
-                                onClick={() => saveManagerLevelByCompetency(selectedEmployee.sid, compId)} 
-                                disabled={!managerLevels[compId]}
-                                className={`transition-all duration-200 ${
-                                  managerLevels[compId] 
-                                    ? 'bg-green-600 hover:bg-green-700 text-white' 
-                                    : 'bg-gray-300 text-gray-500'
-                                }`}
-                              >
-                                {managerLevels[compId] ? '✓ Saved' : 'Save'}
-                              </Button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {groupEntries.map(([compId, group]) => {
+                        // Determine latest attempt per competency
+                        const itemsSorted = [...group.items].sort((a, b) => {
+                          const ad = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+                          const bd = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+                          return bd - ad;
+                        });
+                        const latest = itemsSorted[0];
+                        return (
+                          <div
+                            key={compId}
+                            onClick={() => latest && handleViewAssessmentDetails(latest.sessionId, itemsSorted)}
+                            className="cursor-pointer rounded-lg border border-gray-200 hover:border-green-300 hover:shadow-md transition-all p-4"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <div className="text-base font-semibold text-gray-900">{group.name}</div>
+                                {latest && (
+                                  <>
+                                    <div className="text-sm text-gray-700 mt-1">Latest Score: {latest.percentageScore}% ({latest.correctAnswers}/{latest.totalQuestions})</div>
+                                    <div className="text-xs text-gray-500 mt-1">Completed: {latest.completedAt ? new Date(latest.completedAt).toLocaleString() : '—'}</div>
+                                    {(latest.systemLevel || latest.userConfirmedLevel || latest.managerSelectedLevel) && (
+                                      <div className="text-xs text-gray-700 mt-2">
+                                        <span className="mr-2">System: {latest.systemLevel || '—'}</span>
+                                        <span className="mr-2">User: {latest.userConfirmedLevel || '—'}</span>
+                                        <span>Manager: {latest.managerSelectedLevel || '—'}</span>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                                <div className="text-xs text-gray-500 mt-2">Attempts: {group.items.length}</div>
+                              </div>
+                              {/* Manager level controls (stop click bubbling) */}
+                              <div className="flex flex-col items-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                <select
+                                  value={managerLevels[compId] || latest.managerSelectedLevel || ''}
+                                  onChange={(e) => setManagerLevels(prev => ({ ...prev, [compId]: e.target.value }))}
+                                  disabled={Boolean(latest.managerSelectedLevel)}
+                                  className={`border rounded-md px-2 py-1 text-sm transition-all duration-200 ${
+                                    latest.managerSelectedLevel ? 'bg-green-50 text-green-800 border-green-400 cursor-not-allowed' : 'border-gray-300 hover:border-gray-400'
+                                  }`}
+                                >
+                                  <option value="">Set Manager Level</option>
+                                  <option value="BASIC">BASIC</option>
+                                  <option value="INTERMEDIATE">INTERMEDIATE</option>
+                                  <option value="ADVANCED">ADVANCED</option>
+                                  <option value="MASTERY">MASTERY</option>
+                                </select>
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => saveManagerLevelByCompetency(selectedEmployee.sid, compId)} 
+                                  disabled={Boolean(latest.managerSelectedLevel) || !managerLevels[compId]}
+                                  className={`transition-all duration-200 ${
+                                    latest.managerSelectedLevel
+                                      ? 'bg-gray-300 text-gray-500'
+                                      : (managerLevels[compId] ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-300 text-gray-500')
+                                  }`}
+                                >
+                                  {latest.managerSelectedLevel ? 'Saved' : 'Save'}
+                                </Button>
+                                {/* Add IDP when gap exists: user/system below required level */}
+                                {(() => {
+                                  const jcp = getEmployeeJCP(selectedEmployee).find(j => (j.competency && j.competency.id === compId) || j.competencyId === compId);
+                                  const required = jcp?.requiredLevel;
+                                  const toRank = (l)=>({BASIC:0,INTERMEDIATE:1,ADVANCED:2,MASTERY:3}[String(l||'').toUpperCase()] ?? -1);
+                                  const eff = latest.managerSelectedLevel || latest.userConfirmedLevel || latest.systemLevel;
+                                  const showGap = required && toRank(eff) > -1 && toRank(eff) < toRank(required);
+                                  return showGap ? (
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={() => openAddIdp(selectedEmployee, compId)}
+                                      className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 text-green-700 hover:from-green-100 hover:to-emerald-100 hover:border-green-300"
+                                    >
+                                      <Target className="h-3 w-3 mr-1" />
+                                      Add IDP
+                                    </Button>
+                                  ) : null;
+                                })()}
+                              </div>
                             </div>
                           </div>
-                          <div className="p-4 space-y-3">
-                            {group.items.map((a) => (
-                              <div key={a.sessionId} className="flex items-start justify-between">
-                                <div>
-                                  <div className="text-sm text-gray-700">
-                                    Score: {a.percentageScore}% ({a.correctAnswers}/{a.totalQuestions})
-                                  </div>
-                                  <div className="text-xs text-gray-500 mt-0.5">Completed: {a.completedAt ? new Date(a.completedAt).toLocaleString() : '—'}</div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <Button variant="outline" size="sm" onClick={() => handleViewAssessmentDetails(a.sessionId)}>
-                                    View Details
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })()
-              )}
+              ))
+            }
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add IDP Modal */}
+      {showAddIdpModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 to-blue-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Target className="h-6 w-6 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Create Individual Development Plan</h3>
+              </div>
+              <button onClick={() => setShowAddIdpModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+              {/* Competency Info */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Award className="h-5 w-5 text-blue-600" />
+                  <div className="text-sm font-medium text-blue-900">Target Competency</div>
+                </div>
+                <div className="text-lg font-semibold text-blue-800">
+                  {(() => {
+                    const jcp = getEmployeeJCP(selectedEmployee).find(j => 
+                      (j.competency && j.competency.id === idpForm.competencyId) || j.competencyId === idpForm.competencyId
+                    );
+                    return jcp?.competency?.name || 'Selected Competency';
+                  })()}
+                </div>
+              </div>
+
+              {/* Intervention Selection - Cascading Dropdowns */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb className="h-5 w-5 text-purple-600" />
+                  <div className="text-sm font-medium text-gray-700">Learning Intervention</div>
+                </div>
+                <div className="space-y-4">
+                  {/* Step 1: Select Category */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-blue-600">1</span>
+                      </div>
+                      <div className="text-sm font-medium text-gray-700">Select Intervention Category</div>
+                    </div>
+                    <select
+                      value={idpForm.interventionCategoryId}
+                      onChange={(e) => handleCategoryChange(e.target.value)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">-- Choose a category --</option>
+                      {interventionCategories.map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.name} - {category.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Step 2: Select Type (filtered by category) */}
+                  {idpForm.interventionCategoryId && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                          <span className="text-xs font-bold text-green-600">2</span>
+                        </div>
+                        <div className="text-sm font-medium text-gray-700">Select Intervention Type</div>
+                      </div>
+                      <select
+                        value={idpForm.interventionTypeId}
+                        onChange={(e) => handleTypeChange(e.target.value)}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">-- Choose a type --</option>
+                        {filteredTypes.map(type => (
+                          <option key={type.id} value={type.id}>
+                            {type.name} • {type.delivery_mode || 'Various'} • {type.duration_range || 'Flexible'}
+                          </option>
+                        ))}
+                      </select>
+                      {filteredTypes.length === 0 && (
+                        <div className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          No types available in this category
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Step 3: Select Specific Instance (filtered by type) */}
+                  {idpForm.interventionTypeId && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                          <span className="text-xs font-bold text-purple-600">3</span>
+                        </div>
+                        <div className="text-sm font-medium text-gray-700">Select Specific Intervention (Optional)</div>
+                      </div>
+                      <select
+                        value={idpForm.interventionId}
+                        onChange={(e)=>setIdpForm(prev=>({ ...prev, interventionId: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      >
+                        <option value="">-- Choose specific intervention --</option>
+                        {filteredInstances.map(inst => (
+                          <option key={inst.id} value={inst.id}>
+                            {inst.title} • {inst.start_date ? new Date(inst.start_date).toLocaleDateString() : 'TBD'}
+                            {inst.location && ` • ${inst.location}`}
+                          </option>
+                        ))}
+                      </select>
+                      {filteredInstances.length === 0 && (
+                        <div className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          No specific interventions scheduled for this type. You can still create a general IDP.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Custom Intervention Name (when no specific instance) */}
+                  {idpForm.interventionTypeId && filteredInstances.length === 0 && (
+                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <PlusCircle className="h-5 w-5 text-yellow-600" />
+                        <div className="text-sm font-medium text-yellow-800">Custom Intervention Name</div>
+                      </div>
+                      <input
+                        type="text"
+                        value={idpForm.customInterventionName}
+                        onChange={(e)=>setIdpForm(prev=>({ ...prev, customInterventionName: e.target.value }))}
+                        className="w-full border border-yellow-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                        placeholder="e.g., 'Leadership Coaching with John Smith', 'Project Management Training'"
+                      />
+                      <div className="text-xs text-yellow-700 mt-1">
+                        Give this intervention a specific name for tracking purposes
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Show selected intervention info */}
+                  {(idpForm.interventionId || idpForm.interventionTypeId) && (
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <div className="text-sm font-medium text-green-900">Selected Intervention</div>
+                      </div>
+                      <div className="text-sm text-green-700">
+                        {idpForm.interventionId ? (
+                          <>
+                            <div className="font-medium">{instances.find(i => i.id === idpForm.interventionId)?.title}</div>
+                            <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                              <CalendarIcon className="h-3 w-3" />
+                              Specific scheduled intervention
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-medium">
+                              {idpForm.customInterventionName || interventionTypes.find(t => t.id === idpForm.interventionTypeId)?.name}
+                            </div>
+                            <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                              <Lightbulb className="h-3 w-3" />
+                              {idpForm.customInterventionName ? 'Custom intervention' : 'General intervention type - manager can arrange specific details'}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Target Date */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <CalendarIcon className="h-5 w-5 text-orange-600" />
+                  <div className="text-sm font-medium text-gray-700">Target Completion Date</div>
+                </div>
+                <input
+                  type="date"
+                  value={idpForm.targetDate}
+                  onChange={(e)=>setIdpForm(prev=>({ ...prev, targetDate: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+
+              {/* Priority */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Star className="h-5 w-5 text-yellow-600" />
+                  <div className="text-sm font-medium text-gray-700">Priority Level</div>
+                </div>
+                <select
+                  value={idpForm.priority}
+                  onChange={(e)=>setIdpForm(prev=>({ ...prev, priority: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                >
+                  <option value="LOW">🟢 Low Priority</option>
+                  <option value="MEDIUM">🟡 Medium Priority</option>
+                  <option value="HIGH">🟠 High Priority</option>
+                  <option value="CRITICAL">🔴 Critical Priority</option>
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText className="h-5 w-5 text-indigo-600" />
+                  <div className="text-sm font-medium text-gray-700">Action Plan & Notes</div>
+                </div>
+                <textarea
+                  value={idpForm.notes}
+                  onChange={(e)=>setIdpForm(prev=>({ ...prev, notes: e.target.value }))}
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Describe the development plan, learning objectives, and expectations..."
+                />
+              </div>
+
+              {/* Summary */}
+              <div className="bg-gradient-to-r from-gray-50 to-slate-50 p-4 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="h-5 w-5 text-gray-600" />
+                  <div className="text-sm font-medium text-gray-700">IDP Summary</div>
+                </div>
+                <div className="text-sm text-gray-600 space-y-2">
+                  {idpForm.interventionId ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <span>Linked to specific intervention</span>
+                      </div>
+                      <div className="text-xs text-gray-500 ml-6">
+                        {instances.find(i => i.id === idpForm.interventionId)?.title}
+                      </div>
+                    </>
+                  ) : idpForm.interventionTypeId ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <span>Linked to intervention type</span>
+                      </div>
+                      <div className="text-xs text-gray-500 ml-6">
+                        {idpForm.customInterventionName || interventionTypes.find(t => t.id === idpForm.interventionTypeId)?.name}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-gray-400" />
+                      <span>General development plan (no specific intervention selected)</span>
+                    </div>
+                  )}
+                  {idpForm.targetDate && (
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4 text-blue-500" />
+                      <span>Target: {new Date(idpForm.targetDate).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Star className="h-4 w-4 text-yellow-500" />
+                    <span>Priority: {idpForm.priority}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+              <Button variant="outline" onClick={()=>setShowAddIdpModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveIdp} className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Create IDP
+              </Button>
             </div>
           </div>
         </div>
@@ -880,6 +1530,35 @@ const TeamEmployees = () => {
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[75vh]">
+              {/* Attempt selector */}
+              {assessmentAttempts && assessmentAttempts.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-sm font-medium text-gray-900 mb-2">Attempts</div>
+                  <div className="flex flex-wrap gap-2">
+                    {assessmentAttempts
+                      .slice()
+                      .sort((a,b)=>{
+                        const ad=a.completedAt?new Date(a.completedAt).getTime():0;
+                        const bd=b.completedAt?new Date(b.completedAt).getTime():0;
+                        return bd-ad;
+                      })
+                      .map((att, idx) => (
+                        <button
+                          key={att.sessionId}
+                          onClick={() => handleViewAssessmentDetails(att.sessionId, assessmentAttempts)}
+                          className={`px-3 py-1.5 rounded-md border text-xs transition-all ${
+                            att.sessionId === selectedAttemptId
+                              ? 'border-green-600 bg-green-50 text-green-700'
+                              : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                          }`}
+                        >
+                          {`#${idx+1} • ${att.percentageScore}% • ${att.completedAt ? new Date(att.completedAt).toLocaleDateString() : '—'}`}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {assessmentDetailLoading ? (
                 <div className="flex items-center justify-center h-40">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>

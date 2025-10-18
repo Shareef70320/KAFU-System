@@ -25,14 +25,42 @@ const assessorManagementRoutes = require('./routes/assessorManagement');
 const performanceReviewRoutes = require('./routes/performanceReviews');
 const developmentPathRoutes = require('./routes/developmentPaths');
 const ldInterventionRoutes = require('./routes/ldInterventions');
+const idpRoutes = require('./routes/idp');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(helmet());
+// Configure CORS via environment variable for deploy flexibility
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: function (origin, callback) {
+    // allow requests with no origin (like curl, server-to-server)
+    if (!origin) return callback(null, true);
+    
+    // In development, be more permissive with localhost and Docker containers
+    if (process.env.NODE_ENV === 'development') {
+      if (origin && (
+        origin.includes('localhost') || 
+        origin.includes('127.0.0.1') ||
+        origin.includes('kafu-frontend-dev') ||
+        origin.includes('kafu-backend-dev')
+      )) {
+        return callback(null, true);
+      }
+    }
+    
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    
+    console.log('CORS blocked origin:', origin);
+    console.log('Allowed origins:', allowedOrigins);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -65,6 +93,7 @@ app.use('/api/assessor-management', assessorManagementRoutes);
 app.use('/api/competency-reviews', performanceReviewRoutes);
 app.use('/api/development-paths', developmentPathRoutes);
 app.use('/api/ld-interventions', ldInterventionRoutes);
+app.use('/api/idp', idpRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

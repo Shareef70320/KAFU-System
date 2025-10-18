@@ -49,8 +49,32 @@ const UserAssessments = () => {
   const [lastSessionByCompetency, setLastSessionByCompetency] = useState({});
   const [showDashboardModal, setShowDashboardModal] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
+  const [userConfirmedLevel, setUserConfirmedLevel] = useState(null);
 
-  // Cache clearing is now handled globally in UserContext
+  // Fetch assessment result when assessment is completed
+  useEffect(() => {
+    if (assessmentResult && assessmentResult.sessionId) {
+      // Check if user already has a confirmed level for this competency
+      const fetchExistingLevel = async () => {
+        try {
+          const response = await api.get(`/user-assessments/latest-result/${currentUserId}/${selectedCompetency?.id}`);
+          if (response.data?.assessment?.userConfirmedLevel) {
+            setUserConfirmedLevel(response.data.assessment.userConfirmedLevel);
+          }
+        } catch (error) {
+          console.log('No existing confirmed level found');
+        }
+      };
+      fetchExistingLevel();
+    }
+  }, [assessmentResult, currentUserId, selectedCompetency]);
+
+  // Reset userConfirmedLevel when starting a new assessment
+  useEffect(() => {
+    if (currentStep === 'select') {
+      setUserConfirmedLevel(null);
+    }
+  }, [currentStep]);
 
   // Fetch available competencies
   const { data: competenciesData, isLoading: competenciesLoading } = useQuery({
@@ -284,8 +308,11 @@ const UserAssessments = () => {
     const attemptsLeft = attemptsData?.attemptsLeft || 0;
     const attemptsUsed = attemptsData?.attemptsUsed || 0;
     const maxAttempts = attemptsData?.maxAttempts || 0;
-    const attemptsInfo = attemptsLoading ? '' : (attemptsLeft > 0 ? ` (${attemptsLeft} left)` : ' (No attempts left)');
-    const disabled = !attemptsLoading && attemptsLeft === 0;
+    const hasManagerLevel = Boolean(competency.managerSelectedLevel);
+    const attemptsInfo = hasManagerLevel
+      ? ' (Finalized)'
+      : (attemptsLoading ? '' : (attemptsLeft > 0 ? ` (${attemptsLeft} left)` : ' (No attempts left)'));
+    const disabled = hasManagerLevel || (!attemptsLoading && attemptsLeft === 0);
     return (
       <Card key={competency.id} className="hover:shadow-lg transition-shadow">
         <CardHeader>
@@ -320,10 +347,17 @@ const UserAssessments = () => {
                     Starting...
                   </>
                 ) : disabled ? (
-                  <>
-                    <X className="mr-2 h-4 w-4" />
-                    No Attempts Left
-                  </>
+                  hasManagerLevel ? (
+                    <>
+                      <X className="mr-2 h-4 w-4" />
+                      Finalized by Manager
+                    </>
+                  ) : (
+                    <>
+                      <X className="mr-2 h-4 w-4" />
+                      No Attempts Left
+                    </>
+                  )
                 ) : (
                   <>
                     <Play className="mr-2 h-4 w-4" />
@@ -739,37 +773,54 @@ const UserAssessments = () => {
                 </span>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="text-sm font-medium text-gray-900 mb-2">Confirm Your Level</div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {['BASIC','INTERMEDIATE','ADVANCED','MASTERY'].map(level => (
-                    <button
-                      key={level}
-                      onClick={async () => {
-                        try {
-                          const sid = assessmentResult.sessionId || assessmentData?.sessionId;
-                          if (!sid) {
-                            throw new Error('Missing sessionId');
-                          }
-                          await api.post('/user-assessments/confirm-level', {
-                            sessionId: sid,
-                            userConfirmedLevel: level
-                          });
-                          toast({ title: 'Level Confirmed', description: `You selected ${level}` });
-                          // Refresh competencies data to show updated level
-                          queryClient.invalidateQueries(['user-assessments-competencies']);
-                        } catch (e) {
-                          const msg = e?.response?.data?.error || e?.message || 'Failed to confirm level';
-                          console.error('Confirm level failed:', e);
-                          toast({ title: 'Error', description: msg, variant: 'destructive' });
-                        }
-                      }}
-                      className={`px-3 py-2 rounded border text-sm font-medium transition-all duration-200 ${getLevelColor(level)} hover:opacity-90 hover:scale-105 active:scale-95`}
-                    >
-                      {level}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-600 mt-2">This confirms your view of your current level. Your line manager may adjust later.</p>
+                {userConfirmedLevel ? (
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-gray-900 mb-2">Your Confirmed Level</div>
+                    <div className="flex justify-center">
+                      <span className={`inline-flex px-6 py-3 rounded-lg text-lg font-semibold ${getLevelColor(userConfirmedLevel)} border-2 border-current shadow-lg`}>
+                        {userConfirmedLevel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-3">
+                      ✓ Level confirmed and saved. Your line manager may adjust this level later.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-sm font-medium text-gray-900 mb-2">Confirm Your Level</div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {['BASIC','INTERMEDIATE','ADVANCED','MASTERY'].map(level => (
+                        <button
+                          key={level}
+                          onClick={async () => {
+                            try {
+                              const sid = assessmentResult.sessionId || assessmentData?.sessionId;
+                              if (!sid) {
+                                throw new Error('Missing sessionId');
+                              }
+                              await api.post('/user-assessments/confirm-level', {
+                                sessionId: sid,
+                                userConfirmedLevel: level
+                              });
+                              setUserConfirmedLevel(level);
+                              toast({ title: 'Level Confirmed', description: `You selected ${level}` });
+                              // Refresh competencies data to show updated level
+                              queryClient.invalidateQueries(['user-assessments-competencies']);
+                            } catch (e) {
+                              const msg = e?.response?.data?.error || e?.message || 'Failed to confirm level';
+                              console.error('Confirm level failed:', e);
+                              toast({ title: 'Error', description: msg, variant: 'destructive' });
+                            }
+                          }}
+                          className={`px-3 py-2 rounded border text-sm font-medium transition-all duration-200 ${getLevelColor(level)} hover:opacity-90 hover:scale-105 active:scale-95`}
+                        >
+                          {level}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-2">This confirms your view of your current level. Your line manager may adjust later.</p>
+                  </>
+                )}
               </div>
             </div>
 

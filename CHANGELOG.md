@@ -2,6 +2,58 @@
 
 All notable changes to the KAFU System project will be documented in this file.
 
+## [v4.6.0] - 2025-10-14 - "Stable: Job-Based Competencies + Deletes"
+
+### Added
+- Enforced job-based competency visibility across API and frontend
+
+### Enhanced
+- Question Bank UI cleanup (removed duplicate delete buttons in header)
+- Hardened bulk delete (parameterization, enum casts)
+
+### Fixed
+- Removed global fallback for user competencies to avoid unrelated competencies showing
+- Cleaned specific users' assessment sessions to prevent conflicts
+
+### Technical
+- DB Backup: `backup_v4.6.0_stable.sql`
+- Milestone: `MILESTONE_v4.6.0_STABLE.md`
+
+## [v4.5.0] - 2025-10-13 - "Assessment System Complete"
+
+### Added
+- **Complete Assessment System**: Full end-to-end assessment functionality
+- **Start Assessment**: Creates sessions, loads questions, manages time limits
+- **Submit Assessment**: Processes answers, calculates scores, determines competency levels
+- **User Assessments Page**: Shows available competencies for users to take assessments
+- **Assessment Session Tracking**: Complete session management in database
+- **Question Bank Bulk Operations**: Delete filtered/all questions with proper confirmation
+- **Enhanced Job Competency Profiles**: Real-time editing with duplicate prevention
+- **Bulk Assessor Assignment**: Assign multiple competencies to assessors in single operation
+
+### Enhanced
+- **Question Management**: Full CRUD operations with CSV import/export
+- **Assessment Flow**: Complete start → answer → submit → results cycle
+- **Database Schema**: Proper assessment tables and relationships
+- **API Endpoints**: Robust error handling and validation
+- **Frontend Integration**: Real-time updates and proper user feedback
+- **UI/UX**: Removed duplicate buttons, improved layout consistency
+
+### Fixed
+- **Database Schema Issues**: Resolved camelCase vs snake_case inconsistencies
+- **SQL Parameter Injection**: Implemented proper parameterized queries
+- **Assessment Errors**: Fixed start/submit assessment functionality
+- **Bulk Delete Errors**: Resolved SQL query construction and enum casting
+- **Column Name Mismatches**: Fixed all database column reference issues
+- **Enum Type Handling**: Properly handled PostgreSQL enum types
+
+### Technical
+- **Database Backup**: `backup_v4.5.0_assessment_system_complete.sql`
+- **Assessment Tables**: `assessment_sessions` and `assessment_responses` created
+- **Question Linking**: Proper foreign key relationships established
+- **Error Handling**: Comprehensive error logging and user-friendly messages
+- **Documentation**: Updated troubleshooting guide and success patterns
+
 ## [v3.0.0] - 2024-12-XX - "Complete Assessor Management System with Employee Integration"
 
 ### Added

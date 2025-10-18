@@ -172,12 +172,84 @@ docker-compose logs frontend --tail=10
 - **Database:** 1,254 employees imported from HRData.csv
 - **API:** All endpoints working, returning real HR data
 - **User Profile:** Working with SID 2254, showing Job Competency Profile
-- **User Assessments:** ✅ Working - 9 competency cards showing, Start Assessment functional
-- **Default Assessment:** ✅ Working - 4 questions, 30 minutes, linked to all competencies via `apply_to_all=true`
+- **User Assessments:** ✅ Working - 2 competency cards showing for SID 2254, Start Assessment functional
+- **Default Assessment:** ✅ Working - 10 questions, 30 minutes, linked to competencies via assessment_questions table
 - **Assessment Filtering:** ✅ Working - Only shows competency cards that have assessments available
 - **Question-Based Filtering:** ✅ Working - Only shows competencies that have both questions AND assessments
+- **Assessment Settings:** ✅ Working - Proper time limits, question counts, and attempt limits displayed
 
-**Last Updated:** September 2025 - User Assessments Fixed
+**Last Updated:** October 2025 - Assessment System Database Schema Fixed
+
+## 🔧 **Assessment System "Failed to fetch competencies" Error Fix**
+
+### **Problem:** 
+User Assessments page shows "Failed to fetch competencies" error and no competency cards are displayed
+
+### **Root Cause:** 
+1. Missing `assessment_sessions` table in database
+2. Backend code using incorrect column names (`competencyId` vs `competency_id`)
+3. Assessment settings using wrong column references (`time_limit_minutes` vs `timeLimit`)
+
+### **Symptoms:**
+- User Assessments API returns `{"success": false, "error": "Failed to fetch competencies"}`
+- Backend logs show: `relation "assessment_sessions" does not exist`
+- No competency cards shown on Take Assessment page
+- Assessment system appears completely broken
+
+### **Solution:**
+```bash
+# 1. Create missing assessment_sessions table
+docker exec -i kafu-postgres-dev psql -U kafu_user -d kafu_system < create_user_assessment_tables.sql
+
+# 2. Add missing columns to assessment_sessions table
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "ALTER TABLE assessment_sessions ADD COLUMN IF NOT EXISTS user_confirmed_level TEXT, ADD COLUMN IF NOT EXISTS manager_selected_level TEXT, ADD COLUMN IF NOT EXISTS system_level TEXT;"
+
+# 3. Link questions to assessments
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "INSERT INTO assessment_questions (id, \"assessmentId\", \"questionId\", \"order\", points) SELECT gen_random_uuid()::text, '0b92450f-3551-4e13-8378-3cf468f9c333', id, ROW_NUMBER() OVER(), 1 FROM questions LIMIT 10;"
+
+# 4. Fix backend code column references
+# In backend/routes/userAssessments.js, replace all instances:
+# - competencyId → competency_id (in SQL queries)
+# - time_limit_minutes → timeLimit (in assessment object references)
+# - max_attempts → maxAttempts (in assessment object references)
+
+# 5. Copy updated code to container
+docker cp backend/routes/userAssessments.js kafu-backend-dev:/app/routes/userAssessments.js
+
+# 6. Restart backend
+docker compose -f docker-compose.dev.yml restart backend
+```
+
+### **Why This Happens:**
+- Database restoration doesn't include all required tables
+- Backend code was written for different database schema
+- Column naming inconsistencies between camelCase and snake_case
+- Assessment system requires specific table structure to function
+
+### **Prevention:**
+- Always run complete database setup scripts after restoration
+- Verify all required tables exist before testing assessment system
+- Use consistent column naming conventions
+- Test assessment system after any database changes
+
+### **Verification:**
+```bash
+# Test user assessments API
+curl -s "http://localhost:5001/api/user-assessments/competencies?userId=2254" | jq '.success'
+# Should return: true
+
+# Test assessment settings
+curl -s "http://localhost:5001/api/user-assessments/settings/COMPETENCY_ID?userId=2254" | jq '.success'
+# Should return: true
+
+# Test frontend proxy
+curl -s "http://localhost:3000/api/user-assessments/competencies?userId=2254" | jq '.success'
+# Should return: true
+
+# Check competency cards show with proper settings
+curl -s "http://localhost:5001/api/user-assessments/competencies?userId=2254" | jq '.competencies[] | {name, numQuestions, timeLimitMinutes}'
+# Should show competencies with numQuestions: 10, timeLimitMinutes: 30
+```
 
 ## 🔧 **User Profile "Error loading profile" Fix**
 
@@ -857,6 +929,118 @@ Frontend relying on backend data instead of calculating live values for unsaved 
 # Should match exactly
 ```
 
+## 🔧 **Jobs Management Page Shows No Data**
+
+### **Problem:** 
+Jobs Management page displays "No jobs found" message and shows empty statistics cards
+
+### **Root Cause:** 
+Jobs table is empty - jobs data needs to be populated from employee data using the sync script
+
+### **Symptoms:**
+- Jobs Management page shows "No jobs found" message
+- Statistics cards show 0 for Total Jobs, Active Jobs, Units, Divisions
+- API returns empty array: `{"jobs": [], "pagination": {"total": 0}}`
+- Database jobs table is empty: `SELECT COUNT(*) FROM jobs;` returns 0
+
+### **Solution:**
+```bash
+# 1. Copy sync script to backend container
+docker cp sync_jobs_from_employees.js kafu-backend-dev:/app/
+
+# 2. Run the sync script to populate jobs from employee data
+docker exec kafu-backend-dev node /app/sync_jobs_from_employees.js
+
+# 3. Verify jobs were created
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "SELECT COUNT(*) FROM jobs;"
+# Should return: 471 (or similar number)
+
+# 4. Test Jobs API
+curl -s "http://localhost:5001/api/jobs?page=1&limit=5" | jq '.jobs | length'
+# Should return: 5
+
+# 5. Test frontend can access jobs
+curl -s "http://localhost:3000/api/jobs?page=1&limit=5" | jq '.jobs | length'
+# Should return: 5
+```
+
+### **Why This Happens:**
+- Jobs table starts empty after database restoration
+- Jobs data needs to be extracted from employee records
+- The `sync_jobs_from_employees.js` script creates unique job positions from employee job codes
+- This is a one-time setup step after restoring database backups
+
+### **Prevention:**
+- Always run job sync script after restoring database backups
+- Include job sync in database restoration procedures
+- Document that jobs data comes from employee data, not separate import
+- Verify jobs count matches unique employee job codes
+
+### **Verification:**
+```bash
+# Check jobs count in database
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "SELECT COUNT(*) FROM jobs;"
+
+# Test Jobs API
+curl -s "http://localhost:5001/api/jobs?page=1&limit=5" | jq '.pagination.total'
+
+# Test frontend proxy
+curl -s "http://localhost:3000/api/jobs?page=1&limit=5" | jq '.pagination.total'
+
+# Both should return the same count (e.g., 471)
+```
+
+## 🔧 **Docker Development Mode Proxy Configuration Fix**
+
+### **Problem:** 
+Frontend shows "Error loading competencies: Request failed with status code 500" and console shows "ECONNREFUSED" errors when trying to connect to backend
+
+### **Root Cause:** 
+Frontend proxy configuration pointing to `localhost:5000` instead of the correct Docker container name `kafu-backend-dev:5000`
+
+### **Symptoms:**
+- Frontend logs show: `Proxy error: Could not proxy request /api/competencies from localhost:3000 to http://localhost:5000 (ECONNREFUSED)`
+- Backend is running and healthy but frontend can't reach it
+- API works when called directly (`curl http://localhost:5001/api/competencies`) but fails through frontend
+- Data appears to "not load" even though backend has the data
+
+### **Solution:**
+```bash
+# 1. Fix proxy configuration in frontend container
+docker exec kafu-frontend-dev sed -i 's/"proxy": "http:\/\/localhost:5000"/"proxy": "http:\/\/kafu-backend-dev:5000"/' package.json
+
+# 2. Restart frontend to apply proxy changes
+docker compose -f docker-compose.dev.yml restart frontend
+
+# 3. Test frontend can reach backend
+curl -s "http://localhost:3000/api/competencies?page=1&limit=5" | jq '.competencies | length'
+# Should return: 5 (or actual number of competencies)
+```
+
+### **Why This Happens:**
+- In Docker containers, `localhost` refers to the container itself, not the host machine
+- Frontend container needs to use the backend container's service name (`kafu-backend-dev`) to communicate
+- Development mode uses `docker-compose.dev.yml` with bind mounts, requiring proper container networking
+
+### **Prevention:**
+- Always use container service names in proxy configurations for Docker development
+- Check `docker-compose.dev.yml` service names when setting up proxy
+- Test API connectivity through frontend after container restarts
+- Verify both direct API (`localhost:5001`) and proxied API (`localhost:3000/api`) work
+
+### **Verification:**
+```bash
+# Test direct backend API
+curl -s "http://localhost:5001/api/competencies?page=1&limit=5" | jq '.competencies | length'
+
+# Test frontend proxy to backend
+curl -s "http://localhost:3000/api/competencies?page=1&limit=5" | jq '.competencies | length'
+
+# Both should return the same result
+# Check frontend logs for no more ECONNREFUSED errors
+docker compose -f docker-compose.dev.yml logs frontend | tail -5
+```
+
 ## 🔧 **"Failed to create assessment" Error Fix**
 
 ### **Problem:** 
@@ -987,6 +1171,161 @@ curl -X POST "http://localhost:5001/api/assessments" \
 
 ---
 
+## 🔧 **Assessments Page "Failed to load assessments" Error Fix**
+
+### **Problem:** 
+Assessments page shows "Failed to load assessments" error and displays no data
+
+### **Root Cause:** 
+1. Assessments table is empty - no assessment data exists in database
+2. Backend API queries reference non-existent database columns (snake_case vs camelCase mismatch)
+
+### **Symptoms:**
+- Assessments page shows "Failed to load assessments" error
+- Backend logs show: `column a.numberOfQuestions does not exist`
+- API returns: `{"success": false, "error": "Failed to fetch assessments"}`
+- Database assessments table is empty: `SELECT COUNT(*) FROM assessments;` returns 0
+
+### **Solution:**
+```bash
+# 1. Insert sample assessment data using correct camelCase column names
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "
+INSERT INTO assessments (id, title, description, \"competencyId\", \"isActive\", \"timeLimit\", \"passingScore\", \"maxAttempts\", \"createdBy\", \"updatedAt\") 
+VALUES 
+  ('assessment-1', 'Communication Skills Assessment', 'Assessment for evaluating communication competency', 'COMPETENCY_ID_1', true, 30, 70.0, 3, 'admin', NOW()),
+  ('assessment-2', 'Strategic Thinking Assessment', 'Assessment for evaluating strategic thinking competency', 'COMPETENCY_ID_2', true, 45, 75.0, 2, 'admin', NOW()),
+  ('assessment-3', 'Leading Change Assessment', 'Assessment for evaluating leading change competency', 'COMPETENCY_ID_3', true, 40, 80.0, 3, 'admin', NOW())
+ON CONFLICT (id) DO NOTHING;
+"
+
+# 2. Fix backend API to remove references to non-existent columns
+# In backend/routes/assessments.js, remove these columns from SELECT queries:
+# - a."numberOfQuestions" as "numberOfQuestions"
+# - a."shuffleQuestions" as "shuffleQuestions" 
+# - a."allowMultipleAttempts" as "allowMultipleAttempts"
+# - a."showTimer" as "showTimer"
+# - a."forceTimeLimit" as "forceTimeLimit"
+# - a."showDashboard" as "showDashboard"
+# - a."showCorrectAnswers" as "showCorrectAnswers"
+# - a."showIncorrectAnswers" as "showIncorrectAnswers"
+
+# 3. Copy updated code to container
+docker cp backend/routes/assessments.js kafu-backend-dev:/app/routes/assessments.js
+
+# 4. Restart backend
+docker compose -f docker-compose.dev.yml restart backend
+
+# 5. Test API
+curl -s "http://localhost:5001/api/assessments" | jq '.success'
+# Should return: true
+```
+
+### **Why This Happens:**
+- Assessment tables start empty after database restoration
+- Backend code references columns that don't exist in actual database schema
+- Database uses camelCase column names but SQL files use snake_case
+- Assessment data needs to be manually inserted using correct column names
+
+### **Prevention:**
+- Always check actual database schema before writing SQL queries
+- Use correct camelCase column names when inserting data
+- Test APIs after database restoration to ensure all endpoints work
+- Verify column names match between Prisma schema and actual database
+
+### **Verification:**
+```bash
+# Check assessments count in database
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "SELECT COUNT(*) FROM assessments;"
+# Should return: 3 (or number of inserted assessments)
+
+# Test Assessments API
+curl -s "http://localhost:5001/api/assessments" | jq '.assessments | length'
+# Should return: 3
+
+# Test frontend proxy
+curl -s "http://localhost:3000/api/assessments" | jq '.success'
+# Should return: true
+
+# Test in frontend:
+# 1. Go to Assessments page
+# 2. Should show assessment list without errors
+# 3. Should display assessment cards with competency names
+```
+
+---
+
+## 🔧 **"Failed to create assessment" Error Fix**
+
+### **Problem:** 
+"Create New Assessment" page shows "Request failed with status code 500" error when trying to create assessments
+
+### **Root Cause:** 
+Database `NOT NULL` constraint on `competencyId` field conflicts with "Apply to All Competencies" feature
+
+### **Symptoms:**
+- Frontend shows: "Request failed with status code 500"
+- Backend logs show: `Failing row contains (..., null, null, ...)`
+- Error code: `23502` (NOT NULL constraint violation)
+- Assessment creation fails for both specific competencies and "Apply to All"
+
+### **Solution:**
+```bash
+# 1. Make competencyId nullable in database
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "ALTER TABLE assessments ALTER COLUMN \"competencyId\" DROP NOT NULL;"
+
+# 2. Verify constraint was removed
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "\d assessments" | grep "competencyId"
+# Should show: competencyId | text | | | (no "not null")
+
+# 3. Test assessment creation
+curl -X POST "http://localhost:5001/api/assessments" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test Assessment", "competencyId": null, "timeLimit": 30, "passingScore": 70, "maxAttempts": 3, "createdBy": "admin"}'
+# Should return: {"success":true,"assessment":{...}}
+
+# 4. Test with specific competency
+curl -X POST "http://localhost:5001/api/assessments" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Communication Test", "competencyId": "COMPETENCY_ID", "timeLimit": 25, "passingScore": 75, "maxAttempts": 2, "createdBy": "admin"}'
+# Should return: {"success":true,"assessment":{...}}
+```
+
+### **Why This Happens:**
+- "Apply to All Competencies" feature requires `competencyId` to be `null`
+- Database schema had `NOT NULL` constraint on `competencyId` column
+- Frontend sends `null` values for competencyId when "Apply to All" is selected
+- Database rejects `null` values due to constraint
+
+### **Prevention:**
+- Always check database constraints when implementing nullable field features
+- Test both specific competency and "Apply to All" scenarios during development
+- Verify database schema supports all application features
+- Use nullable fields for optional relationships
+
+### **Verification:**
+```bash
+# Test "Apply to All Competencies" creation
+curl -X POST "http://localhost:5001/api/assessments" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Universal Assessment", "competencyId": null, "createdBy": "admin"}'
+# Should succeed with competencyId: null
+
+# Test specific competency creation
+curl -X POST "http://localhost:5001/api/assessments" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Specific Assessment", "competencyId": "VALID_COMPETENCY_ID", "createdBy": "admin"}'
+# Should succeed with competencyId: "VALID_COMPETENCY_ID"
+
+# Test in frontend:
+# 1. Go to Create Assessment page
+# 2. Fill in required fields
+# 3. Check "Apply to All Competencies" OR select specific competency
+# 4. Click "Create Assessment"
+# 5. Should succeed without 500 error
+```
+
+---
+
 ## Assessment Updates Not Saving Fix
 
 **Issue**: Assessment updates not being saved in the frontend.
@@ -1065,3 +1404,180 @@ curl -s "http://localhost:5001/api/job-competencies?jobId={jobId}" | jq '.mappin
 # 5. Should be able to add/remove competencies
 # 6. Should be able to save changes
 ```
+
+---
+
+## 🧩 Question Bank: CSV Upload Imports 0 Items
+
+### Problem
+Upload returns `Successfully uploaded 0 questions` and errors like `Competency not found: <name>` even though the competency exists.
+
+### Root Causes
+- Exact string match on competency name (case/whitespace mismatch).
+- Level values not normalized to enum values (BASIC/INTERMEDIATE/ADVANCED/MASTERY).
+
+### Fix
+- Backend lookup updated to use case-insensitive, trimmed comparison and level normalization:
+  - `lower(trim(name)) = lower(trim(<csv_name>))`
+  - `competency_level.toUpperCase()` then cast to enum.
+
+### CSV Requirements
+- Headers: `text,type,competency_name,competency_level,points,explanation,correct_answer,option_1_text,option_1_is_correct,option_2_text,option_2_is_correct,option_3_text,option_3_is_correct,option_4_text,option_4_is_correct`
+- type: `MULTIPLE_CHOICE | TRUE_FALSE | SHORT_ANSWER | ESSAY`
+- competency_level: `BASIC | INTERMEDIATE | ADVANCED | MASTERY`
+- option_*_is_correct: `true | false`
+
+### Quick Verification
+```bash
+docker exec kafu-postgres psql -U kafu_user -d kafu_system -c "SELECT id,name FROM competencies WHERE lower(trim(name))=lower(trim('Learning and Development Execution')) LIMIT 1;"
+```
+
+---
+
+## 🔁 UI Changes Not Appearing (Stale Frontend Build)
+
+### Symptoms
+- Page does not reflect recent edits (e.g., buttons/heading color do not change).
+
+### Root Cause
+- Frontend container was serving an outdated cached build layer.
+
+### Solution (Clean Rebuild)
+```bash
+docker compose build --no-cache frontend && docker compose up -d frontend
+```
+Then hard refresh browser (Cmd/Ctrl+Shift+R).
+
+### Tip
+- Add a canary change (temporary red heading) to confirm the live page is using the latest build; remove after verification.
+
+## PostgreSQL Case-Sensitive Column Names Error
+
+**Issue**: "Failed to confirm user level: Invalid `prisma.$queryRaw()` invocation: Raw query failed. Code: `42703`. Message: `column "competencyid" does not exist`"
+
+**Root Cause**: 
+- PostgreSQL column names are case-sensitive when created with quotes (e.g., `"competencyId"`)
+- SQL queries using unquoted column names (e.g., `competencyId`) fail because PostgreSQL converts them to lowercase (`competencyid`)
+- The database has `"competencyId"` (with quotes) but queries use `competencyId` (without quotes)
+
+**Symptoms**:
+- User level confirmation fails with column not found error
+- Assessment submission works but level confirmation fails
+- Error occurs in `/api/user-assessments/confirm-level` endpoint
+
+**Solution**:
+```sql
+-- WRONG (causes error):
+SELECT user_id, competencyId FROM assessment_sessions WHERE id = ${sessionId}
+
+-- CORRECT (works):
+SELECT user_id, "competencyId" FROM assessment_sessions WHERE id = ${sessionId}
+```
+
+**Files Modified**: 
+- `backend/routes/userAssessments.js` - Fixed all instances of unquoted `competencyId` in SQL queries
+
+**Prevention**:
+- Always use double quotes around case-sensitive column names in raw SQL queries
+- Check database schema with `\d table_name` to see exact column names
+- Use consistent naming convention (camelCase with quotes in SQL)
+
+**Verification**:
+```bash
+# Test level confirmation
+curl -X POST "http://localhost:5001/api/user-assessments/confirm-level" \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "session-id", "userConfirmedLevel": "BASIC"}'
+
+# Should return: {"success":true}
+```
+
+---
+
+## 🔧 **Assessment System Complete Fix - Start & Submit Assessment Errors**
+
+### **Problem:** 
+Assessment system shows "Failed to start assessment" and "Failed to submit assessment" errors
+
+### **Root Cause:** 
+Multiple database schema mismatches between camelCase and snake_case column names across different tables
+
+### **Symptoms:**
+- Start Assessment API returns "Failed to start assessment"
+- Submit Assessment API returns "Failed to submit assessment" 
+- Backend logs show column name errors like:
+  - `column q.competencyid does not exist`
+  - `column qo.is_correct does not exist`
+  - `column "updatedAt" of relation "assessment_sessions" does not exist`
+
+### **Solution:**
+```bash
+# 1. Fix column name references in backend/routes/userAssessments.js:
+
+# Questions table uses camelCase (quoted):
+q."competencyId" = c.id
+q."competencyLevelId" = cl.id
+
+# Question_options table uses camelCase (quoted):
+qo."questionId" = ${question.id}
+qo."isCorrect" = true
+
+# Assessment_sessions table uses snake_case (unquoted):
+ORDER BY updated_at DESC LIMIT 1
+SET updated_at = NOW()
+
+# Assessment_responses table uses snake_case (unquoted):
+is_correct, points_earned, created_at, updated_at
+
+# Assessments table uses camelCase (quoted):
+ORDER BY "updatedAt" DESC LIMIT 1
+
+# 2. Copy updated file to container
+docker cp backend/routes/userAssessments.js kafu-backend-dev:/app/routes/userAssessments.js
+
+# 3. Restart backend
+docker compose -f docker-compose.dev.yml restart backend
+
+# 4. Link questions to competencies (if needed)
+docker exec kafu-postgres-dev psql -U kafu_user -d kafu_system -c "UPDATE questions SET \"competencyId\" = 'COMPETENCY_ID' WHERE id IN (SELECT id FROM questions LIMIT 10);"
+```
+
+### **Why This Happens:**
+- Different tables use different naming conventions (camelCase vs snake_case)
+- PostgreSQL is case-sensitive with quoted column names
+- Raw SQL queries must match exact column names from database schema
+- Assessment system spans multiple tables with different schemas
+
+### **Prevention:**
+- Always check table schema with `\d table_name` before writing SQL queries
+- Use consistent quoting for camelCase columns (`"columnName"`)
+- Use unquoted names for snake_case columns (`column_name`)
+- Test both start and submit assessment flows after any database changes
+
+### **Verification:**
+```bash
+# Test start assessment
+curl -X POST "http://localhost:5001/api/user-assessments/start" \
+  -H "Content-Type: application/json" \
+  -d '{"competencyId": "COMPETENCY_ID", "userId": "2254"}' | jq '.success'
+# Should return: true
+
+# Test submit assessment  
+curl -X POST "http://localhost:5001/api/user-assessments/submit" \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "SESSION_ID", "answers": [{"questionId": "QUESTION_ID", "selectedOptionId": "OPTION_ID"}]}' | jq '.success'
+# Should return: true
+
+# Test competencies list
+curl -s "http://localhost:5001/api/user-assessments/competencies?userId=2254" | jq '.success'
+# Should return: true
+```
+
+### **Files Modified:**
+- `backend/routes/userAssessments.js` - Fixed all column name references across start/submit/competencies endpoints
+
+### **Current Working State:**
+- **Start Assessment:** ✅ Working - Creates session, loads 10 questions with options
+- **Submit Assessment:** ✅ Working - Processes answers, calculates score and competency level
+- **Competencies List:** ✅ Working - Shows available competencies for user
+- **Complete Assessment Flow:** ✅ Working - End-to-end assessment process functional

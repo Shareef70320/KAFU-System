@@ -186,26 +186,27 @@ const NewAssessments = () => {
   const handleCreateAssessment = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const assessmentData = {
-      name: formData.get('name'),
-      description: formData.get('description'),
-      competencyId: formData.get('competencyId'),
-      isActive: formData.get('isActive') === 'on',
+    const title = formData.get('name');
+    const description = formData.get('description');
+    const selectedCompetencyId = formData.get('competencyId') || '';
+    const payload = {
+      title,
+      description,
+      competencyId: applyToAll ? null : (selectedCompetencyId || null),
+      numberOfQuestions: Number.isFinite(numQuestions) ? numQuestions : 10,
       shuffleQuestions: formData.get('shuffleQuestions') === 'on',
       allowMultipleAttempts: formData.get('allowMultipleAttempts') === 'on',
-      maxAttempts: parseInt(formData.get('maxAttempts')) || 3,
+      maxAttempts: parseInt(formData.get('maxAttempts')) || null,
       showTimer: formData.get('showTimer') === 'on',
-      timeLimitMinutes: parseInt(formData.get('timeLimitMinutes')) || 30,
+      timeLimit: parseInt(formData.get('timeLimitMinutes')) || null,
       forceTimeLimit: formData.get('forceTimeLimit') === 'on',
       showDashboard: formData.get('showDashboard') === 'on',
       showCorrectAnswers: formData.get('showCorrectAnswers') === 'on',
       showIncorrectAnswers: formData.get('showIncorrectAnswers') === 'on',
-      numQuestions: Number.isFinite(numQuestions) ? numQuestions : 10,
-      applyToAll,
-      questionIds: []
+      isActive: formData.get('isActive') === 'on'
     };
 
-    await createAssessmentMutation.mutateAsync(assessmentData);
+    await createAssessmentMutation.mutateAsync(payload);
   };
 
   const handleDeleteAssessment = async (assessmentId) => {
@@ -491,7 +492,7 @@ const NewAssessments = () => {
               <form onSubmit={handleCreateAssessment} className="space-y-6">
                 {/* Basic Information */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
+                  <h3 className="text-lg font-semibold text-red-600">Basic Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="name">Assessment Name *</Label>

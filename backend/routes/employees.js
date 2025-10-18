@@ -18,7 +18,8 @@ router.get('/', async (req, res) => {
       division = '', 
       location = '',
       jobCode = '',
-      sortBy = 'created_at',
+      // Default to 'sid' to avoid relying on non-existent created_at column in some DBs
+      sortBy = 'sid',
       sortOrder = 'desc'
     } = req.query;
 

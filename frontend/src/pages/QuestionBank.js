@@ -323,6 +323,24 @@ const QuestionBank = () => {
     return labelMap[type] || type;
   };
 
+  // Bulk Delete
+  const bulkDelete = async (mode) => {
+    if (!window.confirm(mode === 'all' ? 'Delete ALL questions? This cannot be undone.' : 'Delete all FILTERED questions? This cannot be undone.')) return;
+    try {
+      const payload = mode === 'all' ? {} : {
+        competencyId: selectedCompetency || undefined,
+        competencyLevelId: selectedLevel || undefined,
+        type: selectedType || undefined,
+        search: searchInput || undefined,
+      };
+      await api.post('/questions/bulk-delete', payload);
+      queryClient.invalidateQueries(['questions']);
+      toast({ title: 'Deleted', description: mode === 'all' ? 'All questions deleted' : 'Filtered questions deleted' });
+    } catch (e) {
+      toast({ title: 'Delete failed', description: 'Could not delete questions', variant: 'destructive' });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -351,10 +369,10 @@ const QuestionBank = () => {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Question Bank</h1>
+            <h1 className="text-3xl font-bold text-red-600">Question Bank</h1>
             <p className="text-gray-600 mt-2">Manage competency questions and assessment content</p>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex space-x-3 items-center">
             <Button
               onClick={() => navigate('/assessments')}
               variant="outline"
@@ -524,6 +542,10 @@ const QuestionBank = () => {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Questions ({filteredQuestions.length})</h2>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => bulkDelete('filtered')} className="text-red-600 border-red-200 hover:bg-red-50">Delete Filtered</Button>
+            <Button variant="outline" onClick={() => bulkDelete('all')} className="text-red-700 border-red-300 hover:bg-red-100">Delete All</Button>
+          </div>
         </div>
 
         {filteredQuestions.length === 0 ? (
