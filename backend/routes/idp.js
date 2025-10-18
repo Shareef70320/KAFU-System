@@ -13,6 +13,45 @@ const levelRank = (lvl) => {
 // POST /api/idp - create IDP entry if gap exists (manager action)
 router.post('/', async (req, res) => {
   try {
+    // First, ensure the idp_entries table exists
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM idp_entries LIMIT 1`;
+    } catch (tableError) {
+      if (tableError.code === 'P2010' && tableError.meta?.code === '42P01') {
+        // Table doesn't exist, create it
+        console.log('Creating idp_entries table...');
+        await prisma.$queryRaw`
+          CREATE TABLE IF NOT EXISTS idp_entries (
+            id TEXT PRIMARY KEY,
+            employee_id TEXT NOT NULL,
+            competency_id TEXT NOT NULL REFERENCES competencies(id) ON DELETE CASCADE,
+            required_level TEXT NOT NULL,
+            employee_level TEXT,
+            system_level TEXT,
+            manager_level TEXT,
+            intervention_id TEXT,
+            intervention_type_id TEXT,
+            custom_intervention_name TEXT,
+            target_date DATE,
+            priority TEXT NOT NULL DEFAULT 'MEDIUM',
+            status TEXT NOT NULL DEFAULT 'OPEN',
+            notes TEXT,
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+          )
+        `;
+        
+        // Create indexes
+        await prisma.$queryRaw`CREATE INDEX IF NOT EXISTS idx_idp_entries_employee_id ON idp_entries(employee_id)`;
+        await prisma.$queryRaw`CREATE INDEX IF NOT EXISTS idx_idp_entries_competency_id ON idp_entries(competency_id)`;
+        await prisma.$queryRaw`CREATE INDEX IF NOT EXISTS idx_idp_entries_status ON idp_entries(status)`;
+        
+        console.log('idp_entries table created successfully');
+      } else {
+        throw tableError;
+      }
+    }
+
     const { 
       employeeId, 
       competencyId, 
@@ -120,6 +159,19 @@ router.post('/', async (req, res) => {
 router.get('/:employeeId', async (req, res) => {
   try {
     const { employeeId } = req.params;
+    
+    // First, check if the idp_entries table exists
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM idp_entries LIMIT 1`;
+    } catch (tableError) {
+      if (tableError.code === 'P2010' && tableError.meta?.code === '42P01') {
+        // Table doesn't exist, return empty array
+        return res.json({ success: true, idps: [] });
+      } else {
+        throw tableError;
+      }
+    }
+    
     // Try enhanced query first, fallback to basic query if columns don't exist
     let rows;
     try {
