@@ -46,6 +46,15 @@ const MyIDP = () => {
 
   const idps = idpData?.idps || [];
 
+  // Debug logging
+  console.log('MyIDP Debug:', {
+    currentSid,
+    idpData,
+    idps,
+    isLoading,
+    error
+  });
+
   // Filter and sort IDPs
   const filteredIdps = idps
     .filter(idp => {
