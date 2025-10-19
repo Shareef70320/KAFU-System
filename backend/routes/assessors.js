@@ -223,11 +223,105 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Create multiple assessor-competency mappings (bulk)
+router.post('/bulk', async (req, res) => {
+  try {
+    const { assessorSid, competencies } = req.body;
+
+    // Validate required fields
+    if (!assessorSid || !competencies || !Array.isArray(competencies) || competencies.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: assessorSid and competencies array'
+      });
+    }
+
+    // Check if assessor exists
+    const assessor = await prisma.$queryRaw`
+      SELECT sid FROM employees WHERE sid = ${assessorSid}
+    `;
+
+    if (assessor.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Assessor not found'
+      });
+    }
+
+    // Validate each competency
+    for (const comp of competencies) {
+      if (!comp.competencyId || !comp.competencyLevel) {
+        return res.status(400).json({
+          success: false,
+          error: 'Each competency must have competencyId and competencyLevel'
+        });
+      }
+
+      if (!['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'].includes(comp.competencyLevel)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid competency level. Must be BASIC, INTERMEDIATE, ADVANCED, or MASTERY'
+        });
+      }
+
+      // Check if competency exists
+      const competency = await prisma.$queryRaw`
+        SELECT id FROM competencies WHERE id = ${comp.competencyId}
+      `;
+
+      if (competency.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Competency not found: ${comp.competencyId}`
+        });
+      }
+    }
+
+    // Create all mappings
+    const createdMappings = [];
+    const errors = [];
+
+    for (const comp of competencies) {
+      try {
+        const newMapping = await prisma.$queryRaw`
+          INSERT INTO assessor_competencies (id, assessor_sid, competency_id, competency_level)
+          VALUES (gen_random_uuid()::text, ${assessorSid}, ${comp.competencyId}, ${comp.competencyLevel})
+          RETURNING *
+        `;
+        createdMappings.push(newMapping[0]);
+      } catch (error) {
+        if (error.code === '23505') {
+          errors.push(`Assessor already assigned to competency ${comp.competencyId} at level ${comp.competencyLevel}`);
+        } else {
+          errors.push(`Failed to create mapping for competency ${comp.competencyId}: ${error.message}`);
+        }
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      mappings: createdMappings,
+      errors: errors,
+      summary: {
+        total: competencies.length,
+        created: createdMappings.length,
+        errors: errors.length
+      }
+    });
+  } catch (error) {
+    console.error('Error creating bulk assessor mappings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create bulk assessor mappings'
+    });
+  }
+});
+
 // Update assessor-competency mapping
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { competencyLevel, isActive } = req.body;
+    const { competencyLevel } = req.body;
 
     // Validate competency level if provided
     if (competencyLevel && !['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'].includes(competencyLevel)) {
@@ -246,11 +340,6 @@ router.put('/:id', async (req, res) => {
       updateValues.push(competencyLevel);
     }
 
-    if (isActive !== undefined) {
-      updateFields.push('is_active = $' + (updateValues.length + 1));
-      updateValues.push(isActive);
-    }
-
     if (updateFields.length === 0) {
       return res.status(400).json({
         success: false,
@@ -258,8 +347,7 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    updateValues.push(parseInt(id));
+    updateValues.push(id);
 
     const query = `
       UPDATE assessor_competencies 

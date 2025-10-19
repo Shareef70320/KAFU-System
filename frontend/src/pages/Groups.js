@@ -180,7 +180,7 @@ const Groups = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Groups Management</h1>
+          <h1 className="text-2xl font-bold" style={{ color: '#dc2626' }} data-testid="groups-title">Groups Management</h1>
           <p className="text-gray-600">Organize employees into groups for bulk management</p>
         </div>
         <Button

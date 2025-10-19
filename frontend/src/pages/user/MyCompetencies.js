@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -38,7 +38,7 @@ const MyCompetencies = () => {
     enabled: !!currentSid
   });
 
-  // Fetch competencies with questions and assessments for this user
+  // Fetch competencies with questions and assessments for this user (unfiltered)
   const { data: competenciesData, isLoading: competenciesLoading } = useQuery({
     queryKey: ['user-competencies', currentSid],
     queryFn: async () => {
@@ -60,8 +60,41 @@ const MyCompetencies = () => {
     }
   }, [employeeData]);
 
-  // Competencies with questions and assessments available
-  const competencies = competenciesData?.competencies || [];
+  // Resolve user's job -> jobId
+  const { data: jobsData } = useQuery({
+    queryKey: ['jobs'],
+    queryFn: async () => {
+      const res = await api.get('/jobs?page=1&limit=2000');
+      return res.data;
+    },
+    enabled: !!employeeData?.job_code
+  });
+
+  const jobId = useMemo(() => {
+    const jobs = jobsData?.jobs || jobsData || [];
+    const job = jobs.find(j => String(j.code) === String(employeeData?.job_code));
+    return job?.id || null;
+  }, [jobsData, employeeData]);
+
+  // Fetch job-competency mappings for this job
+  const { data: mappingsData } = useQuery({
+    queryKey: ['job-competencies', jobId],
+    queryFn: async () => {
+      const res = await api.get(`/job-competencies?jobId=${jobId}&limit=1000`);
+      return res.data;
+    },
+    enabled: !!jobId
+  });
+
+  // Filter competencies to only those mapped to the user's job
+  const competencies = useMemo(() => {
+    const all = competenciesData?.competencies || [];
+    if (!jobId) return [];
+    const mappings = mappingsData?.mappings || [];
+    if (!mappings.length) return [];
+    const allowedIds = new Set(mappings.map(m => m.competencyId));
+    return all.filter(c => allowedIds.has(c.id));
+  }, [competenciesData, mappingsData, jobId]);
 
   const getStatusColor = (status) => {
     switch (status) {

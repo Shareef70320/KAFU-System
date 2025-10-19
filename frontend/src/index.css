@@ -91,3 +91,15 @@
     @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;
   }
 }
+
+/* Temporary override to ensure modal headers display in black for verification */
+.fixed.inset-0 .border-b h3 {
+  color: #000 !important;
+}
+
+/* Stronger temporary override: force any red text inside modal overlays to black */
+.fixed.inset-0 .text-red-600,
+.fixed.inset-0 .text-red-700,
+.fixed.inset-0 .text-red-800 {
+  color: #000 !important;
+}

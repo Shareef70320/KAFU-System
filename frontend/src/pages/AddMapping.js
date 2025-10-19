@@ -35,6 +35,7 @@ const AddMapping = () => {
   // State for selected job and its competencies
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobCompetencies, setJobCompetencies] = useState([]); // Array of {competency, level}
+  const [existingJobCompetencies, setExistingJobCompetencies] = useState([]); // Array of existing mappings
 
   // Fetch jobs - get all jobs without pagination
   const { data: jobsData, error: jobsError } = useQuery({
@@ -50,9 +51,40 @@ const AddMapping = () => {
     retry: 1,
   });
 
+  // Fetch existing job competency mappings
+  const { data: mappingsData, error: mappingsError } = useQuery({
+    queryKey: ['jobCompetencies'],
+    queryFn: () => api.get('/job-competencies').then(res => res.data),
+    retry: 1,
+  });
+
   const jobs = jobsData?.jobs || [];
   const competencies = competenciesData?.competencies || [];
+  const mappings = mappingsData?.mappings || [];
 
+  // Function to get existing competencies for a job
+  const getExistingJobCompetencies = (jobId) => {
+    return mappings.filter(mapping => mapping.jobId === jobId);
+  };
+
+  // Handle job selection
+  const handleJobSelection = (job) => {
+    setSelectedJob(job);
+    
+    // Get existing competencies for this job
+    const existing = getExistingJobCompetencies(job.id);
+    setExistingJobCompetencies(existing);
+    
+    // Clear any manually added competencies when selecting a new job
+    setJobCompetencies([]);
+    
+    if (existing.length > 0) {
+      toast({
+        title: "Existing Profile Found",
+        description: `This job already has ${existing.length} competency mappings. You can add more competencies below.`,
+      });
+    }
+  };
 
   // Calculate stats from jobs data
   const jobStats = React.useMemo(() => {
@@ -132,14 +164,40 @@ const AddMapping = () => {
     return matchesSearch && matchesType && matchesFamily;
   });
 
+  // Check if a competency is already linked to the selected job
+  const isCompetencyLinked = (competencyId) => {
+    if (!selectedJob) return false;
+    
+    // Check if it's in existing competencies
+    const existsInExisting = existingJobCompetencies.some(mapping => mapping.competency.id === competencyId);
+    if (existsInExisting) return true;
+    
+    // Check if it's in newly added competencies
+    const existsInNew = jobCompetencies.some(comp => comp.competency.id === competencyId);
+    if (existsInNew) return true;
+    
+    return false;
+  };
+
   // Add competency to job profile
   const addCompetencyToJob = (competency, level) => {
-    // Check if competency already exists
-    const exists = jobCompetencies.some(comp => comp.competency.id === competency.id);
-    if (exists) {
+    // Check if competency already exists in newly added competencies
+    const existsInNew = jobCompetencies.some(comp => comp.competency.id === competency.id);
+    if (existsInNew) {
       toast({
         title: "Competency Already Added",
-        description: `${competency.name} is already in the job profile`,
+        description: `${competency.name} is already in the new competencies list`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if competency already exists in existing job competencies
+    const existsInExisting = existingJobCompetencies.some(mapping => mapping.competency.id === competency.id);
+    if (existsInExisting) {
+      toast({
+        title: "Competency Already Linked",
+        description: `${competency.name} is already linked to this job profile`,
         variant: "destructive",
       });
       return;
@@ -172,13 +230,16 @@ const AddMapping = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Job Profile Created",
-        description: `Job profile with ${jobCompetencies.length} competencies created successfully`,
+        title: existingJobCompetencies.length > 0 ? "Competencies Added" : "Job Profile Created",
+        description: existingJobCompetencies.length > 0 
+          ? `${jobCompetencies.length} new competencies added to existing profile`
+          : `Job profile with ${jobCompetencies.length} competencies created successfully`,
       });
       queryClient.invalidateQueries(['jobCompetencies']);
       // Reset selections
       setSelectedJob(null);
       setJobCompetencies([]);
+      setExistingJobCompetencies([]);
     },
     onError: (error) => {
       toast({
@@ -232,7 +293,7 @@ const AddMapping = () => {
   };
 
   // Show error if any API calls failed
-  if (jobsError || competenciesError) {
+  if (jobsError || competenciesError || mappingsError) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -241,6 +302,7 @@ const AddMapping = () => {
           <div className="space-y-2 text-sm text-gray-500">
             {jobsError && <p>Jobs: {jobsError.message}</p>}
             {competenciesError && <p>Competencies: {competenciesError.message}</p>}
+            {mappingsError && <p>Job Competencies: {mappingsError.message}</p>}
           </div>
           <Button 
             onClick={() => window.location.reload()} 
@@ -346,7 +408,7 @@ const AddMapping = () => {
                   {filteredJobs.map((job) => (
                     <div
                       key={job.id}
-                      onClick={() => setSelectedJob(job)}
+                      onClick={() => handleJobSelection(job)}
                       className={`p-4 border rounded-lg cursor-pointer transition-all ${
                         selectedJob?.id === job.id
                           ? 'border-blue-500 bg-blue-50'
@@ -455,11 +517,17 @@ const AddMapping = () => {
 
                 {/* Competencies List */}
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {filteredCompetencies.map((competency) => (
-                    <div
-                      key={competency.id}
-                      className="p-4 border rounded-lg border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                    >
+                  {filteredCompetencies.map((competency) => {
+                    const isLinked = isCompetencyLinked(competency.id);
+                    return (
+                      <div
+                        key={competency.id}
+                        className={`p-4 border rounded-lg ${
+                          isLinked 
+                            ? 'border-gray-300 bg-gray-100 opacity-75' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-2">
@@ -487,38 +555,51 @@ const AddMapping = () => {
                       
                       {/* Level Selection and Add Button */}
                       <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="flex items-center space-x-2">
-                          <select
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                addCompetencyToJob(competency, e.target.value);
-                                e.target.value = ''; // Reset selection
-                              }
-                            }}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Level</option>
-                            <option value="BASIC">Basic</option>
-                            <option value="INTERMEDIATE">Intermediate</option>
-                            <option value="ADVANCED">Advanced</option>
-                            <option value="MASTERY">Mastery</option>
-                          </select>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              const level = prompt('Enter level (BASIC, INTERMEDIATE, ADVANCED, MASTERY):');
-                              if (level && ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'].includes(level.toUpperCase())) {
-                                addCompetencyToJob(competency, level.toUpperCase());
-                              }
-                            }}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        {isLinked ? (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <Check className="h-4 w-4 text-green-600" />
+                              <span className="text-sm text-gray-600">Already linked to this job</span>
+                            </div>
+                            <Badge className="bg-green-100 text-green-800 text-xs">
+                              Linked
+                            </Badge>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  addCompetencyToJob(competency, e.target.value);
+                                  e.target.value = ''; // Reset selection
+                                }
+                              }}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">Select Level</option>
+                              <option value="BASIC">Basic</option>
+                              <option value="INTERMEDIATE">Intermediate</option>
+                              <option value="ADVANCED">Advanced</option>
+                              <option value="MASTERY">Mastery</option>
+                            </select>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const level = prompt('Enter level (BASIC, INTERMEDIATE, ADVANCED, MASTERY):');
+                                if (level && ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'].includes(level.toUpperCase())) {
+                                  addCompetencyToJob(competency, level.toUpperCase());
+                                }
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -548,19 +629,58 @@ const AddMapping = () => {
                       </div>
                     </div>
 
-                    {/* Selected Competencies */}
+                    {/* Existing Competencies */}
+                    {existingJobCompetencies.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
+                          <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
+                          Existing Competencies ({existingJobCompetencies.length})
+                        </h4>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {existingJobCompetencies.map((mapping) => (
+                            <div
+                              key={mapping.id}
+                              className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200"
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2 mb-1">
+                                  <BookOpen className="h-4 w-4 text-blue-600" />
+                                  <span className="font-medium text-sm text-gray-900">
+                                    {mapping.competency.name}
+                                  </span>
+                                </div>
+                                <Badge className={`text-xs ${getLevelColor(mapping.requiredLevel)}`}>
+                                  {mapping.requiredLevel}
+                                </Badge>
+                              </div>
+                              <Badge className="bg-blue-100 text-blue-800 text-xs">
+                                Existing
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New Competencies */}
                     <div>
-                      <h4 className="font-semibold text-gray-800 mb-3">
-                        Competencies ({jobCompetencies.length})
+                      <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
+                        <Plus className="h-4 w-4 mr-2 text-green-600" />
+                        New Competencies ({jobCompetencies.length})
                       </h4>
                       {jobCompetencies.length === 0 ? (
-                        <p className="text-gray-500 text-sm italic">No competencies added yet</p>
+                        <p className="text-gray-500 text-sm italic">
+                          {existingJobCompetencies.length > 0 
+                            ? 'Add additional competencies below' 
+                            : 'No competencies added yet'
+                          }
+                        </p>
                       ) : (
-                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
                           {jobCompetencies.map((comp, index) => (
                             <div
                               key={`${comp.competency.id}-${index}`}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                              className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200"
                             >
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2 mb-1">
@@ -573,14 +693,19 @@ const AddMapping = () => {
                                   {comp.level}
                                 </Badge>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeCompetencyFromJob(comp.competency.id)}
-                                className="text-red-600 hover:text-red-700 p-1"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center space-x-2">
+                                <Badge className="bg-green-100 text-green-800 text-xs">
+                                  New
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeCompetencyFromJob(comp.competency.id)}
+                                  className="text-red-600 hover:text-red-700 p-1"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -593,7 +718,12 @@ const AddMapping = () => {
                       disabled={addMappingMutation.isPending || jobCompetencies.length === 0}
                       className="w-full bg-blue-600 hover:bg-blue-700"
                     >
-                      {addMappingMutation.isPending ? 'Creating Profile...' : `Create Job Profile (${jobCompetencies.length} competencies)`}
+                      {addMappingMutation.isPending 
+                        ? 'Adding Competencies...' 
+                        : existingJobCompetencies.length > 0 
+                          ? `Add ${jobCompetencies.length} New Competencies`
+                          : `Create Job Profile (${jobCompetencies.length} competencies)`
+                      }
                     </Button>
                   </div>
                 ) : (

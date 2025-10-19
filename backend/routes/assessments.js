@@ -21,14 +21,6 @@ router.get('/', async (req, res) => {
         a."timeLimit" as "timeLimit",
         a."passingScore" as "passingScore",
         a."maxAttempts" as "maxAttempts",
-        a."numberOfQuestions" as "numberOfQuestions",
-        a."shuffleQuestions" as "shuffleQuestions",
-        a."allowMultipleAttempts" as "allowMultipleAttempts",
-        a."showTimer" as "showTimer",
-        a."forceTimeLimit" as "forceTimeLimit",
-        a."showDashboard" as "showDashboard",
-        a."showCorrectAnswers" as "showCorrectAnswers",
-        a."showIncorrectAnswers" as "showIncorrectAnswers",
         (a."competencyId" IS NULL) as "applyToAll",
         a."createdBy" as "createdBy",
         a."createdAt" as "createdAt",
@@ -85,14 +77,6 @@ router.get('/:id', async (req, res) => {
         a."timeLimit" as "timeLimit",
         a."passingScore" as "passingScore",
         a."maxAttempts" as "maxAttempts",
-        a."numberOfQuestions" as "numberOfQuestions",
-        a."shuffleQuestions" as "shuffleQuestions",
-        a."allowMultipleAttempts" as "allowMultipleAttempts",
-        a."showTimer" as "showTimer",
-        a."forceTimeLimit" as "forceTimeLimit",
-        a."showDashboard" as "showDashboard",
-        a."showCorrectAnswers" as "showCorrectAnswers",
-        a."showIncorrectAnswers" as "showIncorrectAnswers",
         (a."competencyId" IS NULL) as "applyToAll",
         a."createdBy" as "createdBy",
         a."createdAt" as "createdAt",
@@ -152,29 +136,17 @@ router.post('/', async (req, res) => {
       timeLimit,
       passingScore,
       maxAttempts,
-      createdBy,
-      numberOfQuestions,
-      shuffleQuestions,
-      allowMultipleAttempts,
-      showTimer,
-      forceTimeLimit,
-      showDashboard,
-      showCorrectAnswers,
-      showIncorrectAnswers
+      createdBy
     } = req.body;
 
     const assessment = await prisma.$queryRaw`
       INSERT INTO assessments (
         id, title, description, "competencyId", "competencyLevelId", 
         "timeLimit", "passingScore", "maxAttempts", "createdBy", 
-        "numberOfQuestions", "shuffleQuestions", "allowMultipleAttempts",
-        "showTimer", "forceTimeLimit", "showDashboard", "showCorrectAnswers", "showIncorrectAnswers",
         "isActive", "createdAt", "updatedAt"
       ) VALUES (
         gen_random_uuid()::text, ${title}, ${description || null}, ${competencyId}, ${competencyLevelId},
         ${timeLimit || null}, ${passingScore || 70.0}, ${maxAttempts || null}, ${createdBy || null},
-        ${numberOfQuestions || 10}, ${shuffleQuestions || true}, ${allowMultipleAttempts || true},
-        ${showTimer || true}, ${forceTimeLimit || false}, ${showDashboard || true}, ${showCorrectAnswers || true}, ${showIncorrectAnswers || true},
         true, NOW(), NOW()
       ) RETURNING *
     `;
@@ -203,14 +175,6 @@ router.put('/:id', async (req, res) => {
       passingScore,
       maxAttempts,
       isActive,
-      numberOfQuestions,
-      shuffleQuestions,
-      allowMultipleAttempts,
-      showTimer,
-      forceTimeLimit,
-      showDashboard,
-      showCorrectAnswers,
-      showIncorrectAnswers,
       applyToAll
     } = req.body;
 
@@ -231,18 +195,6 @@ router.put('/:id', async (req, res) => {
     if (passingScore !== undefined) { updateFields.push(`"passingScore" = $${updateValues.length + 1}`); updateValues.push(passingScore); }
     if (maxAttempts !== undefined) { updateFields.push(`"maxAttempts" = $${updateValues.length + 1}`); updateValues.push(maxAttempts); }
     if (isActive !== undefined) { updateFields.push(`"isActive" = $${updateValues.length + 1}`); updateValues.push(isActive); }
-    if (numberOfQuestions !== undefined) { 
-      const numQs = parseInt(numberOfQuestions, 10);
-      updateFields.push(`"numberOfQuestions" = $${updateValues.length + 1}`); 
-      updateValues.push(Number.isFinite(numQs) ? numQs : 10); 
-    }
-    if (shuffleQuestions !== undefined) { updateFields.push(`"shuffleQuestions" = $${updateValues.length + 1}`); updateValues.push(shuffleQuestions); }
-    if (allowMultipleAttempts !== undefined) { updateFields.push(`"allowMultipleAttempts" = $${updateValues.length + 1}`); updateValues.push(allowMultipleAttempts); }
-    if (showTimer !== undefined) { updateFields.push(`"showTimer" = $${updateValues.length + 1}`); updateValues.push(showTimer); }
-    if (forceTimeLimit !== undefined) { updateFields.push(`"forceTimeLimit" = $${updateValues.length + 1}`); updateValues.push(forceTimeLimit); }
-    if (showDashboard !== undefined) { updateFields.push(`"showDashboard" = $${updateValues.length + 1}`); updateValues.push(showDashboard); }
-    if (showCorrectAnswers !== undefined) { updateFields.push(`"showCorrectAnswers" = $${updateValues.length + 1}`); updateValues.push(showCorrectAnswers); }
-    if (showIncorrectAnswers !== undefined) { updateFields.push(`"showIncorrectAnswers" = $${updateValues.length + 1}`); updateValues.push(showIncorrectAnswers); }
 
     updateFields.push(`"updatedAt" = NOW()`);
     updateValues.push(id);

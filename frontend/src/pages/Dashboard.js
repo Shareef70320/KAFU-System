@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Users, 
   UserCheck, 
@@ -11,13 +11,30 @@ import {
   UserCog,
   BookOpen
 } from 'lucide-react';
+import api from '../lib/api';
 
 const Dashboard = () => {
-  // Mock data for demonstration
+  const [totalEmployees, setTotalEmployees] = useState(0);
+
+  useEffect(() => {
+    const fetchEmployeesCount = async () => {
+      try {
+        // Use a large limit to fetch all employees and derive total count
+        const res = await api.get('/employees?limit=2000');
+        const count = Array.isArray(res.data?.employees) ? res.data.employees.length : 0;
+        setTotalEmployees(count);
+      } catch (_) {
+        // Leave default 0 on error; dashboard remains functional
+      }
+    };
+    fetchEmployeesCount();
+  }, []);
+
+  // Stats, with Total Users driven by employees count
   const stats = [
     {
       name: 'Total Users',
-      value: '1,234',
+      value: totalEmployees.toLocaleString(),
       change: '+12%',
       changeType: 'positive',
       icon: Users,
@@ -121,7 +138,7 @@ const Dashboard = () => {
       <div className="loyverse-card">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Welcome back!</h1>
+            <h1 className="text-2xl font-bold text-gray-500">Welcome back!</h1>
             <p className="text-gray-600">Here's what's happening with your competency framework system.</p>
           </div>
           <div className="flex items-center space-x-2 text-sm text-gray-500">

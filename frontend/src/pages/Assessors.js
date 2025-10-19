@@ -42,8 +42,7 @@ const Assessors = () => {
   // Form state for adding new mapping
   const [newMapping, setNewMapping] = useState({
     assessorSid: '',
-    competencyId: '',
-    competencyLevel: 'BASIC'
+    competencies: [] // Changed from single competency to array
   });
 
   // Search states for modal
@@ -52,8 +51,7 @@ const Assessors = () => {
 
   // Form state for editing mapping
   const [editMapping, setEditMapping] = useState({
-    competencyLevel: '',
-    isActive: true
+    competencyLevel: ''
   });
 
   useEffect(() => {
@@ -116,16 +114,27 @@ const Assessors = () => {
 
   const handleAddMapping = async () => {
     try {
-      const response = await api.post('/assessors', newMapping);
+      const response = await api.post('/assessors/bulk', {
+        assessorSid: newMapping.assessorSid,
+        competencies: newMapping.competencies
+      });
       
       if (response.data.success) {
+        const { summary } = response.data;
         toast({
           title: 'Success',
-          description: 'Assessor mapping added successfully',
+          description: `Created ${summary.created} assessor mapping${summary.created !== 1 ? 's' : ''}${summary.errors > 0 ? ` (${summary.errors} failed)` : ''}`,
           variant: 'default'
         });
+        
+        if (response.data.errors && response.data.errors.length > 0) {
+          console.warn('Some mappings failed:', response.data.errors);
+        }
+        
         setShowAddModal(false);
-        setNewMapping({ assessorSid: '', competencyId: '', competencyLevel: 'BASIC' });
+        setNewMapping({ assessorSid: '', competencies: [] });
+        setAssessorSearchTerm('');
+        setCompetencySearchTerm('');
         fetchData();
       }
     } catch (error) {
@@ -191,8 +200,7 @@ const Assessors = () => {
   const openEditModal = (mapping) => {
     setSelectedMapping(mapping);
     setEditMapping({
-      competencyLevel: mapping.competency_level,
-      isActive: mapping.is_active
+      competencyLevel: mapping.competency_level
     });
     setShowEditModal(true);
   };
@@ -370,94 +378,129 @@ const Assessors = () => {
         </CardContent>
       </Card>
 
-      {/* Assessor Mappings */}
+      {/* Assessor Mappings - Grouped by Assessor */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredMappings.map((mapping) => (
-          <Card key={mapping.id} className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              {/* Header with Photo and Actions */}
-              <div className="flex items-start space-x-4 mb-4">
-                <div className="flex-shrink-0">
-                  <EmployeePhoto
-                    sid={mapping.assessor_sid}
-                    firstName={mapping.first_name}
-                    lastName={mapping.last_name}
-                    size="large"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900 truncate">
-                      {mapping.first_name} {mapping.last_name}
-                    </h3>
-                    <div className="flex space-x-1">
-                      <Button variant="outline" size="sm" onClick={() => openEditModal(mapping)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDeleteMapping(mapping.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+        {(() => {
+          // Group mappings by assessor_sid
+          const groupedMappings = filteredMappings.reduce((acc, mapping) => {
+            if (!acc[mapping.assessor_sid]) {
+              acc[mapping.assessor_sid] = [];
+            }
+            acc[mapping.assessor_sid].push(mapping);
+            return acc;
+          }, {});
+
+          return Object.entries(groupedMappings).map(([assessorSid, mappings]) => {
+            const firstMapping = mappings[0]; // Use first mapping for assessor info
+            return (
+              <Card key={assessorSid} className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-6">
+                  {/* Header with Photo and Actions */}
+                  <div className="flex items-start space-x-4 mb-4">
+                    <div className="flex-shrink-0">
+                      <EmployeePhoto
+                        sid={firstMapping.assessor_sid}
+                        firstName={firstMapping.first_name}
+                        lastName={firstMapping.last_name}
+                        size="large"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900 truncate">
+                          {firstMapping.first_name} {firstMapping.last_name}
+                        </h3>
+                      </div>
+                      
+                      <p className="text-sm text-gray-600 mt-1">
+                        {firstMapping.job_title || 'No Job Title'}
+                      </p>
                     </div>
                   </div>
-                  
-                  <p className="text-sm text-gray-600 mt-1">
-                    {mapping.job_title || 'No Job Title'}
-                  </p>
-                </div>
-              </div>
 
-              {/* Competency Info - Prominent Position */}
-              <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-gray-900 text-base">{mapping.competency_name}</h4>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(mapping.competency_level)}`}>
-                    {mapping.competency_level}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs font-medium">
-                    {mapping.competency_type}
-                  </span>
-                  <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 text-xs font-medium">
-                    {mapping.competency_family}
-                  </span>
-                </div>
-              </div>
+                  {/* Competencies Section */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-900">Competencies ({mappings.length})</h4>
+                      <span className="text-xs text-gray-500">Assessor</span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {mappings.map((mapping) => (
+                        <div key={mapping.id} className="p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="font-medium text-gray-900 text-sm">{mapping.competency_name}</h5>
+                            <div className="flex items-center space-x-2">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getLevelColor(mapping.competency_level)}`}>
+                                {mapping.competency_level}
+                              </span>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => openEditModal(mapping)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => handleDeleteMapping(mapping.id)}
+                                className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 text-xs text-gray-600">
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 font-medium">
+                              {mapping.competency_type}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-100 text-purple-800 font-medium">
+                              {mapping.competency_family}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Employee Details */}
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center text-sm text-gray-500">
-                  <User className="h-4 w-4 mr-2" />
-                  <span className="font-mono">{mapping.assessor_sid}</span>
-                </div>
-                
-                <div className="flex items-center text-sm text-gray-500">
-                  <Mail className="h-4 w-4 mr-2" />
-                  <span className="truncate">{mapping.email}</span>
-                </div>
-                
-                <div className="flex items-center text-sm text-gray-500">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  <span>{mapping.division || 'No Division'}</span>
-                </div>
-              </div>
+                  {/* Employee Details */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-sm text-gray-500">
+                      <User className="h-4 w-4 mr-2" />
+                      <span className="font-mono">{firstMapping.assessor_sid}</span>
+                    </div>
+                    
+                    <div className="flex items-center text-sm text-gray-500">
+                      <Mail className="h-4 w-4 mr-2" />
+                      <span className="truncate">{firstMapping.email}</span>
+                    </div>
+                    
+                    <div className="flex items-center text-sm text-gray-500">
+                      <MapPin className="h-4 w-4 mr-2" />
+                      <span>{firstMapping.division || 'No Division'}</span>
+                    </div>
+                  </div>
 
-              {/* Status Badge */}
-              <div className="flex justify-between items-center">
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  mapping.is_active 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {mapping.is_active ? 'Active' : 'Inactive'}
-                </span>
-                <span className="text-xs text-gray-400">
-                  Assessor Mapping
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                  {/* Status Badge */}
+                  <div className="flex justify-between items-center">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                      firstMapping.is_active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {firstMapping.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {mappings.length} Competenc{mappings.length !== 1 ? 'ies' : 'y'}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          });
+        })()}
       </div>
 
       {/* No Results */}
@@ -589,32 +632,80 @@ const Assessors = () => {
                 {/* Competency Cards Grid */}
                 <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {filteredCompetencies.map(competency => (
-                      <Card 
-                        key={competency.id} 
-                        className={`cursor-pointer transition-all hover:shadow-md ${
-                          newMapping.competencyId === competency.id 
-                            ? 'ring-2 ring-blue-500 bg-blue-50' 
-                            : 'hover:bg-white'
-                        }`}
-                        onClick={() => setNewMapping({...newMapping, competencyId: competency.id})}
-                      >
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
-                            <h4 className="font-medium text-gray-900">{competency.name}</h4>
-                            <p className="text-sm text-gray-600 line-clamp-2">{competency.definition}</p>
-                            <div className="flex items-center space-x-2">
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                {competency.type}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                {competency.family}
-                              </span>
+                    {filteredCompetencies.map(competency => {
+                      const isSelected = newMapping.competencies.some(comp => comp.competencyId === competency.id);
+                      return (
+                        <Card 
+                          key={competency.id} 
+                          className={`cursor-pointer transition-all hover:shadow-md ${
+                            isSelected
+                              ? 'ring-2 ring-blue-500 bg-blue-50' 
+                              : 'hover:bg-white'
+                          }`}
+                          onClick={() => {
+                            if (isSelected) {
+                              // Remove competency
+                              setNewMapping({
+                                ...newMapping,
+                                competencies: newMapping.competencies.filter(comp => comp.competencyId !== competency.id)
+                              });
+                            } else {
+                              // Add competency with default level
+                              setNewMapping({
+                                ...newMapping,
+                                competencies: [...newMapping.competencies, {
+                                  competencyId: competency.id,
+                                  competencyLevel: 'BASIC'
+                                }]
+                              });
+                            }
+                          }}
+                        >
+                          <CardContent className="p-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-medium text-gray-900">{competency.name}</h4>
+                                {isSelected && (
+                                  <CheckCircle className="h-5 w-5 text-blue-600" />
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600 line-clamp-2">{competency.definition}</p>
+                              <div className="flex items-center space-x-2">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  {competency.type}
+                                </span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                  {competency.family}
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <div className="mt-2">
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Level:</label>
+                                  <select
+                                    value={newMapping.competencies.find(comp => comp.competencyId === competency.id)?.competencyLevel || 'BASIC'}
+                                    onChange={(e) => {
+                                      const updatedCompetencies = newMapping.competencies.map(comp => 
+                                        comp.competencyId === competency.id 
+                                          ? { ...comp, competencyLevel: e.target.value }
+                                          : comp
+                                      );
+                                      setNewMapping({ ...newMapping, competencies: updatedCompetencies });
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    <option value="BASIC">Basic</option>
+                                    <option value="INTERMEDIATE">Intermediate</option>
+                                    <option value="ADVANCED">Advanced</option>
+                                    <option value="MASTERY">Mastery</option>
+                                  </select>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
                   {filteredCompetencies.length === 0 && (
                     <div className="text-center py-8 text-gray-500">
@@ -624,49 +715,57 @@ const Assessors = () => {
                 </div>
               </div>
 
-              {/* Step 3: Select Competency Level */}
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-semibold text-purple-600">3</span>
+              {/* Selected Competencies Summary */}
+              {newMapping.competencies.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-semibold text-purple-600">3</span>
+                    </div>
+                    <label className="text-lg font-medium text-gray-900">Selected Competencies ({newMapping.competencies.length})</label>
                   </div>
-                  <label className="text-lg font-medium text-gray-900">Select Competency Level</label>
+                  <div className="space-y-2">
+                    {newMapping.competencies.map((comp, index) => {
+                      const competency = competencies.find(c => c.id === comp.competencyId);
+                      return (
+                        <div key={comp.competencyId} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">{competency?.name}</h4>
+                            <p className="text-sm text-gray-600">{competency?.type} • {competency?.family}</p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              comp.competencyLevel === 'BASIC' ? 'bg-blue-100 text-blue-800' :
+                              comp.competencyLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
+                              comp.competencyLevel === 'ADVANCED' ? 'bg-green-100 text-green-800' :
+                              'bg-purple-100 text-purple-800'
+                            }`}>
+                              {comp.competencyLevel}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setNewMapping({
+                                  ...newMapping,
+                                  competencies: newMapping.competencies.filter((_, i) => i !== index)
+                                });
+                              }}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { value: 'BASIC', label: 'Basic', description: 'Fundamental understanding', color: 'blue' },
-                    { value: 'INTERMEDIATE', label: 'Intermediate', description: 'Practical application', color: 'yellow' },
-                    { value: 'ADVANCED', label: 'Advanced', description: 'Expert level mastery', color: 'green' },
-                    { value: 'MASTERY', label: 'Mastery', description: 'Leadership and guidance', color: 'purple' }
-                  ].map((level) => (
-                    <button
-                      key={level.value}
-                      onClick={() => setNewMapping({...newMapping, competencyLevel: level.value})}
-                      className={`p-4 rounded-lg border-2 transition-all ${
-                        newMapping.competencyLevel === level.value
-                          ? `border-${level.color}-500 bg-${level.color}-50`
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <div className={`w-4 h-4 rounded-full mx-auto mb-2 ${
-                          newMapping.competencyLevel === level.value
-                            ? `bg-${level.color}-500`
-                            : 'bg-gray-300'
-                        }`}></div>
-                        <h4 className="font-medium text-gray-900">{level.label}</h4>
-                        <p className="text-xs text-gray-500 mt-1">{level.description}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
 
               {/* Summary */}
-              {newMapping.assessorSid && newMapping.competencyId && newMapping.competencyLevel && (
+              {newMapping.assessorSid && newMapping.competencies.length > 0 && (
                 <div className="mt-6 p-6 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
                   <h4 className="font-medium text-gray-900 mb-4 text-center">Mapping Summary</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="text-center">
                       <div className="text-sm text-gray-600 mb-1">Assessor</div>
                       <div className="font-medium">
@@ -677,23 +776,24 @@ const Assessors = () => {
                       </div>
                     </div>
                     <div className="text-center">
-                      <div className="text-sm text-gray-600 mb-1">Competency</div>
-                      <div className="font-medium">
-                        {competencies.find(comp => comp.id === newMapping.competencyId)?.name}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {competencies.find(comp => comp.id === newMapping.competencyId)?.type}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-sm text-gray-600 mb-1">Level</div>
-                      <div className={`font-medium px-3 py-1 rounded-full text-sm inline-block ${
-                        newMapping.competencyLevel === 'BASIC' ? 'bg-blue-100 text-blue-800' :
-                        newMapping.competencyLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
-                        newMapping.competencyLevel === 'ADVANCED' ? 'bg-green-100 text-green-800' :
-                        'bg-purple-100 text-purple-800'
-                      }`}>
-                        {newMapping.competencyLevel}
+                      <div className="text-sm text-gray-600 mb-1">Competencies ({newMapping.competencies.length})</div>
+                      <div className="space-y-1">
+                        {newMapping.competencies.map((comp, index) => {
+                          const competency = competencies.find(c => c.id === comp.competencyId);
+                          return (
+                            <div key={index} className="text-xs">
+                              <span className="font-medium">{competency?.name}</span>
+                              <span className={`ml-1 px-1 py-0.5 rounded text-xs ${
+                                comp.competencyLevel === 'BASIC' ? 'bg-blue-100 text-blue-800' :
+                                comp.competencyLevel === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
+                                comp.competencyLevel === 'ADVANCED' ? 'bg-green-100 text-green-800' :
+                                'bg-purple-100 text-purple-800'
+                              }`}>
+                                {comp.competencyLevel}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -709,7 +809,7 @@ const Assessors = () => {
                   setShowAddModal(false);
                   setAssessorSearchTerm('');
                   setCompetencySearchTerm('');
-                  setNewMapping({ assessorSid: '', competencyId: '', competencyLevel: 'BASIC' });
+                  setNewMapping({ assessorSid: '', competencies: [] });
                 }}
                 className="px-6"
               >
@@ -717,11 +817,11 @@ const Assessors = () => {
               </Button>
               <Button 
                 onClick={handleAddMapping}
-                disabled={!newMapping.assessorSid || !newMapping.competencyId || !newMapping.competencyLevel}
+                disabled={!newMapping.assessorSid || newMapping.competencies.length === 0}
                 className="bg-green-600 hover:bg-green-700 px-6 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Create Mapping
+                Create {newMapping.competencies.length} Mapping{newMapping.competencies.length !== 1 ? 's' : ''}
               </Button>
             </div>
           </div>

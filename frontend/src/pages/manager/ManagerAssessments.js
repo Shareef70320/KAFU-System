@@ -28,8 +28,13 @@ const ManagerAssessments = () => {
     mutationFn: async ({ sessionId, level }) => {
       await api.post('/user-assessments/manager-level', { sessionId, managerSelectedLevel: level });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['manager-latest-by-user', searchSid] });
+    onSuccess: async () => {
+      // Hard refresh of data to reflect saved state
+      await queryClient.invalidateQueries({ queryKey: ['manager-latest-by-user', searchSid] });
+      await refetch();
+    },
+    onError: (error) => {
+      console.error('Manager level save failed:', error);
     }
   });
 
@@ -112,6 +117,7 @@ const ManagerAssessments = () => {
                       <Select
                         value={selectedLevels[r.sessionId] || r.managerSelectedLevel || ''}
                         onValueChange={(val) => setSelectedLevels(prev => ({ ...prev, [r.sessionId]: val }))}
+                        disabled={Boolean(r.managerSelectedLevel)}
                       >
                         <SelectTrigger className="w-40">
                           <SelectValue placeholder="Select level" />
@@ -128,7 +134,7 @@ const ManagerAssessments = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleAssign(r.sessionId)}
-                        disabled={(!selectedLevels[r.sessionId] && !r.managerSelectedLevel) || saveMutation.isPending}
+                        disabled={Boolean(r.managerSelectedLevel) || !selectedLevels[r.sessionId] || saveMutation.isPending}
                       >
                         <Save className="h-4 w-4 mr-1" /> Assign
                       </Button>

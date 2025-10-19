@@ -50,6 +50,12 @@ const JobCompetencyMapping = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingMapping, setEditingMapping] = useState(null);
   
+  // State for job profile edit modal
+  const [showJobProfileModal, setShowJobProfileModal] = useState(false);
+  const [editingJobProfile, setEditingJobProfile] = useState(null);
+  const [availableCompetencies, setAvailableCompetencies] = useState([]);
+  const [competencySearchTerm, setCompetencySearchTerm] = useState('');
+  
 
   // Fetch jobs - get all jobs without pagination
   const { data: jobsData } = useQuery({
@@ -165,9 +171,43 @@ const JobCompetencyMapping = () => {
     }
   });
 
+  // Create mapping mutation
+  const createMappingMutation = useMutation({
+    mutationFn: async (data) => {
+      await api.post('/job-competencies', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['jobCompetencies']);
+    }
+  });
+
   const handleDeleteMapping = (mappingId) => {
     if (window.confirm('Are you sure you want to delete this competency from the job profile?')) {
       deleteMappingMutation.mutate(mappingId);
+    }
+  };
+
+  // Handle delete from job profile edit modal
+  const handleDeleteFromJobProfile = (mappingId) => {
+    if (window.confirm('Are you sure you want to delete this competency from the job profile?')) {
+      deleteMappingMutation.mutate(mappingId, {
+        onSuccess: () => {
+          // Update the local state to remove the deleted competency
+          if (editingJobProfile) {
+            const updatedCompetencies = editingJobProfile.competencies.filter(comp => comp.id !== mappingId);
+            setEditingJobProfile({
+              ...editingJobProfile,
+              competencies: updatedCompetencies
+            });
+            
+            // Also update available competencies to include the deleted one
+            const deletedMapping = editingJobProfile.competencies.find(comp => comp.id === mappingId);
+            if (deletedMapping) {
+              setAvailableCompetencies(prev => [...prev, deletedMapping.competency]);
+            }
+          }
+        }
+      });
     }
   };
 
@@ -187,6 +227,74 @@ const JobCompetencyMapping = () => {
         }
       });
     }
+  };
+
+  // Handle job profile editing
+  const handleEditJobProfile = (profile) => {
+    setEditingJobProfile(profile);
+    
+    // Filter out competencies that are already assigned to this job
+    const assignedCompetencyIds = profile.competencies.map(comp => comp.competency.id);
+    const available = competencies.filter(comp => !assignedCompetencyIds.includes(comp.id));
+    setAvailableCompetencies(available);
+    
+    setShowJobProfileModal(true);
+  };
+
+  // Handle adding new competency to job profile
+  const handleAddCompetencyToProfile = (competency, level) => {
+    if (editingJobProfile) {
+      createMappingMutation.mutate({
+        jobId: editingJobProfile.job.id,
+        competencyId: competency.id,
+        requiredLevel: level,
+        isRequired: true
+      }, {
+        onSuccess: () => {
+          // Update local state to add the new competency
+          const newMapping = {
+            id: `temp-${Date.now()}`, // Temporary ID until we get the real one
+            competency: competency,
+            requiredLevel: level,
+            isRequired: true
+          };
+          
+          setEditingJobProfile({
+            ...editingJobProfile,
+            competencies: [...editingJobProfile.competencies, newMapping]
+          });
+          
+          // Remove from available competencies
+          setAvailableCompetencies(prev => prev.filter(comp => comp.id !== competency.id));
+        }
+      });
+    }
+  };
+
+  // Handle updating competency level in job profile
+  const handleUpdateCompetencyLevel = (mappingId, newLevel) => {
+    updateMappingMutation.mutate({
+      id: mappingId,
+      data: {
+        requiredLevel: newLevel,
+        isRequired: true
+      }
+    }, {
+      onSuccess: () => {
+        // Update local state to reflect the level change
+        if (editingJobProfile) {
+          const updatedCompetencies = editingJobProfile.competencies.map(comp => 
+            comp.id === mappingId 
+              ? { ...comp, requiredLevel: newLevel }
+              : comp
+          );
+          setEditingJobProfile({
+            ...editingJobProfile,
+            competencies: updatedCompetencies
+          });
+        }
+      }
+    });
   };
 
 
@@ -489,7 +597,7 @@ const JobCompetencyMapping = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/edit-mapping/${profile.job.id}`)}
+                          onClick={() => handleEditJobProfile(profile)}
                           className="flex items-center space-x-1"
                         >
                           <Edit className="h-4 w-4" />
@@ -812,6 +920,196 @@ const JobCompetencyMapping = () => {
                     </Button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Job Profile Edit Modal */}
+        {showJobProfileModal && editingJobProfile && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-6 border-b">
+                <div className="flex items-center space-x-3">
+                  <Building2 className="h-6 w-6 text-blue-600" />
+                  <div>
+                    <h2 className="text-xl font-semibold">Edit Job Profile</h2>
+                    <p className="text-sm text-gray-600">{editingJobProfile.job.title} ({editingJobProfile.job.code})</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowJobProfileModal(false);
+                    setEditingJobProfile(null);
+                    setAvailableCompetencies([]);
+                    setCompetencySearchTerm('');
+                  }}
+                >
+                  <X className="h-6 w-6" />
+                </Button>
+              </div>
+              
+              <div className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Existing Competencies */}
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                      <BookOpen className="h-5 w-5 mr-2 text-green-600" />
+                      Current Competencies ({editingJobProfile.competencies.length})
+                    </h3>
+                    
+                    {editingJobProfile.competencies.length === 0 ? (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg">
+                        <BookOpen className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">No competencies assigned yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {editingJobProfile.competencies.map((comp) => (
+                          <div
+                            key={comp.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="font-medium text-sm text-gray-900">
+                                  {comp.competency.name}
+                                </span>
+                                <Badge className={`text-xs ${getLevelColor(comp.requiredLevel)}`}>
+                                  {comp.requiredLevel}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-gray-600">{comp.competency.family}</p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Select
+                                value={comp.requiredLevel}
+                                onValueChange={(newLevel) => handleUpdateCompetencyLevel(comp.id, newLevel)}
+                              >
+                                <SelectTrigger className="w-32 h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="BASIC">Basic</SelectItem>
+                                  <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
+                                  <SelectItem value="ADVANCED">Advanced</SelectItem>
+                                  <SelectItem value="MASTERY">Mastery</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteFromJobProfile(comp.id)}
+                                className="h-8 w-8 p-0 text-red-400 hover:text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add New Competencies */}
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                      <Plus className="h-5 w-5 mr-2 text-blue-600" />
+                      Add New Competencies
+                    </h3>
+                    
+                    {/* Search */}
+                    <div className="relative mb-4">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search competencies..."
+                        value={competencySearchTerm}
+                        onChange={(e) => setCompetencySearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Available Competencies */}
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {availableCompetencies
+                        .filter(comp => 
+                          comp.name.toLowerCase().includes(competencySearchTerm.toLowerCase()) ||
+                          comp.family.toLowerCase().includes(competencySearchTerm.toLowerCase())
+                        )
+                        .map((competency) => (
+                          <div
+                            key={competency.id}
+                            className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="font-medium text-sm text-gray-900">
+                                  {competency.name}
+                                </span>
+                                <Badge className="text-xs bg-blue-100 text-blue-800">
+                                  {competency.type}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-gray-600">{competency.family}</p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Select
+                                onValueChange={(level) => handleAddCompetencyToProfile(competency, level)}
+                              >
+                                <SelectTrigger className="w-32 h-8">
+                                  <SelectValue placeholder="Level" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="BASIC">Basic</SelectItem>
+                                  <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
+                                  <SelectItem value="ADVANCED">Advanced</SelectItem>
+                                  <SelectItem value="MASTERY">Mastery</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleAddCompetencyToProfile(competency, 'BASIC')}
+                                className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {availableCompetencies.filter(comp => 
+                        comp.name.toLowerCase().includes(competencySearchTerm.toLowerCase()) ||
+                        comp.family.toLowerCase().includes(competencySearchTerm.toLowerCase())
+                      ).length === 0 && (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <BookOpen className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-500">
+                            {competencySearchTerm ? 'No competencies match your search' : 'All competencies are already assigned'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowJobProfileModal(false);
+                      setEditingJobProfile(null);
+                      setAvailableCompetencies([]);
+                      setCompetencySearchTerm('');
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
