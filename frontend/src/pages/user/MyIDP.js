@@ -45,9 +45,7 @@ const MyIDP = () => {
     const fetchIdps = async () => {
       try {
         setIsLoading(true);
-        console.log('Fetching IDPs for SID:', currentSid);
         const response = await api.get(`/idp/${currentSid}`);
-        console.log('API Response:', response.data);
         setIdps(response.data.idps || []);
         setError(null);
       } catch (err) {
@@ -63,14 +61,6 @@ const MyIDP = () => {
       fetchIdps();
     }
   }, [currentSid]);
-
-  // Debug logging
-  console.log('MyIDP Debug:', {
-    currentSid,
-    idps,
-    isLoading,
-    error
-  });
 
   // Filter and sort IDPs
   const filteredIdps = idps
