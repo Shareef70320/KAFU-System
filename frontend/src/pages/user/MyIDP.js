@@ -41,22 +41,22 @@ const MyIDP = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchIdps = async () => {
-      try {
-        setIsLoading(true);
-        const response = await api.get(`/idp/${currentSid}`);
-        setIdps(response.data.idps || []);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching IDPs:', err);
-        setError(err.message);
-        setIdps([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const fetchIdps = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/idp/${currentSid}`);
+      setIdps(response.data.idps || []);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching IDPs:', err);
+      setError(err.message);
+      setIdps([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (currentSid) {
       fetchIdps();
     }
@@ -162,7 +162,7 @@ const MyIDP = () => {
           <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading IDPs</h2>
           <p className="text-gray-600 mb-4">Unable to load your Individual Development Plans.</p>
-          <Button onClick={() => refetch()} className="bg-blue-600 hover:bg-blue-700">
+          <Button onClick={() => fetchIdps()} className="bg-blue-600 hover:bg-blue-700">
             Try Again
           </Button>
         </div>
