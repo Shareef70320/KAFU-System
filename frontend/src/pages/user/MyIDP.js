@@ -49,7 +49,8 @@ const MyIDP = () => {
     progressPercentage: 0,
     progressNotes: '',
     status: 'PLANNED',
-    completionDate: ''
+    completionDate: '',
+    attachments: []
   });
 
   // Fetch user's IDPs
@@ -85,7 +86,8 @@ const MyIDP = () => {
       progressPercentage: idp.progress_percentage || 0,
       progressNotes: idp.progress_notes || '',
       status: idp.status || 'PLANNED',
-      completionDate: idp.completion_date ? new Date(idp.completion_date).toISOString().split('T')[0] : ''
+      completionDate: idp.completion_date ? new Date(idp.completion_date).toISOString().split('T')[0] : '',
+      attachments: []
     });
     setIsProgressModalOpen(true);
   };
@@ -97,17 +99,30 @@ const MyIDP = () => {
       progressPercentage: 0,
       progressNotes: '',
       status: 'PLANNED',
-      completionDate: ''
+      completionDate: '',
+      attachments: []
     });
   };
 
   const updateProgress = async () => {
     try {
-      const response = await api.put(`/idp/${selectedIdp.id}/progress`, {
-        progressPercentage: parseInt(progressForm.progressPercentage),
-        progressNotes: progressForm.progressNotes,
-        status: progressForm.status,
-        completionDate: progressForm.completionDate || null
+      const formData = new FormData();
+      formData.append('progressPercentage', progressForm.progressPercentage);
+      formData.append('progressNotes', progressForm.progressNotes);
+      formData.append('status', progressForm.status);
+      if (progressForm.completionDate) {
+        formData.append('completionDate', progressForm.completionDate);
+      }
+      
+      // Add attachments
+      progressForm.attachments.forEach((file, index) => {
+        formData.append('attachments', file);
+      });
+
+      const response = await api.put(`/idp/${selectedIdp.id}/progress`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
       if (response.data.success) {
@@ -438,6 +453,27 @@ const MyIDP = () => {
                         <div className="text-sm text-blue-700">{idp.progress_notes}</div>
                       </div>
                     )}
+                    
+                    {/* Progress Attachments */}
+                    {idp.progress_attachments && idp.progress_attachments.length > 0 && (
+                      <div className="mt-3 p-3 bg-green-50 rounded-lg">
+                        <div className="text-sm font-medium text-green-800 mb-2">Attachments</div>
+                        <div className="space-y-1">
+                          {idp.progress_attachments.map((attachment, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <a 
+                                href={`http://localhost:3000${attachment}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm text-green-700 hover:text-green-800 underline"
+                              >
+                                📎 {idp.attachment_names?.[index] || `Attachment ${index + 1}`}
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Learning Intervention */}
@@ -640,6 +676,38 @@ const MyIDP = () => {
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       rows={3}
                     />
+                  </div>
+
+                  {/* File Attachments */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Attachments (Optional)
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files);
+                        setProgressForm({...progressForm, attachments: files});
+                      }}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, JPG, JPEG, PNG, GIF (Max 10MB each)
+                    </p>
+                    
+                    {/* Show selected files */}
+                    {progressForm.attachments.length > 0 && (
+                      <div className="mt-2">
+                        <div className="text-sm font-medium text-gray-700 mb-1">Selected files:</div>
+                        {progressForm.attachments.map((file, index) => (
+                          <div key={index} className="text-sm text-gray-600 bg-gray-50 p-2 rounded mb-1">
+                            📎 {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Completion Date (only show if status is COMPLETED) */}

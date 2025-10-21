@@ -1,7 +1,44 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const prisma = new PrismaClient();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/progress-attachments');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow common document and image types
+    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|ppt|pptx|txt/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only documents and images are allowed'));
+    }
+  }
+});
 
 // Helper to compare levels by rank
 const levelRank = (lvl) => {
@@ -213,7 +250,7 @@ router.get('/:employeeId', async (req, res) => {
 });
 
 // PUT /api/idp/:id/progress - update IDP progress (user action)
-router.put('/:id/progress', async (req, res) => {
+router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => {
   try {
     const { id } = req.params;
     const { 
@@ -252,6 +289,15 @@ router.put('/:id/progress', async (req, res) => {
       });
     }
 
+    // Handle file attachments
+    let attachmentPaths = [];
+    let attachmentNames = [];
+    
+    if (req.files && req.files.length > 0) {
+      attachmentPaths = req.files.map(file => `/uploads/progress-attachments/${file.filename}`);
+      attachmentNames = req.files.map(file => file.originalname);
+    }
+
     // Prepare update data
     const updateData = {
       last_progress_update: new Date()
@@ -280,6 +326,14 @@ router.put('/:id/progress', async (req, res) => {
       }
     }
 
+    // Handle attachments (append to existing ones)
+    if (attachmentPaths.length > 0) {
+      const existingAttachments = existingIdp[0].progress_attachments || [];
+      const existingNames = existingIdp[0].attachment_names || [];
+      updateData.progress_attachments = [...existingAttachments, ...attachmentPaths];
+      updateData.attachment_names = [...existingNames, ...attachmentNames];
+    }
+
     // Update the IDP
     await prisma.$queryRaw`
       UPDATE idp_entries 
@@ -290,6 +344,8 @@ router.put('/:id/progress', async (req, res) => {
         last_progress_update = ${updateData.last_progress_update},
         started_date = ${updateData.started_date || existingIdp[0].started_date || null},
         completion_date = ${updateData.completion_date || existingIdp[0].completion_date || null},
+        progress_attachments = ${updateData.progress_attachments || existingIdp[0].progress_attachments || null},
+        attachment_names = ${updateData.attachment_names || existingIdp[0].attachment_names || null},
         updated_at = NOW()
       WHERE id = ${id}
     `;
