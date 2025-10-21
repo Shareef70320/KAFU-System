@@ -106,24 +106,37 @@ const MyIDP = () => {
 
   const updateProgress = async () => {
     try {
-      const formData = new FormData();
-      formData.append('progressPercentage', progressForm.progressPercentage);
-      formData.append('progressNotes', progressForm.progressNotes);
-      formData.append('status', progressForm.status);
-      if (progressForm.completionDate) {
-        formData.append('completionDate', progressForm.completionDate);
-      }
+      let response;
       
-      // Add attachments
-      progressForm.attachments.forEach((file, index) => {
-        formData.append('attachments', file);
-      });
+      if (progressForm.attachments.length > 0) {
+        // Send FormData when there are attachments
+        const formData = new FormData();
+        formData.append('progressPercentage', progressForm.progressPercentage);
+        formData.append('progressNotes', progressForm.progressNotes);
+        formData.append('status', progressForm.status);
+        if (progressForm.completionDate) {
+          formData.append('completionDate', progressForm.completionDate);
+        }
+        
+        // Add attachments
+        progressForm.attachments.forEach((file, index) => {
+          formData.append('attachments', file);
+        });
 
-      const response = await api.put(`/idp/${selectedIdp.id}/progress`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+        response = await api.put(`/idp/${selectedIdp.id}/progress`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+      } else {
+        // Send JSON when there are no attachments
+        response = await api.put(`/idp/${selectedIdp.id}/progress`, {
+          progressPercentage: parseInt(progressForm.progressPercentage),
+          progressNotes: progressForm.progressNotes,
+          status: progressForm.status,
+          completionDate: progressForm.completionDate || null
+        });
+      }
 
       if (response.data.success) {
         // Refresh the IDPs list
