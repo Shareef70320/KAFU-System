@@ -253,12 +253,23 @@ router.get('/:employeeId', async (req, res) => {
 router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      progressPercentage, 
-      progressNotes, 
-      status,
-      completionDate 
-    } = req.body;
+    
+    // Handle both JSON and FormData
+    let progressPercentage, progressNotes, status, completionDate;
+    
+    if (req.body.progressPercentage !== undefined) {
+      // FormData
+      progressPercentage = parseInt(req.body.progressPercentage);
+      progressNotes = req.body.progressNotes;
+      status = req.body.status;
+      completionDate = req.body.completionDate;
+    } else {
+      // JSON
+      progressPercentage = req.body.progressPercentage;
+      progressNotes = req.body.progressNotes;
+      status = req.body.status;
+      completionDate = req.body.completionDate;
+    }
 
     // Validate progress percentage
     if (progressPercentage !== undefined && (progressPercentage < 0 || progressPercentage > 100)) {
