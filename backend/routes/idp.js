@@ -212,4 +212,143 @@ router.get('/:employeeId', async (req, res) => {
   }
 });
 
+// PUT /api/idp/:id/progress - update IDP progress (user action)
+router.put('/:id/progress', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      progressPercentage, 
+      progressNotes, 
+      status,
+      completionDate 
+    } = req.body;
+
+    // Validate progress percentage
+    if (progressPercentage !== undefined && (progressPercentage < 0 || progressPercentage > 100)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Progress percentage must be between 0 and 100' 
+      });
+    }
+
+    // Validate status
+    const validStatuses = ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'ON_HOLD', 'CANCELLED'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid status. Must be one of: ' + validStatuses.join(', ') 
+      });
+    }
+
+    // Check if IDP exists
+    const existingIdp = await prisma.$queryRaw`
+      SELECT id, employee_id, status FROM idp_entries WHERE id = ${id}
+    `;
+
+    if (!existingIdp || existingIdp.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'IDP not found' 
+      });
+    }
+
+    // Prepare update data
+    const updateData = {
+      last_progress_update: new Date()
+    };
+
+    if (progressPercentage !== undefined) {
+      updateData.progress_percentage = progressPercentage;
+    }
+
+    if (progressNotes !== undefined) {
+      updateData.progress_notes = progressNotes;
+    }
+
+    if (status) {
+      updateData.status = status;
+      
+      // Set started_date when moving to IN_PROGRESS
+      if (status === 'IN_PROGRESS' && existingIdp[0].status === 'PLANNED') {
+        updateData.started_date = new Date();
+      }
+      
+      // Set completion_date when moving to COMPLETED
+      if (status === 'COMPLETED') {
+        updateData.completion_date = completionDate ? new Date(completionDate) : new Date();
+        updateData.progress_percentage = 100;
+      }
+    }
+
+    // Update the IDP
+    await prisma.$queryRaw`
+      UPDATE idp_entries 
+      SET 
+        progress_percentage = ${updateData.progress_percentage || existingIdp[0].progress_percentage || 0},
+        progress_notes = ${updateData.progress_notes || existingIdp[0].progress_notes || null},
+        status = ${updateData.status || existingIdp[0].status},
+        last_progress_update = ${updateData.last_progress_update},
+        started_date = ${updateData.started_date || existingIdp[0].started_date || null},
+        completion_date = ${updateData.completion_date || existingIdp[0].completion_date || null},
+        updated_at = NOW()
+      WHERE id = ${id}
+    `;
+
+    res.json({ 
+      success: true, 
+      message: 'IDP progress updated successfully' 
+    });
+
+  } catch (error) {
+    console.error('Error updating IDP progress:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update IDP progress' 
+    });
+  }
+});
+
+// GET /api/idp/:id/progress-history - get progress history for an IDP
+router.get('/:id/progress-history', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // For now, we'll return the current progress data
+    // In a full implementation, you might want a separate progress_history table
+    const idpData = await prisma.$queryRaw`
+      SELECT 
+        id,
+        progress_percentage,
+        progress_notes,
+        status,
+        last_progress_update,
+        started_date,
+        completion_date,
+        created_at,
+        updated_at
+      FROM idp_entries 
+      WHERE id = ${id}
+    `;
+
+    if (!idpData || idpData.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'IDP not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      progressHistory: idpData[0] 
+    });
+
+  } catch (error) {
+    console.error('Error fetching IDP progress history:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch IDP progress history' 
+    });
+  }
+});
+
 module.exports = router;

@@ -21,7 +21,13 @@ import {
   Filter,
   Search,
   SortAsc,
-  SortDesc
+  SortDesc,
+  Play,
+  Pause,
+  RotateCcw,
+  Save,
+  X,
+  Percent
 } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -35,6 +41,16 @@ const MyIDP = () => {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
+  
+  // Progress tracking modal state
+  const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+  const [selectedIdp, setSelectedIdp] = useState(null);
+  const [progressForm, setProgressForm] = useState({
+    progressPercentage: 0,
+    progressNotes: '',
+    status: 'PLANNED',
+    completionDate: ''
+  });
 
   // Fetch user's IDPs
   const [idps, setIdps] = useState([]);
@@ -61,6 +77,49 @@ const MyIDP = () => {
       fetchIdps();
     }
   }, [currentSid]);
+
+  // Progress tracking functions
+  const openProgressModal = (idp) => {
+    setSelectedIdp(idp);
+    setProgressForm({
+      progressPercentage: idp.progress_percentage || 0,
+      progressNotes: idp.progress_notes || '',
+      status: idp.status || 'PLANNED',
+      completionDate: idp.completion_date ? new Date(idp.completion_date).toISOString().split('T')[0] : ''
+    });
+    setIsProgressModalOpen(true);
+  };
+
+  const closeProgressModal = () => {
+    setIsProgressModalOpen(false);
+    setSelectedIdp(null);
+    setProgressForm({
+      progressPercentage: 0,
+      progressNotes: '',
+      status: 'PLANNED',
+      completionDate: ''
+    });
+  };
+
+  const updateProgress = async () => {
+    try {
+      const response = await api.put(`/idp/${selectedIdp.id}/progress`, {
+        progressPercentage: parseInt(progressForm.progressPercentage),
+        progressNotes: progressForm.progressNotes,
+        status: progressForm.status,
+        completionDate: progressForm.completionDate || null
+      });
+
+      if (response.data.success) {
+        // Refresh the IDPs list
+        await fetchIdps();
+        closeProgressModal();
+      }
+    } catch (error) {
+      console.error('Error updating progress:', error);
+      alert('Failed to update progress. Please try again.');
+    }
+  };
 
   // Filter and sort IDPs
   const filteredIdps = idps
@@ -339,6 +398,48 @@ const MyIDP = () => {
                     </div>
                   </div>
 
+                  {/* Progress Tracking */}
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Percent className="h-5 w-5 text-blue-600" />
+                        <span className="font-medium text-gray-900">Progress</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openProgressModal(idp)}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Update
+                      </Button>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${idp.progress_percentage || 0}%` }}
+                      ></div>
+                    </div>
+                    
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>{idp.progress_percentage || 0}% Complete</span>
+                      {idp.last_progress_update && (
+                        <span>Last updated: {formatDate(idp.last_progress_update)}</span>
+                      )}
+                    </div>
+                    
+                    {/* Progress Notes */}
+                    {idp.progress_notes && (
+                      <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                        <div className="text-sm font-medium text-blue-800 mb-1">Progress Notes</div>
+                        <div className="text-sm text-blue-700">{idp.progress_notes}</div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Learning Intervention */}
                   {(idp.intervention_title || idp.custom_intervention_name) && (
                     <div className="border-t pt-4">
@@ -421,7 +522,7 @@ const MyIDP = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <div className="text-2xl font-bold text-blue-600">
                     {filteredIdps.filter(idp => idp.status === 'PLANNED').length}
@@ -440,6 +541,12 @@ const MyIDP = () => {
                   </div>
                   <div className="text-sm text-green-800">Completed</div>
                 </div>
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {Math.round(filteredIdps.reduce((sum, idp) => sum + (idp.progress_percentage || 0), 0) / filteredIdps.length) || 0}%
+                  </div>
+                  <div className="text-sm text-purple-800">Avg Progress</div>
+                </div>
                 <div className="text-center p-4 bg-red-50 rounded-lg">
                   <div className="text-2xl font-bold text-red-600">
                     {filteredIdps.filter(idp => isOverdue(idp.target_date, idp.status)).length}
@@ -449,6 +556,128 @@ const MyIDP = () => {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Progress Update Modal */}
+        {isProgressModalOpen && selectedIdp && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Update IDP Progress</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={closeProgressModal}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Competency Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Competency
+                    </label>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {selectedIdp.competency_name}
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <Select 
+                      value={progressForm.status} 
+                      onValueChange={(value) => setProgressForm({...progressForm, status: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PLANNED">Planned</SelectItem>
+                        <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                        <SelectItem value="COMPLETED">Completed</SelectItem>
+                        <SelectItem value="ON_HOLD">On Hold</SelectItem>
+                        <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Progress Percentage */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Progress Percentage
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={progressForm.progressPercentage}
+                        onChange={(e) => setProgressForm({...progressForm, progressPercentage: parseInt(e.target.value)})}
+                        className="flex-1"
+                      />
+                      <div className="w-16 text-center font-semibold text-blue-600">
+                        {progressForm.progressPercentage}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Notes */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Progress Notes
+                    </label>
+                    <textarea
+                      value={progressForm.progressNotes}
+                      onChange={(e) => setProgressForm({...progressForm, progressNotes: e.target.value})}
+                      placeholder="Add notes about your progress..."
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Completion Date (only show if status is COMPLETED) */}
+                  {progressForm.status === 'COMPLETED' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Completion Date
+                      </label>
+                      <input
+                        type="date"
+                        value={progressForm.completionDate}
+                        onChange={(e) => setProgressForm({...progressForm, completionDate: e.target.value})}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={closeProgressModal}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={updateProgress}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Update Progress
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
