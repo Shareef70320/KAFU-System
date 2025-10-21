@@ -132,7 +132,9 @@ const MyIDP = () => {
       }
     } catch (error) {
       console.error('Error updating progress:', error);
-      alert('Failed to update progress. Please try again.');
+      console.error('Error details:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      alert(`Failed to update progress: ${error.response?.data?.error || error.message}`);
     }
   };
 
