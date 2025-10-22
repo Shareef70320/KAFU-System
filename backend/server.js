@@ -141,6 +141,6 @@ app.use('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT} - v4.7.3`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
 });
