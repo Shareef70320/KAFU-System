@@ -270,6 +270,17 @@ const TeamEmployees = () => {
     }
   };
 
+  const fetchIdps = async () => {
+    if (!selectedEmployee) return;
+    try {
+      const idpResp = await api.get(`/idp/${selectedEmployee.sid}`);
+      setIdps(idpResp.data.idps || []);
+    } catch (e) {
+      console.error('Failed to refresh IDPs:', e);
+      setIdps([]);
+    }
+  };
+
   const loadInterventionTypes = async () => {
     try {
       const resp = await api.get('/ld-interventions/types?is_active=true');
@@ -1005,15 +1016,30 @@ const TeamEmployees = () => {
             </div>
             {/* Tabs */}
             <div className="px-6 pt-4">
-              <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
-                <button
-                  onClick={() => setAssessmentsTab('assessments')}
-                  className={`px-4 py-2 text-sm ${assessmentsTab==='assessments' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                >Assessments</button>
-                <button
-                  onClick={() => setAssessmentsTab('idps')}
-                  className={`px-4 py-2 text-sm ${assessmentsTab==='idps' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                >IDPs</button>
+              <div className="flex items-center justify-between">
+                <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => setAssessmentsTab('assessments')}
+                    className={`px-4 py-2 text-sm ${assessmentsTab==='assessments' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >Assessments</button>
+                  <button
+                    onClick={() => setAssessmentsTab('idps')}
+                    className={`px-4 py-2 text-sm ${assessmentsTab==='idps' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >IDPs</button>
+                </div>
+                
+                {assessmentsTab === 'idps' && (
+                  <button
+                    onClick={fetchIdps}
+                    className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    title="Refresh IDP progress"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh Progress
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1026,6 +1052,40 @@ const TeamEmployees = () => {
                       <div className="text-sm text-gray-400">Individual Development Plans will appear here when created for competency gaps.</div>
                     </div>
                   ) : (
+                    <div>
+                      {/* IDP Progress Summary */}
+                      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
+                          <h3 className="text-lg font-semibold text-blue-900">IDP Progress Summary</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-blue-600">{idps.length}</div>
+                            <div className="text-blue-800">Total IDPs</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-green-600">
+                              {idps.filter(idp => idp.status === 'COMPLETED').length}
+                            </div>
+                            <div className="text-green-800">Completed</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-blue-600">
+                              {idps.filter(idp => idp.status === 'IN_PROGRESS').length}
+                            </div>
+                            <div className="text-blue-800">In Progress</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-gray-600">
+                              {Math.round(idps.reduce((sum, idp) => sum + (idp.progress_percentage || 0), 0) / idps.length) || 0}%
+                            </div>
+                            <div className="text-gray-800">Avg Progress</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* IDP Cards */}
                     <div className="space-y-4">
                       {idps.map((idp) => (
                         <div key={idp.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -1051,6 +1111,22 @@ const TeamEmployees = () => {
                                 </span>
                               </div>
                               
+                              {/* Progress Bar */}
+                              {idp.progress_percentage !== undefined && (
+                                <div className="mb-4">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-700">Progress</span>
+                                    <span className="text-sm font-bold text-blue-600">{idp.progress_percentage || 0}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                                      style={{ width: `${idp.progress_percentage || 0}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                 <div>
                                   <div className="text-gray-500">Required Level</div>
@@ -1071,6 +1147,42 @@ const TeamEmployees = () => {
                                   </div>
                                 </div>
                               </div>
+
+                              {/* Progress Information */}
+                              {(idp.progress_notes || idp.last_progress_update || idp.progress_attachments) && (
+                                <div className="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
+                                    <span className="text-sm font-medium text-blue-900">Latest Progress Update</span>
+                                  </div>
+                                  
+                                  {idp.progress_notes && (
+                                    <div className="text-sm text-blue-800 mb-2">
+                                      <span className="font-medium">Notes:</span> {idp.progress_notes}
+                                    </div>
+                                  )}
+                                  
+                                  {idp.last_progress_update && (
+                                    <div className="text-xs text-blue-600 mb-2">
+                                      <span className="font-medium">Updated:</span> {new Date(idp.last_progress_update).toLocaleString()}
+                                    </div>
+                                  )}
+                                  
+                                  {idp.progress_attachments && idp.progress_attachments.length > 0 && (
+                                    <div className="text-xs text-blue-600">
+                                      <span className="font-medium">Attachments:</span> {idp.progress_attachments.length} file(s)
+                                      <div className="mt-1 space-y-1">
+                                        {idp.attachment_names && idp.attachment_names.map((name, index) => (
+                                          <div key={index} className="flex items-center gap-1">
+                                            <div className="h-1 w-1 bg-blue-500 rounded-full"></div>
+                                            <span className="truncate max-w-[200px]">{name}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {idp.intervention_title && (
                                 <div className="mt-3 p-3 bg-blue-50 rounded-lg">
@@ -1118,6 +1230,7 @@ const TeamEmployees = () => {
                           </div>
                         </div>
                       ))}
+                    </div>
                     </div>
                   )}
                 </div>

@@ -106,9 +106,13 @@ const MyIDP = () => {
 
   const updateProgress = async () => {
     try {
+      console.log('Progress form:', progressForm);
+      console.log('Attachments length:', progressForm.attachments.length);
+      
       let response;
       
       if (progressForm.attachments.length > 0) {
+        console.log('Sending FormData with attachments');
         // Send FormData when there are attachments
         const formData = new FormData();
         formData.append('progressPercentage', progressForm.progressPercentage);
@@ -129,6 +133,7 @@ const MyIDP = () => {
           },
         });
       } else {
+        console.log('Sending JSON without attachments');
         // Send JSON when there are no attachments
         response = await api.put(`/idp/${selectedIdp.id}/progress`, {
           progressPercentage: parseInt(progressForm.progressPercentage),
@@ -703,7 +708,8 @@ const MyIDP = () => {
                       multiple
                       accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif"
                       onChange={(e) => {
-                        const files = Array.from(e.target.files);
+                        const files = Array.from(e.target.files).filter(file => file.size > 0);
+                        console.log('Selected files:', files);
                         setProgressForm({...progressForm, attachments: files});
                       }}
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
