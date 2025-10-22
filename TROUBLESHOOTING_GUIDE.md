@@ -1,3 +1,4 @@
+
 # KAFU System Troubleshooting Guide
 
 **Created:** September 8, 2024  
@@ -1039,6 +1040,73 @@ curl -s "http://localhost:3000/api/competencies?page=1&limit=5" | jq '.competenc
 # Both should return the same result
 # Check frontend logs for no more ECONNREFUSED errors
 docker compose -f docker-compose.dev.yml logs frontend | tail -5
+```
+
+## 🔧 **Docker CORS "Not allowed by CORS" Error Fix**
+
+### **Problem:** 
+Frontend shows "Failed to update progress: Not allowed by CORS" or "Failed to load resource: the server responded with a status of 500 (Internal Server Error)" when making API requests
+
+### **Root Cause:** 
+Backend CORS configuration doesn't allow `http://backend:5000` origin that Docker containers use for internal communication
+
+### **Symptoms:**
+- Frontend logs show: `Failed to load resource: the server responded with a status of 500 (Internal Server Error)`
+- Backend logs show: `CORS blocked origin: http://backend:5000`
+- API requests fail with CORS errors in Docker development environment
+- Direct API calls work (`curl localhost:3000/api/health`) but frontend requests fail
+
+### **Solution:**
+```bash
+# 1. Update backend CORS configuration
+# In backend/server.js, add 'backend' to allowed origins in development mode:
+
+if (process.env.NODE_ENV === 'development') {
+  if (origin && (
+    origin.includes('localhost') || 
+    origin.includes('127.0.0.1') ||
+    origin.includes('kafu-frontend-dev') ||
+    origin.includes('kafu-backend-dev') ||
+    origin.includes('backend')  # <-- Add this line
+  )) {
+    return callback(null, true);
+  }
+}
+
+# 2. Restart backend container to apply changes
+docker restart kafu-backend-dev
+
+# 3. Wait for backend to fully start
+sleep 5
+
+# 4. Test API connectivity
+curl -s "http://localhost:3000/api/health" | jq
+```
+
+### **Why This Happens:**
+- Docker containers communicate using service names (`backend:5000`) instead of `localhost`
+- Frontend proxy forwards requests to `http://backend:5000` 
+- Backend CORS only allows `localhost` origins by default
+- Development mode needs to be more permissive for Docker networking
+
+### **Prevention:**
+- Always include Docker service names in CORS allowed origins for development
+- Test both direct API calls and frontend proxy after container restarts
+- Check backend logs for CORS errors when API requests fail
+- Restart containers after CORS configuration changes
+
+### **Verification:**
+```bash
+# Test API through frontend proxy (should work)
+curl -s "http://localhost:3000/api/health" | jq
+
+# Test progress update endpoint (should work)
+curl -X PUT "http://localhost:3000/api/idp/[ID]/progress" \
+  -H "Content-Type: application/json" \
+  -d '{"progressPercentage": 50, "status": "IN_PROGRESS"}' | jq
+
+# Check backend logs for no CORS errors
+docker logs kafu-backend-dev --tail 10 | grep -i cors
 ```
 
 ## 🔧 **"Failed to create assessment" Error Fix**

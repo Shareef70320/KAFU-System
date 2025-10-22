@@ -64,7 +64,8 @@ app.use(cors({
         origin.includes('localhost') || 
         origin.includes('127.0.0.1') ||
         origin.includes('kafu-frontend-dev') ||
-        origin.includes('kafu-backend-dev')
+        origin.includes('kafu-backend-dev') ||
+        origin.includes('backend')
       )) {
         return callback(null, true);
       }

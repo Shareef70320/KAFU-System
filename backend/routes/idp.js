@@ -290,7 +290,7 @@ router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => 
 
     // Check if IDP exists
     const existingIdp = await prisma.$queryRaw`
-      SELECT id, employee_id, status FROM idp_entries WHERE id = ${id}
+      SELECT id, employee_id, status, progress_percentage, progress_notes, progress_attachments, attachment_names, started_date, completion_date FROM idp_entries WHERE id = ${id}
     `;
 
     if (!existingIdp || existingIdp.length === 0) {
