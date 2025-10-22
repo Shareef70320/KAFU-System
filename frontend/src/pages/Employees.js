@@ -27,7 +27,8 @@ import {
   UserCheck,
   Clock,
   Award,
-  BookOpen
+  BookOpen,
+  Target
 } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -45,6 +46,8 @@ const Employees = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showJCPModal, setShowJCPModal] = useState(false);
   const [selectedEmployeeJCP, setSelectedEmployeeJCP] = useState(null);
+  const [showIDPModal, setShowIDPModal] = useState(false);
+  const [selectedEmployeeIDP, setSelectedEmployeeIDP] = useState(null);
   const searchInputRef = useRef(null);
   const [assessorEmployees, setAssessorEmployees] = useState(new Set());
 
@@ -106,6 +109,44 @@ const Employees = () => {
   const isAssessor = (employeeSid) => {
     return assessorEmployees.has(employeeSid);
   };
+
+  // State for employee IDPs
+  const [employeeIdps, setEmployeeIdps] = useState(new Map());
+
+  // Function to check if employee has IDPs
+  const hasIDPs = (sid) => {
+    return employeeIdps.has(sid) && employeeIdps.get(sid).length > 0;
+  };
+
+  // Function to get IDP count for employee
+  const getIDPCount = (sid) => {
+    return employeeIdps.get(sid)?.length || 0;
+  };
+
+  // Fetch IDPs for all employees
+  useEffect(() => {
+    const fetchAllIDPs = async () => {
+      if (!employeesData?.employees) return;
+      
+      const idpMap = new Map();
+      const promises = employeesData.employees.map(async (employee) => {
+        try {
+          const response = await api.get(`/idp/${employee.sid}`);
+          if (response.data.success && response.data.idps) {
+            idpMap.set(employee.sid, response.data.idps);
+          }
+        } catch (error) {
+          // Employee might not have IDPs, which is fine
+          idpMap.set(employee.sid, []);
+        }
+      });
+      
+      await Promise.all(promises);
+      setEmployeeIdps(idpMap);
+    };
+
+    fetchAllIDPs();
+  }, [employeesData]);
 
   // Fetch job-competency mappings for JCP calculation
   const { data: jobCompetencyMappings } = useQuery({
@@ -476,6 +517,19 @@ const Employees = () => {
                         {isAssessor(employee.sid) && (
                           <UserCheck className="h-4 w-4 text-green-600 flex-shrink-0" title="Assessor - Can evaluate competencies" />
                         )}
+                        {hasIDPs(employee.sid) && (
+                          <Target 
+                            className="h-4 w-4 text-blue-600 flex-shrink-0" 
+                            title={`Has ${getIDPCount(employee.sid)} Individual Development Plan(s)`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Open IDP modal for this employee
+                              setSelectedEmployeeIDP(employee);
+                              setShowIDPModal(true);
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -735,6 +789,214 @@ const Employees = () => {
                 <Button
                   onClick={() => setShowJCPModal(false)}
                   className="loyverse-button-primary"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IDP Modal */}
+      {showIDPModal && selectedEmployeeIDP && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <EmployeePhoto
+                    sid={selectedEmployeeIDP.sid}
+                    firstName={selectedEmployeeIDP.first_name}
+                    lastName={selectedEmployeeIDP.last_name}
+                    size="medium"
+                  />
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Individual Development Plans</h2>
+                    <p className="text-sm text-gray-600">
+                      {selectedEmployeeIDP.first_name} {selectedEmployeeIDP.last_name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowIDPModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* IDP Content */}
+              <div className="space-y-4">
+                {(() => {
+                  const employeeIdpList = employeeIdps.get(selectedEmployeeIDP.sid) || [];
+                  
+                  if (employeeIdpList.length === 0) {
+                    return (
+                      <div className="text-center py-8">
+                        <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No IDPs Found</h3>
+                        <p className="text-gray-500">This employee doesn't have any Individual Development Plans yet.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {/* IDP Summary */}
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
+                          <h3 className="text-lg font-semibold text-blue-900">IDP Progress Summary</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-blue-600">{employeeIdpList.length}</div>
+                            <div className="text-blue-800">Total IDPs</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-green-600">
+                              {employeeIdpList.filter(idp => idp.status === 'COMPLETED').length}
+                            </div>
+                            <div className="text-green-800">Completed</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-blue-600">
+                              {employeeIdpList.filter(idp => idp.status === 'IN_PROGRESS').length}
+                            </div>
+                            <div className="text-blue-800">In Progress</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-gray-600">
+                              {Math.round(employeeIdpList.reduce((sum, idp) => sum + (idp.progress_percentage || 0), 0) / employeeIdpList.length) || 0}%
+                            </div>
+                            <div className="text-gray-800">Avg Progress</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Individual IDP Cards */}
+                      <div className="space-y-4">
+                        {employeeIdpList.map((idp) => (
+                          <div key={idp.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <h4 className="text-lg font-semibold text-gray-900">{idp.competency_name || 'Competency'}</h4>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${
+                                    idp.priority === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                                    idp.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+                                    idp.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {idp.priority || 'MEDIUM'} Priority
+                                  </span>
+                                  <span className={`px-2 py-1 text-xs rounded-full ${
+                                    idp.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                                    idp.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                                    idp.status === 'PLANNED' ? 'bg-gray-100 text-gray-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {idp.status || 'PLANNED'}
+                                  </span>
+                                </div>
+                                
+                                {/* Progress Bar */}
+                                {idp.progress_percentage !== undefined && (
+                                  <div className="mb-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-medium text-gray-700">Progress</span>
+                                      <span className="text-sm font-bold text-blue-600">{idp.progress_percentage || 0}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                      <div 
+                                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                                        style={{ width: `${idp.progress_percentage || 0}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                  <div>
+                                    <div className="text-gray-500">Required Level</div>
+                                    <div className="font-medium">{idp.required_level || '—'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-gray-500">Current Level</div>
+                                    <div className="font-medium">{idp.employee_level || '—'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-gray-500">Manager Level</div>
+                                    <div className="font-medium">{idp.manager_level || '—'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-gray-500">Target Date</div>
+                                    <div className="font-medium">
+                                      {idp.target_date ? new Date(idp.target_date).toLocaleDateString() : '—'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Progress Information */}
+                                {(idp.progress_notes || idp.last_progress_update || idp.progress_attachments) && (
+                                  <div className="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
+                                      <span className="text-sm font-medium text-blue-900">Latest Progress Update</span>
+                                    </div>
+                                    
+                                    {idp.progress_notes && (
+                                      <div className="text-sm text-blue-800 mb-2">
+                                        <span className="font-medium">Notes:</span> {idp.progress_notes}
+                                      </div>
+                                    )}
+                                    
+                                    {idp.last_progress_update && (
+                                      <div className="text-xs text-blue-600 mb-2">
+                                        <span className="font-medium">Updated:</span> {new Date(idp.last_progress_update).toLocaleString()}
+                                      </div>
+                                    )}
+                                    
+                                    {idp.progress_attachments && idp.progress_attachments.length > 0 && (
+                                      <div className="text-xs text-blue-600">
+                                        <span className="font-medium">Attachments:</span> {idp.progress_attachments.length} file(s)
+                                        <div className="mt-1 space-y-1">
+                                          {idp.attachment_names && idp.attachment_names.map((name, index) => (
+                                            <div key={index} className="flex items-center gap-1">
+                                              <div className="h-1 w-1 bg-blue-500 rounded-full"></div>
+                                              <span className="truncate max-w-[200px]">{name}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="mt-3 text-xs text-gray-500">
+                                  Created: {idp.created_at ? new Date(idp.created_at).toLocaleDateString() : '—'}
+                                  {idp.updated_at && idp.updated_at !== idp.created_at && (
+                                    <span> • Updated: {new Date(idp.updated_at).toLocaleDateString()}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Close Button */}
+              <div className="flex justify-end mt-6">
+                <Button
+                  onClick={() => setShowIDPModal(false)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   Close
                 </Button>
