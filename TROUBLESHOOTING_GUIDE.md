@@ -1747,3 +1747,71 @@ curl -s "http://localhost:5001/api/user-assessments/competencies?userId=2254" | 
 - **Submit Assessment:** ✅ Working - Processes answers, calculates score and competency level
 - **Competencies List:** ✅ Working - Shows available competencies for user
 - **Complete Assessment Flow:** ✅ Working - End-to-end assessment process functional
+
+## 🔧 Cloud IDP Progress Update 500 (Missing Columns) Fix
+
+### **Problem:** 
+Updating IDP progress on the cloud (Render) returns:
+`{"success": false, "error": "Failed to update IDP progress"}` or
+`{"success": false, "error": "Database schema missing progress tracking columns"}`
+
+### **Root Cause:** 
+- The `idp_entries` table on Render is missing the new progress-tracking columns:
+  - `progress_percentage`, `progress_notes`, `last_progress_update`,
+    `started_date`, `completion_date`, `progress_attachments`, `attachment_names`
+
+### **Fast Fix (Automatic):**
+- Backend now auto-creates the required columns on the first progress update call.
+- Just deploy the latest backend and perform one progress update; the columns are added automatically.
+
+### **Steps:**
+```bash
+# 1) Deploy latest backend to Render (must include auto-create code)
+#    Render → Service → Manual Deploy → Clear build cache & deploy
+
+# 2) Verify backend is the latest
+curl -s "https://kafu-system-2.onrender.com/api/health?ts=$(date +%s)" | jq
+# version must be v4.7.5 (or newer)
+
+# 3) Trigger one JSON-only progress update
+curl -s -X PUT "https://kafu-system-2.onrender.com/api/idp/<IDP_ID>/progress" \
+  -H "Content-Type: application/json" \
+  -d '{"progressPercentage": 10, "status": "IN_PROGRESS", "progressNotes": "cloud auto-create"}' | jq
+# First call will auto-create columns, subsequent calls will succeed
+```
+
+### **Alternative (Manual Migration):**
+- If auto-create is restricted by DB permissions, run the migration script manually:
+- File: `add_idp_progress_columns_render.sql`
+```bash
+# Using psql
+psql "<RENDER_POSTGRES_URL>" -f add_idp_progress_columns_render.sql
+```
+
+### **Diagnostic Script (Optional):**
+- File: `test_idp_progress.sh`
+```bash
+./test_idp_progress.sh <IDP_ID>
+# 1) Checks /api/health version
+# 2) Sends JSON-only progress update and reports HTTP code & body
+```
+
+### **Why This Happens:**
+- Cloud database was created before progress features were added
+- Local DB had columns; Render DB didn’t
+- Backend originally assumed columns existed and failed on UPDATE
+
+### **Prevention:**
+- Keep Render DB schema in sync with local by:
+  - Running the provided SQL migration scripts after new features
+  - Or relying on the new auto-create logic in the backend (recommended)
+- Always verify `/api/health` shows the latest version before testing
+
+### **Verification:**
+```bash
+# After deploy/update, this should succeed
+curl -s -X PUT "https://kafu-system-2.onrender.com/api/idp/<IDP_ID>/progress" \
+  -H "Content-Type: application/json" \
+  -d '{"progressPercentage": 15, "status": "IN_PROGRESS", "progressNotes": "verified"}' | jq '.success'
+# Expected: true
+```
