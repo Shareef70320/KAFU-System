@@ -116,12 +116,12 @@ app.use('/api/development-paths', developmentPathRoutes);
 app.use('/api/ld-interventions', ldInterventionRoutes);
 app.use('/api/idp', idpRoutes);
 
-// Health check
+// Health check - MUST be before 404 handler
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    version: 'v4.7.2',
+    version: 'v4.7.5',
     idpCompatibility: 'enabled'
   });
 });
@@ -141,6 +141,6 @@ app.use('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT} - v4.7.3`);
+  console.log(`🚀 Server running on port ${PORT} - v4.7.5`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
 });

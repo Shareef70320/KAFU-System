@@ -1109,6 +1109,104 @@ curl -X PUT "http://localhost:3000/api/idp/[ID]/progress" \
 docker logs kafu-backend-dev --tail 10 | grep -i cors
 ```
 
+## 🔧 **Render "Route not found" Error Fix**
+
+### **Problem:** 
+Health endpoint or API routes return `{"message":"Route not found"}` on Render deployment
+
+### **Root Cause:** 
+1. Render deployment is using outdated code version
+2. Health endpoint version mismatch between code and deployment
+3. Route order in server.js causes 404 handler to catch routes
+4. Render build cache serving old code
+
+### **Symptoms:**
+- Health endpoint shows: `{"message":"Route not found"}` at `https://kafu-system-2.onrender.com/api/health`
+- Console logs show version like `v4.7.3` but health shows `v4.7.2`
+- All API routes return 404 on cloud but work locally
+- Render logs show server starting but routes not accessible
+
+### **Solution:**
+```bash
+# 1. Verify code version in server.js matches current version
+# Check backend/server.js - health endpoint version should match console log version
+# Current version should be v4.7.5
+
+# 2. Force Render to rebuild from latest code
+# In Render Dashboard:
+# - Go to your service
+# - Click "Manual Deploy"
+# - Select "Clear build cache & deploy"
+# - Wait for deployment to complete
+
+# 3. Verify deployment completed
+curl -s "https://kafu-system-2.onrender.com/api/health?ts=$(date +%s)" | jq
+
+# Expected response:
+# {
+#   "status": "OK",
+#   "timestamp": "...",
+#   "version": "v4.7.5",
+#   "idpCompatibility": "enabled"
+# }
+
+# 4. If still showing "Route not found", check Render logs
+# In Render Dashboard → Logs, look for:
+# - "Server running on port XXXX - v4.7.5"
+# - Any route registration errors
+# - Any middleware errors
+
+# 5. If routes still not working, verify server.js route order:
+# - Health endpoint MUST be defined before 404 handler
+# - All route middleware MUST be before error handlers
+# - Check that all routes use '/api' prefix
+```
+
+### **Why This Happens:**
+- Render may cache old builds even after code push
+- Version mismatch indicates code not synced with deployment
+- Route order issues cause 404 handler to catch valid routes
+- Render may serve from cached node_modules with old code
+
+### **Prevention:**
+- **Always use "Clear build cache & deploy"** on Render after version updates
+- Keep version numbers consistent in server.js (both health endpoint and console log)
+- Verify health endpoint immediately after deployment
+- Test all critical routes after each Render deployment
+- Document version changes in commit messages
+
+### **Verification:**
+```bash
+# Test health endpoint with cache buster (should work)
+curl -s "https://kafu-system-2.onrender.com/api/health?ts=$(date +%s)" | jq '.version'
+
+# Test IDP progress endpoint (should work after fix)
+curl -X PUT "https://kafu-system-2.onrender.com/api/idp/[ID]/progress" \
+  -H "Content-Type: application/json" \
+  -d '{"progressPercentage": 50, "status": "IN_PROGRESS", "progressNotes": "Test"}' | jq
+
+# Check Render logs for correct version
+# Look for: "Server running on port XXXX - v4.7.5"
+```
+
+### **Render Deployment Checklist:**
+- ✅ Code pushed to GitHub with correct version in server.js
+- ✅ Render service settings have correct:
+  - Root Directory: `backend`
+  - Build Command: `npm install`
+  - Start Command: `npm start`
+- ✅ Environment variables configured (DATABASE_URL, JWT_SECRET, CORS_ORIGINS)
+- ✅ Manual deploy with "Clear build cache" selected
+- ✅ Health endpoint shows correct version after deploy
+- ✅ All API routes tested and working
+
+### **Common Mistakes:**
+- ❌ Deploying without clearing build cache (serves old code)
+- ❌ Version mismatch between health endpoint and console log
+- ❌ Not waiting for deployment to complete before testing
+- ❌ Testing old cached URL instead of fresh request
+- ❌ Wrong Root Directory in Render settings
+
 ## 🔧 **"Failed to create assessment" Error Fix**
 
 ### **Problem:** 
