@@ -254,6 +254,52 @@ router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => 
   try {
     const { id } = req.params;
     
+    // Auto-create progress columns if they don't exist
+    try {
+      await prisma.$queryRaw`SELECT progress_percentage FROM idp_entries LIMIT 1`;
+    } catch (columnError) {
+      // Check if it's a column not found error (PostgreSQL error code 42703)
+      const isColumnError = columnError.code === 'P2010' || 
+                           (columnError.meta && columnError.meta.code === '42703') ||
+                           (columnError.message && columnError.message.includes('progress_percentage'));
+      
+      if (isColumnError) {
+        // Columns don't exist, create them
+        console.log('Creating IDP progress tracking columns...');
+        try {
+          await prisma.$queryRaw`
+            ALTER TABLE idp_entries
+            ADD COLUMN IF NOT EXISTS progress_percentage INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS progress_notes TEXT,
+            ADD COLUMN IF NOT EXISTS last_progress_update TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            ADD COLUMN IF NOT EXISTS started_date TIMESTAMP WITHOUT TIME ZONE,
+            ADD COLUMN IF NOT EXISTS completion_date TIMESTAMP WITHOUT TIME ZONE,
+            ADD COLUMN IF NOT EXISTS progress_attachments TEXT[],
+            ADD COLUMN IF NOT EXISTS attachment_names TEXT[]
+          `;
+          
+          // Add constraint if it doesn't exist
+          await prisma.$queryRaw`
+            DO $$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'idp_entries_progress_percentage_check'
+              ) THEN
+                ALTER TABLE idp_entries
+                ADD CONSTRAINT idp_entries_progress_percentage_check
+                CHECK (progress_percentage >= 0 AND progress_percentage <= 100);
+              END IF;
+            END $$;
+          `;
+          
+          console.log('IDP progress tracking columns created successfully');
+        } catch (alterError) {
+          console.error('Error creating progress columns:', alterError);
+          // Continue anyway - might already exist
+        }
+      }
+    }
+    
     // Handle both JSON and FormData
     let progressPercentage, progressNotes, status, completionDate;
     
@@ -376,11 +422,12 @@ router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => 
           WHERE id = ${id}
         `;
       } else {
-        // Progress columns don't exist - return helpful error
+        // Progress columns don't exist - try creating them one more time, then return error
+        console.log('Progress columns still missing after auto-create attempt');
         return res.status(500).json({ 
           success: false, 
-          error: 'Database schema missing progress tracking columns',
-          details: 'Please run the migration script: add_idp_progress_columns_render.sql to add progress_percentage, progress_notes, and other progress tracking columns to the idp_entries table.'
+          error: 'Database schema issue: Unable to create progress tracking columns',
+          details: 'The progress columns could not be auto-created. Please check Render logs or run the migration script manually: add_idp_progress_columns_render.sql'
         });
       }
     } catch (updateError) {
