@@ -288,10 +288,19 @@ router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => 
       });
     }
 
-    // Check if IDP exists
-    const existingIdp = await prisma.$queryRaw`
-      SELECT id, employee_id, status, progress_percentage, progress_notes, progress_attachments, attachment_names, started_date, completion_date FROM idp_entries WHERE id = ${id}
-    `;
+    // Check if IDP exists - try with progress columns first, fallback to basic query
+    let existingIdp;
+    try {
+      existingIdp = await prisma.$queryRaw`
+        SELECT id, employee_id, status, progress_percentage, progress_notes, progress_attachments, attachment_names, started_date, completion_date FROM idp_entries WHERE id = ${id}
+      `;
+    } catch (columnError) {
+      // Fallback if progress columns don't exist yet
+      console.log('Progress columns not found, using basic query:', columnError.message);
+      existingIdp = await prisma.$queryRaw`
+        SELECT id, employee_id, status FROM idp_entries WHERE id = ${id}
+      `;
+    }
 
     if (!existingIdp || existingIdp.length === 0) {
       return res.status(404).json({ 
@@ -339,27 +348,53 @@ router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => 
 
     // Handle attachments (append to existing ones)
     if (attachmentPaths.length > 0) {
-      const existingAttachments = existingIdp[0].progress_attachments || [];
-      const existingNames = existingIdp[0].attachment_names || [];
+      const existingAttachments = (existingIdp[0].progress_attachments || []);
+      const existingNames = (existingIdp[0].attachment_names || []);
       updateData.progress_attachments = [...existingAttachments, ...attachmentPaths];
       updateData.attachment_names = [...existingNames, ...attachmentNames];
     }
 
-    // Update the IDP
-    await prisma.$queryRaw`
-      UPDATE idp_entries 
-      SET 
-        progress_percentage = ${updateData.progress_percentage || existingIdp[0].progress_percentage || 0},
-        progress_notes = ${updateData.progress_notes || existingIdp[0].progress_notes || null},
-        status = ${updateData.status || existingIdp[0].status},
-        last_progress_update = ${updateData.last_progress_update},
-        started_date = ${updateData.started_date || existingIdp[0].started_date || null},
-        completion_date = ${updateData.completion_date || existingIdp[0].completion_date || null},
-        progress_attachments = ${updateData.progress_attachments || existingIdp[0].progress_attachments || null},
-        attachment_names = ${updateData.attachment_names || existingIdp[0].attachment_names || null},
-        updated_at = NOW()
-      WHERE id = ${id}
-    `;
+    // Update the IDP - try with progress columns first, fallback to basic update
+    try {
+      // Check if progress columns exist (they'll be undefined if basic query was used)
+      const hasProgressColumns = existingIdp[0].progress_percentage !== undefined;
+      
+      if (hasProgressColumns) {
+        // Full update with progress columns
+        await prisma.$queryRaw`
+          UPDATE idp_entries 
+          SET 
+            progress_percentage = ${updateData.progress_percentage !== undefined ? updateData.progress_percentage : (existingIdp[0].progress_percentage || 0)},
+            progress_notes = ${updateData.progress_notes !== undefined ? updateData.progress_notes : (existingIdp[0].progress_notes || null)},
+            status = ${updateData.status || existingIdp[0].status},
+            last_progress_update = ${updateData.last_progress_update},
+            started_date = ${updateData.started_date !== undefined ? updateData.started_date : (existingIdp[0].started_date || null)},
+            completion_date = ${updateData.completion_date !== undefined ? updateData.completion_date : (existingIdp[0].completion_date || null)},
+            progress_attachments = ${updateData.progress_attachments !== undefined ? updateData.progress_attachments : (existingIdp[0].progress_attachments || null)},
+            attachment_names = ${updateData.attachment_names !== undefined ? updateData.attachment_names : (existingIdp[0].attachment_names || null)},
+            updated_at = NOW()
+          WHERE id = ${id}
+        `;
+      } else {
+        // Progress columns don't exist - return helpful error
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Database schema missing progress tracking columns',
+          details: 'Please run the migration script: add_idp_progress_columns_render.sql to add progress_percentage, progress_notes, and other progress tracking columns to the idp_entries table.'
+        });
+      }
+    } catch (updateError) {
+      // If columns don't exist, return helpful error message
+      if (updateError.code === 'P2010' || (updateError.meta && updateError.meta.code === '42703')) {
+        console.error('Database schema missing progress columns:', updateError.message);
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Database schema missing progress tracking columns. Please run the migration script: add_idp_progress_columns_render.sql',
+          details: 'The idp_entries table is missing progress_percentage, progress_notes, and other progress tracking columns.'
+        });
+      }
+      throw updateError; // Re-throw if it's a different error
+    }
 
     res.json({ 
       success: true, 
@@ -368,9 +403,11 @@ router.put('/:id/progress', upload.array('attachments', 5), async (req, res) => 
 
   } catch (error) {
     console.error('Error updating IDP progress:', error);
+    console.error('Error details:', error.code, error.meta);
     res.status(500).json({ 
       success: false, 
-      error: 'Failed to update IDP progress' 
+      error: 'Failed to update IDP progress',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
