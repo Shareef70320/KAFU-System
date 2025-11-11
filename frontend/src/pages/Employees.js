@@ -148,10 +148,10 @@ const Employees = () => {
     fetchAllIDPs();
   }, [employeesData]);
 
-  // Fetch job-competency mappings for JCP calculation
+  // Fetch job-competency mappings for JCP calculation - get all mappings
   const { data: jobCompetencyMappings } = useQuery({
     queryKey: ['job-competency-mappings'],
-    queryFn: () => api.get('/job-competencies').then(res => res.data),
+    queryFn: () => api.get('/job-competencies?limit=10000').then(res => res.data),
     retry: 1,
     staleTime: 5 * 60 * 1000, // 5 minutes
     cacheTime: 10 * 60 * 1000, // 10 minutes

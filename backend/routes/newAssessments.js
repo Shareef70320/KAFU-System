@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const router = express.Router();
 const prisma = new PrismaClient();
+const { canCreateOrActivateAssessment, getCycleStatusMessage } = require('../utils/assessmentCycle');
 
 // Get all assessments with competency and question details
 router.get('/', async (req, res) => {
@@ -91,7 +92,8 @@ router.post('/', async (req, res) => {
       showTimer = true, timeLimitMinutes = 30, forceTimeLimit = false,
       showDashboard = true, showCorrectAnswers = true, showIncorrectAnswers = true,
       numQuestions = 10, applyToAll = false,
-      questionIds = []
+      questionIds = [],
+      createdBy // Employee SID who is creating the assessment
     } = req.body;
     
     // Validate required fields
@@ -99,6 +101,16 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         error: 'Name and competency are required unless applying to all' 
+      });
+    }
+    
+    // Check assessment cycle restrictions
+    const cycleCheck = await canCreateOrActivateAssessment(createdBy || null);
+    if (!cycleCheck.allowed) {
+      return res.status(403).json({
+        success: false,
+        error: cycleCheck.reason,
+        cycleStatus: await getCycleStatusMessage()
       });
     }
     

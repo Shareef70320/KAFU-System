@@ -21,7 +21,10 @@ import {
   Upload,
   Target,
   BarChart3,
-  MessageSquare
+  MessageSquare,
+  Calendar,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { useUser } from '../contexts/UserContext';
@@ -30,6 +33,7 @@ import api from '../lib/api';
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState({});
   const { currentRole, setCurrentRole, currentSid, setCurrentSid } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
@@ -77,6 +81,14 @@ const Layout = () => {
     { name: 'Photo Upload', href: '/photo-upload', icon: Upload },
     { name: 'Development Paths', href: '/development-paths', icon: Layers },
     { name: 'L&D Interventions', href: '/ld-interventions', icon: BookOpen },
+    { 
+      name: 'Settings', 
+      href: '/settings', 
+      icon: Settings,
+      subMenu: [
+        { name: 'Assessment Cycle', href: '/settings/assessment-cycle', icon: Calendar }
+      ]
+    },
   ];
 
   // Base user navigation (for all users)
@@ -156,7 +168,31 @@ const Layout = () => {
     }
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  const toggleSubMenu = (menuName) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuName]: !prev[menuName]
+    }));
+  };
+
+  const hasActiveSubMenu = (item) => {
+    if (!item.subMenu) return false;
+    return item.subMenu.some(subItem => isActive(subItem.href));
+  };
+
+  // Auto-expand menus with active sub-items
+  React.useEffect(() => {
+    const nav = getNavigation();
+    nav.forEach(item => {
+      if (item.subMenu && hasActiveSubMenu(item)) {
+        setExpandedMenus(prev => ({ ...prev, [item.name]: true }));
+      }
+    });
+  }, [location.pathname, currentRole, isManager]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -231,22 +267,64 @@ const Layout = () => {
             <nav className="flex-1 space-y-1 px-2 py-4">
               {navigation.map((item) => {
                 const Icon = item.icon;
+                const hasSubMenu = item.subMenu && item.subMenu.length > 0;
+                const isExpanded = expandedMenus[item.name] || hasActiveSubMenu(item);
+                const isItemActive = isActive(item.href) || hasActiveSubMenu(item);
+
                 return (
-                  <button
-                    key={item.name}
-                    onClick={() => {
-                      navigate(item.href);
-                      setSidebarOpen(false);
-                    }}
-                    className={`group flex w-full items-center rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
-                      isActive(item.href)
-                        ? 'bg-green-100 text-green-700'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
-                    {item.name}
-                  </button>
+                  <div key={item.name}>
+                    <button
+                      onClick={() => {
+                        if (hasSubMenu) {
+                          toggleSubMenu(item.name);
+                        } else {
+                          navigate(item.href);
+                          setSidebarOpen(false);
+                        }
+                      }}
+                      className={`group flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
+                        isItemActive
+                          ? 'bg-green-100 text-green-700'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                        {item.name}
+                      </div>
+                      {hasSubMenu && (
+                        isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )
+                      )}
+                    </button>
+                    {hasSubMenu && isExpanded && (
+                      <div className="ml-4 mt-1 space-y-1">
+                        {item.subMenu.map((subItem) => {
+                          const SubIcon = subItem.icon;
+                          return (
+                            <button
+                              key={subItem.name}
+                              onClick={() => {
+                                navigate(subItem.href);
+                                setSidebarOpen(false);
+                              }}
+                              className={`group flex w-full items-center rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
+                                isActive(subItem.href)
+                                  ? 'bg-green-50 text-green-700 border-l-2 border-green-600'
+                                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                              }`}
+                            >
+                              <SubIcon className="mr-3 h-4 w-4 flex-shrink-0" />
+                              {subItem.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </nav>
@@ -281,19 +359,60 @@ const Layout = () => {
           <nav className="flex-1 space-y-1 px-2 py-4">
             {navigation.map((item) => {
               const Icon = item.icon;
+              const hasSubMenu = item.subMenu && item.subMenu.length > 0;
+              const isExpanded = expandedMenus[item.name] || hasActiveSubMenu(item);
+              const isItemActive = isActive(item.href) || hasActiveSubMenu(item);
+
               return (
-                <button
-                  key={item.name}
-                  onClick={() => navigate(item.href)}
-                  className={`group flex w-full items-center rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
-                    isActive(item.href)
-                      ? 'bg-green-100 text-green-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
-                  {item.name}
-                </button>
+                <div key={item.name}>
+                  <button
+                    onClick={() => {
+                      if (hasSubMenu) {
+                        toggleSubMenu(item.name);
+                      } else {
+                        navigate(item.href);
+                      }
+                    }}
+                    className={`group flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
+                      isItemActive
+                        ? 'bg-green-100 text-green-700'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                      {item.name}
+                    </div>
+                    {hasSubMenu && (
+                      isExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )
+                    )}
+                  </button>
+                  {hasSubMenu && isExpanded && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {item.subMenu.map((subItem) => {
+                        const SubIcon = subItem.icon;
+                        return (
+                          <button
+                            key={subItem.name}
+                            onClick={() => navigate(subItem.href)}
+                            className={`group flex w-full items-center rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
+                              isActive(subItem.href)
+                                ? 'bg-green-50 text-green-700 border-l-2 border-green-600'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            }`}
+                          >
+                            <SubIcon className="mr-3 h-4 w-4 flex-shrink-0" />
+                            {subItem.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>

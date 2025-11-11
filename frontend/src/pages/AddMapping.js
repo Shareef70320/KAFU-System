@@ -16,7 +16,8 @@ import {
   ArrowLeft,
   Plus,
   X,
-  Check
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,10 +33,11 @@ const AddMapping = () => {
   const [selectedCompetencyType, setSelectedCompetencyType] = useState('');
   const [selectedCompetencyFamily, setSelectedCompetencyFamily] = useState('');
 
-  // State for selected job and its competencies
-  const [selectedJob, setSelectedJob] = useState(null);
+  // State for selected jobs and competencies
+  const [selectedJobs, setSelectedJobs] = useState([]); // array of job objects
+  const [jcpCode, setJcpCode] = useState('');
   const [jobCompetencies, setJobCompetencies] = useState([]); // Array of {competency, level}
-  const [existingJobCompetencies, setExistingJobCompetencies] = useState([]); // Array of existing mappings
+  const [existingJobCompetencies, setExistingJobCompetencies] = useState([]); // For preview: based on first selected job
 
   // Fetch jobs - get all jobs without pagination
   const { data: jobsData, error: jobsError } = useQuery({
@@ -66,24 +68,35 @@ const AddMapping = () => {
   const getExistingJobCompetencies = (jobId) => {
     return mappings.filter(mapping => mapping.jobId === jobId);
   };
+  
+  // Check if a job already has a profile (has mappings)
+  const jobHasProfile = (jobId) => {
+    return mappings.some(mapping => mapping.jobId === jobId);
+  };
 
-  // Handle job selection
+  // Handle job toggle selection
   const handleJobSelection = (job) => {
-    setSelectedJob(job);
-    
-    // Get existing competencies for this job
-    const existing = getExistingJobCompetencies(job.id);
-    setExistingJobCompetencies(existing);
-    
-    // Clear any manually added competencies when selecting a new job
+    setSelectedJobs(prev => {
+      const exists = prev.find(j => j.id === job.id);
+      if (exists) {
+        const next = prev.filter(j => j.id !== job.id);
+        // Update existing preview based on first remaining job
+        const first = next[0];
+        setExistingJobCompetencies(first ? getExistingJobCompetencies(first.id) : []);
+        return next;
+      } else {
+        const next = [...prev, job];
+        const first = next[0] || job;
+        setExistingJobCompetencies(getExistingJobCompetencies(first.id));
+        // If only one job selected, prefill JCP code with its job code
+        if (next.length === 1 && !jcpCode) {
+          setJcpCode(job.code || '');
+        }
+        return next;
+      }
+    });
+    // Clear any manually added competencies when selection changes for the first time
     setJobCompetencies([]);
-    
-    if (existing.length > 0) {
-      toast({
-        title: "Existing Profile Found",
-        description: `This job already has ${existing.length} competency mappings. You can add more competencies below.`,
-      });
-    }
   };
 
   // Calculate stats from jobs data
@@ -164,11 +177,10 @@ const AddMapping = () => {
     return matchesSearch && matchesType && matchesFamily;
   });
 
-  // Check if a competency is already linked to the selected job
+  // Check if a competency is already linked to the first selected job (for guidance)
   const isCompetencyLinked = (competencyId) => {
-    if (!selectedJob) return false;
-    
-    // Check if it's in existing competencies
+    if (selectedJobs.length === 0) return false;
+    // Check if it's in existing competencies for preview job
     const existsInExisting = existingJobCompetencies.some(mapping => mapping.competency.id === competencyId);
     if (existsInExisting) return true;
     
@@ -215,54 +227,135 @@ const AddMapping = () => {
     setJobCompetencies(jobCompetencies.filter(comp => comp.competency.id !== competencyId));
   };
 
-  // Create job profile with all competencies
+  // Create job profiles with all competencies for selected jobs (bulk)
   const addMappingMutation = useMutation({
-    mutationFn: async (mappingData) => {
-      // Create multiple mappings for each competency
-      const promises = mappingData.competencies.map(comp => 
-        api.post('/job-competencies', {
-          jobId: mappingData.jobId,
-          competencyId: comp.competency.id,
-          requiredLevel: comp.level,
-        })
-      );
-      return Promise.all(promises);
+    mutationFn: async ({ jobIds, competencies, jcpCode }) => {
+      // First, delete existing mappings for all selected jobs (override behavior)
+      for (const jobId of jobIds) {
+        try {
+          // Fetch all existing mappings for this job
+          const response = await api.get(`/job-competencies?jobId=${jobId}&limit=1000`);
+          const existingMappings = response.data?.mappings || response.data || [];
+          if (existingMappings.length > 0) {
+            // Delete each existing mapping
+            for (const mapping of existingMappings) {
+              try {
+                await api.delete(`/job-competencies/${mapping.id}`);
+              } catch (deleteError) {
+                console.warn(`Failed to delete existing mapping ${mapping.id}:`, deleteError);
+                // Continue even if deletion fails - the bulk endpoint will handle duplicates
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`Error fetching/deleting existing mappings for job ${jobId}:`, error);
+          // Continue - we'll try to create new mappings anyway
+        }
+      }
+      
+      // Build bulk payload for all jobs
+      const allMappings = [];
+      for (const jobId of jobIds) {
+        for (const comp of competencies) {
+          allMappings.push({
+            jobId,
+            competencyId: comp.competency.id,
+            requiredLevel: comp.level,
+            isRequired: true
+          });
+        }
+      }
+      // Send in batches to avoid request size/timeouts and to surface granular errors
+      const batchSize = 100;
+      const aggregateErrors = [];
+      let hasSuccess = false;
+      for (let i = 0; i < allMappings.length; i += batchSize) {
+        const batch = allMappings.slice(i, i + batchSize);
+        // eslint-disable-next-line no-await-in-loop
+        const res = await api.post('/job-competencies/bulk', { mappings: batch }).catch((err) => {
+          // Capture any unexpected server error
+          aggregateErrors.push(err?.response?.data?.message || err.message || 'Unknown error');
+          return null;
+        });
+        if (res?.data) {
+          if (res.data.success > 0) {
+            hasSuccess = true;
+          }
+          if (res.data.errors > 0 && Array.isArray(res.data.errors)) {
+            aggregateErrors.push(...res.data.errors.map(e => e?.error || 'Unknown mapping error'));
+          }
+        }
+      }
+      
+      // Set JCP code for all selected jobs, if provided - ALWAYS try to set it even if there were mapping errors
+      if (jcpCode && jcpCode.trim().length > 0) {
+        try {
+          await api.post('/jobs/set-jcp-code', { jobIds, jcpCode: jcpCode.trim() });
+        } catch (jcpError) {
+          // Bulk failed; attempt per-job fallback to ensure JCP is applied
+          try {
+            for (const jobId of jobIds) {
+              // eslint-disable-next-line no-await-in-loop
+              await api.post('/jobs/set-jcp-code', { jobIds: [jobId], jcpCode: jcpCode.trim() });
+            }
+          } catch (perJobError) {
+            console.error('Error setting JCP code (per-job fallback):', perJobError);
+            aggregateErrors.push(`Failed to set JCP code: ${perJobError?.response?.data?.message || perJobError.message || 'Unknown error'}`);
+          }
+        }
+      }
+      
+      // If there were errors but also some success, treat as partial success
+      if (aggregateErrors.length > 0) {
+        if (hasSuccess) {
+          const message = `Mappings created with some errors (${aggregateErrors.length}). First error: ${aggregateErrors[0]}`;
+          const error = new Error(message);
+          error._partial = true;
+          throw error;
+        } else {
+          // All failed
+          throw new Error(`All mappings failed. First error: ${aggregateErrors[0]}`);
+        }
+      }
     },
     onSuccess: () => {
       toast({
-        title: existingJobCompetencies.length > 0 ? "Competencies Added" : "Job Profile Created",
-        description: existingJobCompetencies.length > 0 
-          ? `${jobCompetencies.length} new competencies added to existing profile`
-          : `Job profile with ${jobCompetencies.length} competencies created successfully`,
+        title: "Job Profiles Updated",
+        description: `Applied ${jobCompetencies.length} competencies to ${selectedJobs.length} job(s)` + (jcpCode ? ` with JCP code "${jcpCode}"` : ''),
       });
       queryClient.invalidateQueries(['jobCompetencies']);
+      queryClient.invalidateQueries(['jobs']);
       // Reset selections
-      setSelectedJob(null);
+      setSelectedJobs([]);
+      setJcpCode('');
       setJobCompetencies([]);
       setExistingJobCompetencies([]);
     },
     onError: (error) => {
+      const partial = error && error._partial;
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to create job profile",
-        variant: "destructive",
+        title: partial ? "Partial Success" : "Error",
+        description: error.response?.data?.message || error.message || "Failed to create job profile",
+        variant: partial ? "default" : "destructive",
       });
     },
   });
 
   const handleCreateJobProfile = () => {
-    if (!selectedJob || jobCompetencies.length === 0) {
+    if (selectedJobs.length === 0 || jobCompetencies.length === 0) {
       toast({
         title: "Missing Information",
-        description: "Please select a job and add at least one competency",
+        description: "Please select at least one job and add at least one competency",
         variant: "destructive",
       });
       return;
     }
 
+    // Basic validation for JCP code uniqueness is handled on DB uniqueness if we enforce later; here we just pass through
     addMappingMutation.mutate({
-      jobId: selectedJob.id,
+      jobIds: selectedJobs.map(j => j.id),
       competencies: jobCompetencies,
+      jcpCode
     });
   };
 
@@ -372,7 +465,7 @@ const AddMapping = () => {
                       onChange={(e) => {
                         setSelectedJobType(e.target.value);
                         // Clear any selected job when filter changes
-                        setSelectedJob(null);
+                        setSelectedJobs([]);
                       }}
                       className="loyverse-input mt-1 w-full"
                     >
@@ -395,7 +488,7 @@ const AddMapping = () => {
                       onClick={() => {
                         setJobSearchTerm('');
                         setSelectedJobType('');
-                        setSelectedJob(null);
+                        setSelectedJobs([]);
                       }}
                     >
                       Clear Filters
@@ -403,21 +496,37 @@ const AddMapping = () => {
                   </div>
                 </div>
 
-                {/* Jobs List */}
+                {/* Jobs List (multi-select) */}
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {filteredJobs.map((job) => (
                     <div
                       key={job.id}
                       onClick={() => handleJobSelection(job)}
                       className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                        selectedJob?.id === job.id
+                        selectedJobs.some(j => j.id === job.id)
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{job.title}</h3>
+                          <div className="flex items-center space-x-2 flex-wrap">
+                            <h3 className="font-semibold text-gray-900">{job.title}</h3>
+                            {job.code && (
+                              <Badge variant="outline" className="text-xs">{job.code}</Badge>
+                            )}
+                            {jobHasProfile(job.id) && (
+                              <Badge className="text-xs bg-amber-100 text-amber-800 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                Has Profile
+                              </Badge>
+                            )}
+                          </div>
+                          {jobHasProfile(job.id) && (
+                            <p className="text-xs text-amber-700 mt-1 italic">
+                              This job already has a profile. Creating a new one will replace it.
+                            </p>
+                          )}
                           <p className="text-sm text-gray-600 mt-1">{job.description}</p>
                           <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
                             <span className="flex items-center">
@@ -428,7 +537,7 @@ const AddMapping = () => {
                             <span>{job.department}</span>
                           </div>
                         </div>
-                        {selectedJob?.id === job.id && (
+                        {selectedJobs.some(j => j.id === job.id) && (
                           <div className="ml-2">
                             <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
                               <Check className="h-4 w-4 text-white" />
@@ -615,17 +724,33 @@ const AddMapping = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {selectedJob ? (
+                {selectedJobs.length > 0 ? (
                   <div className="space-y-4">
-                    {/* Selected Job */}
+                    {/* JCP Code Input */}
+                    <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <Label htmlFor="jcp-code">JCP Code (applied to all selected jobs)</Label>
+                      <Input
+                        id="jcp-code"
+                        placeholder="Enter JCP code (e.g., use a representative job code)"
+                        value={jcpCode}
+                        onChange={(e) => setJcpCode(e.target.value)}
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-600 mt-2">
+                        Tip: If creating a shared profile for multiple jobs, use the source job code as the common JCP code.
+                      </p>
+                    </div>
+
+                    {/* Selected Jobs */}
                     <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <h4 className="font-semibold text-blue-800 mb-2">Selected Job</h4>
-                      <h5 className="font-medium text-gray-900">{selectedJob.title}</h5>
-                      <p className="text-sm text-gray-600 mt-1">{selectedJob.description}</p>
-                      <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                        <span>{selectedJob.unit}</span>
-                        <span>{selectedJob.division}</span>
-                        <span>{selectedJob.department}</span>
+                      <h4 className="font-semibold text-blue-800 mb-2">Selected Jobs ({selectedJobs.length})</h4>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {selectedJobs.map(job => (
+                          <div key={job.id} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-900">{job.title}</span>
+                            <Badge variant="outline" className="text-xs">{job.code}</Badge>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -634,7 +759,7 @@ const AddMapping = () => {
                       <div>
                         <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
                           <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
-                          Existing Competencies ({existingJobCompetencies.length})
+                          Existing Competencies (from first selected job) ({existingJobCompetencies.length})
                         </h4>
                         <div className="space-y-2 max-h-48 overflow-y-auto">
                           {existingJobCompetencies.map((mapping) => (
@@ -715,14 +840,12 @@ const AddMapping = () => {
                     {/* Create Profile Button */}
                     <Button
                       onClick={handleCreateJobProfile}
-                      disabled={addMappingMutation.isPending || jobCompetencies.length === 0}
+                      disabled={addMappingMutation.isPending || jobCompetencies.length === 0 || selectedJobs.length === 0}
                       className="w-full bg-blue-600 hover:bg-blue-700"
                     >
                       {addMappingMutation.isPending 
                         ? 'Adding Competencies...' 
-                        : existingJobCompetencies.length > 0 
-                          ? `Add ${jobCompetencies.length} New Competencies`
-                          : `Create Job Profile (${jobCompetencies.length} competencies)`
+                        : `Apply ${jobCompetencies.length} Competencies to ${selectedJobs.length} Job(s)`
                       }
                     </Button>
                   </div>

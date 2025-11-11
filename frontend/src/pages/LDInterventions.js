@@ -18,7 +18,9 @@ const LDInterventions = () => {
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [showCreateType, setShowCreateType] = useState(false);
   const [showCreateInstance, setShowCreateInstance] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
+  const [editingItem, setEditingItem] = useState(null); // category
+  const [editingType, setEditingType] = useState(null);
+  const [editingInstance, setEditingInstance] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
 
@@ -75,11 +77,21 @@ const LDInterventions = () => {
     type.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const toggleTypeActive = useMutation({
+    mutationFn: ({ id, is_active }) => api.put(`/ld-interventions/types/${id}`, { is_active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ld-types'], exact: false })
+  });
+
   const filteredInstances = instances.filter(instance => 
     instance.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     instance.type_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     instance.instructor?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const toggleInstanceActive = useMutation({
+    mutationFn: ({ id, is_active }) => api.put(`/ld-interventions/instances/${id}`, { is_active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ld-instances'], exact: false })
+  });
 
   // Mutations
   const createCategoryMutation = useMutation({
@@ -89,6 +101,11 @@ const LDInterventions = () => {
       setCategoryForm({ name: '', description: '', color: '#3B82F6', icon: 'BookOpen' });
       setShowCreateCategory(false);
     }
+  });
+
+  const toggleCategoryActive = useMutation({
+    mutationFn: ({ id, is_active }) => api.put(`/ld-interventions/categories/${id}`, { is_active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ld-categories'], exact: false })
   });
 
   const updateCategoryMutation = useMutation({
@@ -120,6 +137,14 @@ const LDInterventions = () => {
     }
   });
 
+  const updateTypeMutation = useMutation({
+    mutationFn: ({ id, data }) => api.put(`/ld-interventions/types/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries(['ld-types']);
+      setEditingType(null);
+    }
+  });
+
   const createInstanceMutation = useMutation({
     mutationFn: (data) => api.post('/ld-interventions/instances', data),
     onSuccess: () => {
@@ -129,6 +154,14 @@ const LDInterventions = () => {
         start_date: '', end_date: '', max_participants: 20, cost_per_participant: '', notes: ''
       });
       setShowCreateInstance(false);
+    }
+  });
+
+  const updateInstanceMutation = useMutation({
+    mutationFn: ({ id, data }) => api.put(`/ld-interventions/instances/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries(['ld-instances']);
+      setEditingInstance(null);
     }
   });
 
@@ -272,6 +305,9 @@ const LDInterventions = () => {
                     {getCategoryIcon(category.icon)}
                   </div>
                   {category.name}
+                  <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${category.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                    {category.is_active ? 'Active' : 'Inactive'}
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -280,7 +316,20 @@ const LDInterventions = () => {
                   <span className="text-gray-500">Types</span>
                   <span className="font-medium text-gray-900">{category.type_count}</span>
                 </div>
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-3 mt-3 items-center">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Active</span>
+                    <button
+                      type="button"
+                      aria-pressed={!!category.is_active}
+                      onClick={() => toggleCategoryActive.mutate({ id: category.id, is_active: !category.is_active })}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${category.is_active ? 'bg-green-500' : 'bg-gray-300'}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform ${category.is_active ? 'translate-x-5' : ''}`}
+                      />
+                    </button>
+                  </div>
                   <Button variant="outline" size="sm" onClick={() => setEditingItem(category)}>
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -316,6 +365,9 @@ const LDInterventions = () => {
                     {getCategoryIcon(type.category_icon)}
                   </div>
                   {type.name}
+                  <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${type.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                    {type.is_active ? 'Active' : 'Inactive'}
+                  </span>
                 </CardTitle>
                 <p className="text-sm text-gray-500">{type.category_name}</p>
               </CardHeader>
@@ -337,11 +389,24 @@ const LDInterventions = () => {
                     </span>
                   </div>
                 </div>
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-3 mt-3 items-center">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Active</span>
+                    <button
+                      type="button"
+                      aria-pressed={!!type.is_active}
+                      onClick={() => toggleTypeActive.mutate({ id: type.id, is_active: !type.is_active })}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${type.is_active ? 'bg-green-500' : 'bg-gray-300'}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform ${type.is_active ? 'translate-x-5' : ''}`}
+                      />
+                    </button>
+                  </div>
                   <Button variant="outline" size="sm">
                     <Eye className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={() => setEditingType(type)}>
                     <Edit className="h-4 w-4" />
                   </Button>
                 </div>
@@ -357,7 +422,12 @@ const LDInterventions = () => {
           {filteredInstances.map(instance => (
             <Card key={instance.id} className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">{instance.title}</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  {instance.title}
+                  <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${instance.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                    {instance.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </CardTitle>
                 <p className="text-sm text-gray-500">{instance.type_name}</p>
               </CardHeader>
               <CardContent>
@@ -380,11 +450,24 @@ const LDInterventions = () => {
                     </span>
                   </div>
                 </div>
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-3 mt-3 items-center">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Active</span>
+                    <button
+                      type="button"
+                      aria-pressed={!!instance.is_active}
+                      onClick={() => toggleInstanceActive.mutate({ id: instance.id, is_active: !instance.is_active })}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${instance.is_active ? 'bg-green-500' : 'bg-gray-300'}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform ${instance.is_active ? 'translate-x-5' : ''}`}
+                      />
+                    </button>
+                  </div>
                   <Button variant="outline" size="sm">
                     <Eye className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={() => setEditingInstance(instance)}>
                     <Edit className="h-4 w-4" />
                   </Button>
                 </div>
@@ -453,6 +536,55 @@ const LDInterventions = () => {
                 <Button type="submit" disabled={createCategoryMutation.isPending} className="loyverse-button">
                   {createCategoryMutation.isPending ? 'Creating...' : 'Create'}
                 </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Category Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Category</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const data = {
+                name: form.name.value,
+                description: form.description.value,
+                color: form.color.value,
+                icon: form.icon.value
+              };
+              updateCategoryMutation.mutate({ id: editingItem.id, data });
+            }} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-cat-name">Name</Label>
+                <Input id="edit-cat-name" name="name" defaultValue={editingItem.name} className="mt-1" required />
+              </div>
+              <div>
+                <Label htmlFor="edit-cat-desc">Description</Label>
+                <Input id="edit-cat-desc" name="description" defaultValue={editingItem.description || ''} className="mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-cat-color">Color</Label>
+                  <Input id="edit-cat-color" name="color" type="color" defaultValue={editingItem.color || '#3B82F6'} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="edit-cat-icon">Icon</Label>
+                  <select id="edit-cat-icon" name="icon" defaultValue={editingItem.icon || 'BookOpen'} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="BookOpen">BookOpen</option>
+                    <option value="GraduationCap">GraduationCap</option>
+                    <option value="Briefcase">Briefcase</option>
+                    <option value="Users">Users</option>
+                    <option value="Target">Target</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button type="button" onClick={() => setEditingItem(null)} className="loyverse-button-secondary">Cancel</Button>
+                <Button type="submit" className="loyverse-button">Save</Button>
               </div>
             </form>
           </div>
@@ -563,6 +695,77 @@ const LDInterventions = () => {
                 <Button type="submit" disabled={createTypeMutation.isPending} className="loyverse-button">
                   {createTypeMutation.isPending ? 'Creating...' : 'Create'}
                 </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Type Modal */}
+      {editingType && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Intervention Type</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const f = e.currentTarget;
+              const data = {
+                name: f.name.value,
+                description: f.description.value,
+                duration_range: f.duration_range.value,
+                delivery_mode: f.delivery_mode.value,
+                cost_level: f.cost_level.value,
+                complexity_level: f.complexity_level.value
+              };
+              updateTypeMutation.mutate({ id: editingType.id, data });
+            }} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-type-name">Name</Label>
+                <Input id="edit-type-name" name="name" defaultValue={editingType.name} className="mt-1" required />
+              </div>
+              <div>
+                <Label htmlFor="edit-type-desc">Description</Label>
+                <Input id="edit-type-desc" name="description" defaultValue={editingType.description || ''} className="mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-type-duration">Duration Range</Label>
+                  <Input id="edit-type-duration" name="duration_range" defaultValue={editingType.duration_range || ''} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="edit-type-delivery">Delivery Mode</Label>
+                  <select id="edit-type-delivery" name="delivery_mode" defaultValue={editingType.delivery_mode || ''} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="">Select Mode</option>
+                    <option value="Face-to-face">Face-to-face</option>
+                    <option value="Online">Online</option>
+                    <option value="Blended">Blended</option>
+                    <option value="Self-directed">Self-directed</option>
+                    <option value="Workplace">Workplace</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-type-cost">Cost Level</Label>
+                  <select id="edit-type-cost" name="cost_level" defaultValue={editingType.cost_level || 'MEDIUM'} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="edit-type-complexity">Complexity Level</Label>
+                  <select id="edit-type-complexity" name="complexity_level" defaultValue={editingType.complexity_level || 'MEDIUM'} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="BASIC">Basic</option>
+                    <option value="INTERMEDIATE">Intermediate</option>
+                    <option value="ADVANCED">Advanced</option>
+                    <option value="EXPERT">Expert</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button type="button" onClick={() => setEditingType(null)} className="loyverse-button-secondary">Cancel</Button>
+                <Button type="submit" className="loyverse-button">Save</Button>
               </div>
             </form>
           </div>
@@ -699,6 +902,71 @@ const LDInterventions = () => {
                 <Button type="submit" disabled={createInstanceMutation.isPending} className="loyverse-button">
                   {createInstanceMutation.isPending ? 'Creating...' : 'Create'}
                 </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Instance Modal */}
+      {editingInstance && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Intervention Instance</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const f = e.currentTarget;
+              const data = {
+                title: f.title.value,
+                description: f.description.value,
+                instructor: f.instructor.value,
+                location: f.location.value,
+                start_date: f.start_date.value,
+                end_date: f.end_date.value,
+                status: f.status.value
+              };
+              updateInstanceMutation.mutate({ id: editingInstance.id, data });
+            }} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-inst-title">Title</Label>
+                <Input id="edit-inst-title" name="title" defaultValue={editingInstance.title} className="mt-1" required />
+              </div>
+              <div>
+                <Label htmlFor="edit-inst-desc">Description</Label>
+                <Input id="edit-inst-desc" name="description" defaultValue={editingInstance.description || ''} className="mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-inst-instructor">Instructor</Label>
+                  <Input id="edit-inst-instructor" name="instructor" defaultValue={editingInstance.instructor || ''} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="edit-inst-location">Location</Label>
+                  <Input id="edit-inst-location" name="location" defaultValue={editingInstance.location || ''} className="mt-1" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-inst-start">Start Date</Label>
+                  <Input id="edit-inst-start" name="start_date" type="date" defaultValue={editingInstance.start_date || ''} className="mt-1" />
+                </div>
+                <div>
+                  <Label htmlFor="edit-inst-end">End Date</Label>
+                  <Input id="edit-inst-end" name="end_date" type="date" defaultValue={editingInstance.end_date || ''} className="mt-1" />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="edit-inst-status">Status</Label>
+                <select id="edit-inst-status" name="status" defaultValue={editingInstance.status || 'PLANNED'} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                  <option value="PLANNED">Planned</option>
+                  <option value="ONGOING">Ongoing</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button type="button" onClick={() => setEditingInstance(null)} className="loyverse-button-secondary">Cancel</Button>
+                <Button type="submit" className="loyverse-button">Save</Button>
               </div>
             </form>
           </div>

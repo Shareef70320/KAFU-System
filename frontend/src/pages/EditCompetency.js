@@ -17,7 +17,10 @@ import {
   BookOpen, 
   Building2, 
   Award,
-  Target
+  Target,
+  Edit,
+  X,
+  Check
 } from 'lucide-react';
 
 const EditCompetency = () => {
@@ -28,6 +31,7 @@ const EditCompetency = () => {
 
   // Form state
   const [formData, setFormData] = useState({
+    code: '',
     name: '',
     type: 'TECHNICAL',
     family: '',
@@ -38,8 +42,12 @@ const EditCompetency = () => {
   });
 
   const [levels, setLevels] = useState([]);
+  const [elements, setElements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [allFamilies, setAllFamilies] = useState([]);
+  const [showAddElementModal, setShowAddElementModal] = useState(false);
+  const [editingElement, setEditingElement] = useState(null);
+  const [elementForm, setElementForm] = useState({ name: '', description: '' });
   const [allTypes, setAllTypes] = useState([
     'TECHNICAL',
     'NON_TECHNICAL',
@@ -96,6 +104,7 @@ const EditCompetency = () => {
       const normFamily = (competency.family || '').toString().trim();
       const normDivision = (competency.relatedDivision || '').toString().trim();
       setFormData({
+        code: competency.code || '',
         name: competency.name || '',
         type: normType,
         family: normFamily,
@@ -105,6 +114,7 @@ const EditCompetency = () => {
         isActive: competency.isActive !== false
       });
       setLevels(competency.levels || []);
+      setElements(competency.elements || []);
     }
   }, [competency]);
 
@@ -188,6 +198,159 @@ const EditCompetency = () => {
     setLevels(prev => prev.filter((_, index) => index !== levelIndex));
   };
 
+  // Element mutations
+  const createElementMutation = useMutation({
+    mutationFn: async (data) => {
+      const response = await api.post(`/competencies/${id}/elements`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['competency', id]);
+      toast({
+        title: 'Success',
+        description: 'Element added successfully!',
+        variant: 'default'
+      });
+      setShowAddElementModal(false);
+      setElementForm({ name: '', description: '' });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to add element',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const updateElementMutation = useMutation({
+    mutationFn: async ({ elementId, data }) => {
+      const response = await api.put(`/competencies/${id}/elements/${elementId}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['competency', id]);
+      toast({
+        title: 'Success',
+        description: 'Element updated successfully!',
+        variant: 'default'
+      });
+      setEditingElement(null);
+      setElementForm({ name: '', description: '' });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to update element',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const deleteElementMutation = useMutation({
+    mutationFn: async (elementId) => {
+      const response = await api.delete(`/competencies/${id}/elements/${elementId}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['competency', id]);
+      toast({
+        title: 'Success',
+        description: 'Element deleted successfully!',
+        variant: 'default'
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to delete element',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const handleAddElement = () => {
+    if (!elementForm.name.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Element name is required',
+        variant: 'destructive'
+      });
+      return;
+    }
+    createElementMutation.mutate({
+      name: elementForm.name.trim(),
+      description: elementForm.description.trim() || null
+    });
+  };
+
+  const handleEditElement = (element) => {
+    setEditingElement(element);
+    setElementForm({ name: element.name, description: element.description || '' });
+    setShowAddElementModal(true);
+  };
+
+  const handleUpdateElement = () => {
+    if (!elementForm.name.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Element name is required',
+        variant: 'destructive'
+      });
+      return;
+    }
+    updateElementMutation.mutate({
+      elementId: editingElement.id,
+      data: {
+        name: elementForm.name.trim(),
+        description: elementForm.description.trim() || null
+      }
+    });
+  };
+
+  const handleDeleteElement = (elementId) => {
+    if (window.confirm('Are you sure you want to delete this element?')) {
+      deleteElementMutation.mutate(elementId);
+    }
+  };
+
+  const handleBulkAddElements = () => {
+    const elementsText = window.prompt('Enter element names, one per line:');
+    if (!elementsText) return;
+    
+    const elementNames = elementsText.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+    
+    if (elementNames.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'No valid element names provided',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const elementsData = elementNames.map(name => ({ name }));
+    
+    api.post(`/competencies/${id}/elements/bulk`, { elements: elementsData })
+      .then(() => {
+        queryClient.invalidateQueries(['competency', id]);
+        toast({
+          title: 'Success',
+          description: `Added ${elementNames.length} elements successfully!`,
+          variant: 'default'
+        });
+      })
+      .catch((error) => {
+        toast({
+          title: 'Error',
+          description: error.response?.data?.message || 'Failed to add elements',
+          variant: 'destructive'
+        });
+      });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -266,6 +429,17 @@ const EditCompetency = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div>
+                  <Label htmlFor="code">Competency Code <span className="text-gray-500 text-xs">(Unique)</span></Label>
+                  <Input
+                    id="code"
+                    value={formData.code || ''}
+                    onChange={(e) => handleInputChange('code', e.target.value)}
+                    placeholder="e.g., TECH-ICT-001"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Leave empty to auto-generate, or enter a unique code</p>
+                </div>
+                <div>
                   <Label htmlFor="name">Competency Name</Label>
                   <Input
                     id="name"
@@ -275,6 +449,9 @@ const EditCompetency = () => {
                     required
                   />
                 </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div>
                   <Label htmlFor="type">Type</Label>
                   <select
@@ -292,9 +469,6 @@ const EditCompetency = () => {
                     ))}
                   </select>
                 </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div>
                   <Label htmlFor="family">Competency Family</Label>
                   <select
@@ -312,6 +486,9 @@ const EditCompetency = () => {
                     ))}
                   </select>
                 </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div>
                   <Label htmlFor="relatedDivision">Related Division</Label>
                   <Input
@@ -322,6 +499,7 @@ const EditCompetency = () => {
                   />
                 </div>
               </div>
+              
 
               <div>
                 <Label htmlFor="definition">Definition</Label>
@@ -337,15 +515,6 @@ const EditCompetency = () => {
               </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="relatedDivision">Related Division</Label>
-                <Input
-                  id="relatedDivision"
-                  value={formData.relatedDivision || ''}
-                  onChange={(e) => handleInputChange('relatedDivision', e.target.value)}
-                  placeholder="Select or type division"
-                />
-              </div>
               <div>
                 <Label htmlFor="relatedDocuments">Related Documents (comma-separated URLs)</Label>
                 <Input
@@ -430,6 +599,89 @@ const EditCompetency = () => {
           </CardContent>
         </Card>
 
+          {/* Competency Elements */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Building2 className="h-5 w-5 mr-2 text-orange-600" />
+                  Competency Elements
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    type="button" 
+                    onClick={handleBulkAddElements} 
+                    variant="outline" 
+                    size="sm"
+                    title="Bulk add elements from list"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Bulk Add
+                  </Button>
+                  <Button 
+                    type="button" 
+                    onClick={() => {
+                      setEditingElement(null);
+                      setElementForm({ name: '', description: '' });
+                      setShowAddElementModal(true);
+                    }} 
+                    variant="outline" 
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Element
+                  </Button>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {elements.length === 0 ? (
+                <p className="text-gray-500 text-sm">No elements added yet. Click "Add Element" to get started.</p>
+              ) : (
+                <div className="space-y-3">
+                  {elements.map((element) => (
+                    <div 
+                      key={element.id} 
+                      className="flex items-start justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium text-gray-900">{element.name}</h4>
+                          {!element.isActive && (
+                            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">Inactive</span>
+                          )}
+                        </div>
+                        {element.description && (
+                          <p className="text-sm text-gray-600">{element.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditElement(element)}
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteElement(element.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Competency Levels */}
           <Card>
             <CardHeader>
@@ -502,6 +754,84 @@ const EditCompetency = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Add/Edit Element Modal */}
+          {showAddElementModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">
+                    {editingElement ? 'Edit Element' : 'Add Element'}
+                  </h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowAddElementModal(false);
+                      setEditingElement(null);
+                      setElementForm({ name: '', description: '' });
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="element-name">Element Name *</Label>
+                    <Input
+                      id="element-name"
+                      value={elementForm.name}
+                      onChange={(e) => setElementForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Enter element name"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="element-description">Description (Optional)</Label>
+                    <textarea
+                      id="element-description"
+                      value={elementForm.description}
+                      onChange={(e) => setElementForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Enter element description"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowAddElementModal(false);
+                        setEditingElement(null);
+                        setElementForm({ name: '', description: '' });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={editingElement ? handleUpdateElement : handleAddElement}
+                      disabled={createElementMutation.isLoading || updateElementMutation.isLoading}
+                    >
+                      {editingElement ? (
+                        <>
+                          <Check className="h-4 w-4 mr-2" />
+                          Update
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Submit Button */}
           <div className="flex justify-end space-x-4">

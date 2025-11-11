@@ -126,9 +126,12 @@ const NewAssessments = () => {
       setShowAddAssessment(false);
     },
     onError: (error) => {
+      const errorMessage = error.response?.data?.error || 'Failed to create assessment';
+      const cycleStatus = error.response?.data?.cycleStatus;
+      
       toast({
-        title: 'Error',
-        description: error.response?.data?.error || 'Failed to create assessment',
+        title: 'Cannot Create Assessment',
+        description: cycleStatus ? `${errorMessage}\n\n${cycleStatus}` : errorMessage,
         variant: 'destructive'
       });
     }

@@ -4,6 +4,57 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const router = express.Router();
 
+// Helper: clone mappings from one job to many jobs in a transaction
+async function cloneJobCompetencyMappings(sourceJobId, targetJobIds, options = { replace: true }) {
+  return await prisma.$transaction(async (tx) => {
+    // Load source mappings
+    const sourceMappings = await tx.jobCompetency.findMany({
+      where: { jobId: sourceJobId },
+      select: {
+        competencyId: true,
+        requiredLevel: true,
+        isRequired: true
+      }
+    });
+
+    const results = [];
+
+    for (const targetJobId of targetJobIds) {
+      if (options.replace) {
+        await tx.jobCompetency.deleteMany({
+          where: { jobId: targetJobId }
+        });
+      }
+
+      // Create new mappings for target job, avoiding duplicates within the batch
+      for (const m of sourceMappings) {
+        // Ensure we don't violate unique constraints (jobId, competencyId)
+        const existing = await tx.jobCompetency.findUnique({
+          where: {
+            jobId_competencyId: {
+              jobId: targetJobId,
+              competencyId: m.competencyId
+            }
+          }
+        });
+        if (existing) continue;
+
+        const created = await tx.jobCompetency.create({
+          data: {
+            jobId: targetJobId,
+            competencyId: m.competencyId,
+            requiredLevel: m.requiredLevel,
+            isRequired: m.isRequired
+          }
+        });
+        results.push(created);
+      }
+    }
+
+    return { copiedFrom: sourceJobId, targets: targetJobIds, createdCount: results.length };
+  });
+}
+
 // Get all job-competency mappings with pagination and filtering
 router.get('/', async (req, res) => {
   try {
@@ -73,6 +124,58 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching job-competency mappings:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Group-apply a Job Competency Profile (JCP) from one job to multiple jobs
+// POST /api/job-competencies/group-apply
+// body: { sourceJobId: string, targetJobIds: string[], replace?: boolean }
+router.post('/group-apply', async (req, res) => {
+  try {
+    const { sourceJobId, targetJobIds, replace = true } = req.body;
+
+    if (!sourceJobId || !Array.isArray(targetJobIds) || targetJobIds.length === 0) {
+      return res.status(400).json({ message: 'sourceJobId and non-empty targetJobIds are required' });
+    }
+
+    if (targetJobIds.includes(sourceJobId)) {
+      return res.status(400).json({ message: 'sourceJobId cannot be included in targetJobIds' });
+    }
+
+    // Validate source exists
+    const sourceJob = await prisma.job.findUnique({ where: { id: sourceJobId } });
+    if (!sourceJob) {
+      return res.status(404).json({ message: 'Source job not found' });
+    }
+
+    // Validate targets exist
+    const targetJobs = await prisma.job.findMany({
+      where: { id: { in: targetJobIds } },
+      select: { id: true }
+    });
+    const foundIds = new Set(targetJobs.map(j => j.id));
+    const missing = targetJobIds.filter(id => !foundIds.has(id));
+    if (missing.length > 0) {
+      return res.status(404).json({ message: 'One or more target jobs not found', missing });
+    }
+
+    // Perform clone
+    const result = await cloneJobCompetencyMappings(sourceJobId, targetJobIds, { replace: Boolean(replace) });
+
+    // Return summary
+    res.json({
+      message: 'JCP applied to target jobs successfully',
+      sourceJobId,
+      targetJobIds,
+      createdMappings: result.createdCount,
+      replace: Boolean(replace),
+      // For convenience, expose a deterministic JCP code suggestion:
+      // If single job → its code. If multiple jobs → use the source job code.
+      suggestedJcpCode: sourceJob.code || null
+    });
+  } catch (error) {
+    console.error('Error group-applying JCP:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });

@@ -78,7 +78,7 @@ const TeamJobs = () => {
 
   const fetchJCPData = async () => {
     try {
-      const response = await api.get('/job-competencies');
+      const response = await api.get('/job-competencies?limit=10000');
       const jcps = response.data.mappings || response.data;
       setJcpData(jcps);
     } catch (error) {

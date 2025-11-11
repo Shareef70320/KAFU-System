@@ -46,8 +46,14 @@ router.get('/', async (req, res) => {
 
     // Get jobs using raw SQL
     const jobsQuery = `
-      SELECT * FROM jobs 
-      ${whereClause}
+      SELECT j.*, 
+             (
+               SELECT COUNT(*)::int 
+               FROM job_competencies jc 
+               WHERE jc."jobId" = j.id
+             ) as jcp_count
+      FROM jobs j
+      ${whereClause.replaceAll('FROM jobs', 'FROM jobs j')}
       ORDER BY ${sortBy} ${sortOrder.toUpperCase()}
       LIMIT ${take} OFFSET ${skip}
     `;
@@ -117,10 +123,14 @@ router.get('/stats', async (req, res) => {
     const totalJobsResult = await prisma.$queryRawUnsafe(totalJobsQuery);
     const totalJobs = parseInt(totalJobsResult[0].count);
 
-    // Get active jobs count
-    const activeJobsQuery = 'SELECT COUNT(*) as count FROM jobs WHERE "isActive" = true';
-    const activeJobsResult = await prisma.$queryRawUnsafe(activeJobsQuery);
-    const activeJobs = parseInt(activeJobsResult[0].count);
+    // Get jobs with JCP (at least one job_competency mapping)
+    const withJcpQuery = `
+      SELECT COUNT(DISTINCT j.id) as count
+      FROM jobs j
+      JOIN job_competencies jc ON jc."jobId" = j.id
+    `;
+    const withJcpResult = await prisma.$queryRawUnsafe(withJcpQuery);
+    const withJcp = parseInt(withJcpResult[0].count);
 
     // Get unique units count
     const unitsQuery = 'SELECT COUNT(DISTINCT unit) as count FROM jobs WHERE unit IS NOT NULL AND unit != \'\'';
@@ -134,7 +144,7 @@ router.get('/stats', async (req, res) => {
 
     res.json({
       total: totalJobs,
-      active: activeJobs,
+      withJcp: withJcp,
       units: units,
       divisions: divisions
     });
@@ -144,20 +154,80 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Get employees without job codes (for assignment UI)
+// MUST be before /:id route to avoid route conflict
+// GET /api/jobs/employees-without-job
+router.get('/employees-without-job', async (req, res) => {
+  try {
+    const { department, division, location, unit, limit = 100 } = req.query;
+
+    let whereConditions = [
+      "(job_code IS NULL OR job_code = '') OR (job_title IS NULL OR job_title = '')"
+    ];
+
+    if (department) {
+      whereConditions.push(`department = '${String(department).replace(/'/g, "''")}'`);
+    }
+    if (division) {
+      whereConditions.push(`division = '${String(division).replace(/'/g, "''")}'`);
+    }
+    if (location) {
+      whereConditions.push(`location = '${String(location).replace(/'/g, "''")}'`);
+    }
+    if (unit) {
+      whereConditions.push(`unit = '${String(unit).replace(/'/g, "''")}'`);
+    }
+
+    const employees = await prisma.$queryRawUnsafe(`
+      SELECT 
+        id, sid, first_name, last_name, email, 
+        department, division, unit, location, 
+        job_code, job_title
+      FROM employees 
+      WHERE ${whereConditions.join(' AND ')}
+      ORDER BY last_name, first_name
+      LIMIT ${parseInt(limit) || 100}
+    `);
+
+    const countResult = await prisma.$queryRawUnsafe(`
+      SELECT COUNT(*)::int as count 
+      FROM employees 
+      WHERE ${whereConditions.join(' AND ')}
+    `);
+
+    res.json({
+      employees,
+      total: countResult[0].count,
+      shown: employees.length
+    });
+  } catch (error) {
+    console.error('Error fetching employees without job:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
 // Get job by ID
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const job = await prisma.job.findUnique({
-      where: { id }
-    });
+    // Get job with jcp_count using raw query
+    const jobs = await prisma.$queryRawUnsafe(`
+      SELECT j.*, 
+             (
+               SELECT COUNT(*)::int 
+               FROM job_competencies jc 
+               WHERE jc."jobId" = j.id
+             ) as jcp_count
+      FROM jobs j
+      WHERE j.id = $1
+    `, id);
 
-    if (!job) {
+    if (jobs.length === 0) {
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    res.json(job);
+    res.json(jobs[0]);
   } catch (error) {
     console.error('Error fetching job:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -167,7 +237,11 @@ router.get('/:id', async (req, res) => {
 // Create new job
 router.post('/', async (req, res) => {
   try {
-    const { title, description, code, unit, division, department, section, location } = req.body;
+    const { 
+      title, description, code, unit, division, department, section, location,
+      budgetaryControl, externalInterfaces, internalInterfaces, jobScope,
+      accountabilities, qualificationsExperience, restrictions, authority, demands
+    } = req.body;
 
     // Validate required fields
     if (!title || !code) {
@@ -192,7 +266,16 @@ router.post('/', async (req, res) => {
         division,
         department,
         section,
-        location
+        location,
+        budgetaryControl: budgetaryControl !== undefined ? budgetaryControl : null,
+        externalInterfaces: externalInterfaces || null,
+        internalInterfaces: internalInterfaces || null,
+        jobScope: jobScope || null,
+        accountabilities: accountabilities || null,
+        qualificationsExperience: qualificationsExperience || null,
+        restrictions: restrictions || null,
+        authority: authority || null,
+        demands: demands || null
       }
     });
 
@@ -207,7 +290,11 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, code, unit, division, department, section, location, isActive } = req.body;
+    const { 
+      title, description, code, unit, division, department, section, location, isActive,
+      budgetaryControl, externalInterfaces, internalInterfaces, jobScope,
+      accountabilities, qualificationsExperience, restrictions, authority, demands
+    } = req.body;
 
     // Check if job exists
     const existingJob = await prisma.job.findUnique({
@@ -229,19 +316,32 @@ router.put('/:id', async (req, res) => {
       }
     }
 
+    // Build update data object, only including fields that are provided
+    const updateData = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (code !== undefined) updateData.code = code;
+    if (unit !== undefined) updateData.unit = unit;
+    if (division !== undefined) updateData.division = division;
+    if (department !== undefined) updateData.department = department;
+    if (section !== undefined) updateData.section = section;
+    if (location !== undefined) updateData.location = location;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    
+    // JD fields
+    if (budgetaryControl !== undefined) updateData.budgetaryControl = budgetaryControl;
+    if (externalInterfaces !== undefined) updateData.externalInterfaces = externalInterfaces;
+    if (internalInterfaces !== undefined) updateData.internalInterfaces = internalInterfaces;
+    if (jobScope !== undefined) updateData.jobScope = jobScope;
+    if (accountabilities !== undefined) updateData.accountabilities = accountabilities;
+    if (qualificationsExperience !== undefined) updateData.qualificationsExperience = qualificationsExperience;
+    if (restrictions !== undefined) updateData.restrictions = restrictions;
+    if (authority !== undefined) updateData.authority = authority;
+    if (demands !== undefined) updateData.demands = demands;
+
     const job = await prisma.job.update({
       where: { id },
-      data: {
-        title,
-        description,
-        code,
-        unit,
-        division,
-        department,
-        section,
-        location,
-        isActive
-      }
+      data: updateData
     });
 
     res.json(job);
@@ -273,6 +373,131 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting job:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Assign job to employees without job codes
+// POST /api/jobs/:id/assign-to-employees
+router.post('/:id/assign-to-employees', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { employeeIds, filters } = req.body;
+
+    // Get the job
+    const job = await prisma.job.findUnique({
+      where: { id }
+    });
+
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    let employeesToUpdate = [];
+
+    if (employeeIds && Array.isArray(employeeIds) && employeeIds.length > 0) {
+      // Assign to specific employees by ID
+      const employees = await prisma.$queryRawUnsafe(`
+        SELECT id FROM employees 
+        WHERE id IN (${employeeIds.map(id => `'${String(id).replace(/'/g, "''")}'`).join(',')})
+      `);
+      employeesToUpdate = employees.map(e => e.id);
+    } else if (filters) {
+      // Assign based on filters (department, division, etc.)
+      let whereConditions = [
+        "(job_code IS NULL OR job_code = '') OR (job_title IS NULL OR job_title = '')"
+      ];
+
+      if (filters.department) {
+        whereConditions.push(`department = '${String(filters.department).replace(/'/g, "''")}'`);
+      }
+      if (filters.division) {
+        whereConditions.push(`division = '${String(filters.division).replace(/'/g, "''")}'`);
+      }
+      if (filters.location) {
+        whereConditions.push(`location = '${String(filters.location).replace(/'/g, "''")}'`);
+      }
+      if (filters.unit) {
+        whereConditions.push(`unit = '${String(filters.unit).replace(/'/g, "''")}'`);
+      }
+
+      const employees = await prisma.$queryRawUnsafe(`
+        SELECT id FROM employees 
+        WHERE ${whereConditions.join(' AND ')}
+      `);
+      employeesToUpdate = employees.map(e => e.id);
+    } else {
+      // Default: assign to all employees without job_code or job_title
+      const employees = await prisma.$queryRawUnsafe(`
+        SELECT id FROM employees 
+        WHERE (job_code IS NULL OR job_code = '') OR (job_title IS NULL OR job_title = '')
+      `);
+      employeesToUpdate = employees.map(e => e.id);
+    }
+
+    if (employeesToUpdate.length === 0) {
+      return res.status(400).json({ 
+        message: 'No employees found matching the criteria',
+        employeesFound: 0
+      });
+    }
+
+    // Update employees with the job code and title
+    const employeeIdList = employeesToUpdate.map(id => `'${String(id).replace(/'/g, "''")}'`).join(',');
+    
+    const updateResult = await prisma.$executeRawUnsafe(`
+      UPDATE employees 
+      SET 
+        job_code = '${String(job.code).replace(/'/g, "''")}',
+        job_title = '${String(job.title).replace(/'/g, "''")}',
+        division = COALESCE(division, '${String(job.division || '').replace(/'/g, "''")}'),
+        unit = COALESCE(unit, '${String(job.unit || '').replace(/'/g, "''")}'),
+        department = COALESCE(department, '${String(job.department || '').replace(/'/g, "''")}'),
+        section = COALESCE(section, '${String(job.section || '').replace(/'/g, "''")}'),
+        location = COALESCE(location, '${String(job.location || '').replace(/'/g, "''")}'),
+        updated_at = NOW()
+      WHERE id IN (${employeeIdList})
+    `);
+
+    res.json({
+      message: `Job assigned to ${employeesToUpdate.length} employee(s) successfully`,
+      jobCode: job.code,
+      jobTitle: job.title,
+      employeesUpdated: employeesToUpdate.length
+    });
+  } catch (error) {
+    console.error('Error assigning job to employees:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Bulk set JCP code for jobs
+// POST /api/jobs/set-jcp-code
+// body: { jobIds: string[], jcpCode: string }
+router.post('/set-jcp-code', async (req, res) => {
+  try {
+    const { jobIds, jcpCode } = req.body;
+    console.log('Setting JCP code:', { jobIds, jcpCode });
+    
+    if (!Array.isArray(jobIds) || jobIds.length === 0 || !jcpCode || String(jcpCode).trim() === '') {
+      return res.status(400).json({ message: 'jobIds (non-empty) and jcpCode are required' });
+    }
+
+    // Ensure column exists (idempotent)
+    await prisma.$executeRawUnsafe(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS jcp_code TEXT`);
+
+    // Update jobs in bulk using Prisma (safe)
+    const trimmedJcpCode = String(jcpCode).trim();
+    const updated = await prisma.job.updateMany({
+      where: { id: { in: jobIds } },
+      data: { jcpCode: trimmedJcpCode }
+    });
+
+    console.log('JCP code updated:', { updated: updated.count, jcpCode: trimmedJcpCode, jobIds });
+    res.json({ message: 'JCP code set for jobs', updated: updated.count, jcpCode: trimmedJcpCode });
+  } catch (error) {
+    console.error('Error setting JCP code for jobs:', error);
+    console.error('Error details:', { message: error.message, stack: error.stack });
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 

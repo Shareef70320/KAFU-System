@@ -30,21 +30,44 @@ const EditEmployee = () => {
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
+    full_name: '',
+    name_ar: '',
     email: '',
     sid: '',
     erp_id: '',
     job_code: '',
+    jcp_code: '',
     job_title: '',
     division: '',
+    division1: '',
     unit: '',
     department: '',
     section: '',
     sub_section: '',
     position_remark: '',
+    position: '',
+    job: '',
+    chief_office: '',
     grade: '',
     location: '',
     photo_url: '',
     line_manager_sid: '',
+    competency_supervisor_sid: '',
+    date_of_birth: '',
+    age: '',
+    gender: '',
+    nationality: '',
+    mobile_number: '',
+    id_resident_card_no: '',
+    joining_date: '',
+    previous_experience: '',
+    oamc_experience: '',
+    total_experience: '',
+    person_type: '',
+    employee_category: '',
+    employee_local: '',
+    qualification: '',
+    specialization: '',
     employment_status: 'ACTIVE',
     employment_type: 'FULL_TIME',
     is_active: true
@@ -68,27 +91,62 @@ const EditEmployee = () => {
   const divisions = filterData?.divisions || [];
   const locations = filterData?.locations || [];
 
+  // Format date for input field (YYYY-MM-DD)
+  const formatDateForInput = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
   // Update form data when employee data loads
   useEffect(() => {
     if (employee) {
       setFormData({
         first_name: employee.first_name || '',
         last_name: employee.last_name || '',
+        full_name: employee.full_name || '',
+        name_ar: employee.name_ar || '',
         email: employee.email || '',
         sid: employee.sid || '',
         erp_id: employee.erp_id || '',
         job_code: employee.job_code || '',
+        jcp_code: employee.jcp_code || '',
         job_title: employee.job_title || '',
         division: employee.division || '',
+        division1: employee.division1 || '',
         unit: employee.unit || '',
         department: employee.department || '',
         section: employee.section || '',
         sub_section: employee.sub_section || '',
         position_remark: employee.position_remark || '',
+        position: employee.position || '',
+        job: employee.job || '',
+        chief_office: employee.chief_office || '',
         grade: employee.grade || '',
         location: employee.location || '',
         photo_url: employee.photo_url || '',
         line_manager_sid: employee.line_manager_sid || '',
+        competency_supervisor_sid: employee.competency_supervisor_sid || '',
+        date_of_birth: formatDateForInput(employee.date_of_birth),
+        age: employee.age || '',
+        gender: employee.gender || '',
+        nationality: employee.nationality || '',
+        mobile_number: employee.mobile_number || '',
+        id_resident_card_no: employee.id_resident_card_no || '',
+        joining_date: formatDateForInput(employee.joining_date),
+        previous_experience: employee.previous_experience || '',
+        oamc_experience: employee.oamc_experience || '',
+        total_experience: employee.total_experience || '',
+        person_type: employee.person_type || '',
+        employee_category: employee.employee_category || '',
+        employee_local: employee.employee_local || '',
+        qualification: employee.qualification || '',
+        specialization: employee.specialization || '',
         employment_status: employee.employment_status || 'ACTIVE',
         employment_type: employee.employment_type || 'FULL_TIME',
         is_active: employee.is_active !== false
@@ -249,12 +307,117 @@ const EditEmployee = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="erp_id">ERP ID</Label>
+                  <Input
+                    id="erp_id"
+                    name="erp_id"
+                    value={formData.erp_id}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="full_name">Full Name</Label>
+                  <Input
+                    id="full_name"
+                    name="full_name"
+                    value={formData.full_name}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
               <div>
-                <Label htmlFor="erp_id">ERP ID</Label>
+                <Label htmlFor="name_ar">Arabic Name (اسم عربي)</Label>
                 <Input
-                  id="erp_id"
-                  name="erp_id"
-                  value={formData.erp_id}
+                  id="name_ar"
+                  name="name_ar"
+                  value={formData.name_ar}
+                  onChange={handleInputChange}
+                  className="mt-1"
+                  dir="rtl"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="date_of_birth">Date of Birth</Label>
+                  <div className="relative mt-1">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="date_of_birth"
+                      name="date_of_birth"
+                      type="date"
+                      value={formData.date_of_birth}
+                      onChange={handleInputChange}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="age">Age</Label>
+                  <Input
+                    id="age"
+                    name="age"
+                    type="number"
+                    value={formData.age}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="gender">Gender</Label>
+                  <select
+                    id="gender"
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="nationality">Nationality</Label>
+                  <Input
+                    id="nationality"
+                    name="nationality"
+                    value={formData.nationality}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mobile_number">Mobile Number</Label>
+                  <div className="relative mt-1">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="mobile_number"
+                      name="mobile_number"
+                      value={formData.mobile_number}
+                      onChange={handleInputChange}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="id_resident_card_no">ID/Resident Card No</Label>
+                <Input
+                  id="id_resident_card_no"
+                  name="id_resident_card_no"
+                  value={formData.id_resident_card_no}
                   onChange={handleInputChange}
                   className="mt-1"
                 />
@@ -286,6 +449,19 @@ const EditEmployee = () => {
                   />
                 </div>
                 <div>
+                  <Label htmlFor="jcp_code">JCP Code</Label>
+                  <Input
+                    id="jcp_code"
+                    name="jcp_code"
+                    value={formData.jcp_code}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <Label htmlFor="job_title">Job Title</Label>
                   <Input
                     id="job_title"
@@ -295,6 +471,27 @@ const EditEmployee = () => {
                     className="mt-1"
                   />
                 </div>
+                <div>
+                  <Label htmlFor="position">Position</Label>
+                  <Input
+                    id="position"
+                    name="position"
+                    value={formData.position}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="job">Job</Label>
+                <Input
+                  id="job"
+                  name="job"
+                  value={formData.job}
+                  onChange={handleInputChange}
+                  className="mt-1"
+                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -314,11 +511,34 @@ const EditEmployee = () => {
                   </select>
                 </div>
                 <div>
+                  <Label htmlFor="division1">Division 1</Label>
+                  <Input
+                    id="division1"
+                    name="division1"
+                    value={formData.division1}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <Label htmlFor="unit">Unit</Label>
                   <Input
                     id="unit"
                     name="unit"
                     value={formData.unit}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="chief_office">Chief Office</Label>
+                  <Input
+                    id="chief_office"
+                    name="chief_office"
+                    value={formData.chief_office}
                     onChange={handleInputChange}
                     className="mt-1"
                   />
@@ -371,22 +591,41 @@ const EditEmployee = () => {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="line_manager_sid">Line Manager SID</Label>
-                <div className="relative mt-1">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="line_manager_sid"
-                    name="line_manager_sid"
-                    value={formData.line_manager_sid}
-                    onChange={handleInputChange}
-                    placeholder="Enter manager's SID (e.g., 3096)"
-                    className="pl-10"
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="line_manager_sid">Line Manager SID</Label>
+                  <div className="relative mt-1">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="line_manager_sid"
+                      name="line_manager_sid"
+                      value={formData.line_manager_sid}
+                      onChange={handleInputChange}
+                      placeholder="Enter manager's SID (e.g., 3096)"
+                      className="pl-10"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Enter the SID of the employee who will be this person's line manager
+                  </p>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  Enter the SID of the employee who will be this person's line manager
-                </p>
+                <div>
+                  <Label htmlFor="competency_supervisor_sid">Competency Supervisor SID</Label>
+                  <div className="relative mt-1">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="competency_supervisor_sid"
+                      name="competency_supervisor_sid"
+                      value={formData.competency_supervisor_sid}
+                      onChange={handleInputChange}
+                      placeholder="Enter supervisor's SID (e.g., 3096)"
+                      className="pl-10"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Enter the SID of the employee who will be this person's competency supervisor
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -398,6 +637,135 @@ const EditEmployee = () => {
                   onChange={handleInputChange}
                   rows={3}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Employment Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Briefcase className="h-5 w-5" />
+                <span>Employment Information</span>
+              </CardTitle>
+              <CardDescription>
+                Employment history, experience, and qualifications
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="joining_date">Joining Date</Label>
+                  <div className="relative mt-1">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="joining_date"
+                      name="joining_date"
+                      type="date"
+                      value={formData.joining_date}
+                      onChange={handleInputChange}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="oamc_experience">OAMC Experience (Years)</Label>
+                  <Input
+                    id="oamc_experience"
+                    name="oamc_experience"
+                    type="number"
+                    step="0.01"
+                    value={formData.oamc_experience}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    readOnly
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="previous_experience">Previous Experience (Years)</Label>
+                  <Input
+                    id="previous_experience"
+                    name="previous_experience"
+                    type="number"
+                    step="0.01"
+                    value={formData.previous_experience}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="total_experience">Total Experience (Years)</Label>
+                  <Input
+                    id="total_experience"
+                    name="total_experience"
+                    type="number"
+                    step="0.01"
+                    value={formData.total_experience}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    readOnly
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="person_type">Person Type</Label>
+                  <Input
+                    id="person_type"
+                    name="person_type"
+                    value={formData.person_type}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="employee_category">Employee Category</Label>
+                  <Input
+                    id="employee_category"
+                    name="employee_category"
+                    value={formData.employee_category}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="employee_local">Employee Local</Label>
+                  <Input
+                    id="employee_local"
+                    name="employee_local"
+                    value={formData.employee_local}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="qualification">Qualification</Label>
+                  <Input
+                    id="qualification"
+                    name="qualification"
+                    value={formData.qualification}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="specialization">Specialization</Label>
+                <Input
+                  id="specialization"
+                  name="specialization"
+                  value={formData.specialization}
+                  onChange={handleInputChange}
+                  className="mt-1"
                 />
               </div>
             </CardContent>

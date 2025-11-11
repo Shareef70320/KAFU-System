@@ -33,7 +33,17 @@ const EditJob = () => {
     department: '',
     section: '',
     location: '',
-    isActive: true
+    isActive: true,
+    // JD fields
+    budgetaryControl: false,
+    externalInterfaces: '',
+    internalInterfaces: '',
+    jobScope: '',
+    accountabilities: '',
+    qualificationsExperience: '',
+    restrictions: '',
+    authority: '',
+    demands: ''
   });
 
   // Fetch job data
@@ -58,7 +68,17 @@ const EditJob = () => {
         department: job.department || '',
         section: job.section || '',
         location: job.location || '',
-        isActive: job.isActive !== undefined ? job.isActive : true
+        isActive: job.isActive !== undefined ? job.isActive : true,
+        // JD fields
+        budgetaryControl: job.budgetaryControl || false,
+        externalInterfaces: job.externalInterfaces || '',
+        internalInterfaces: job.internalInterfaces || '',
+        jobScope: job.jobScope || '',
+        accountabilities: job.accountabilities || '',
+        qualificationsExperience: job.qualificationsExperience || '',
+        restrictions: job.restrictions || '',
+        authority: job.authority || '',
+        demands: job.demands || ''
       });
     }
   }, [job]);
@@ -299,6 +319,140 @@ const EditJob = () => {
                 <Label htmlFor="isActive" className="text-sm font-medium text-gray-700">
                   Active Job
                 </Label>
+              </div>
+
+              {/* Job Description (JD) Section */}
+              <div className="border-t pt-6 mt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Briefcase className="h-5 w-5 mr-2 text-blue-600" />
+                  Job Description (JD)
+                </h3>
+
+                {/* Dimensions */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-gray-500 mb-3">Dimensions</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="budgetaryControl"
+                        name="budgetaryControl"
+                        checked={formData.budgetaryControl}
+                        onChange={handleInputChange}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <Label htmlFor="budgetaryControl" className="text-sm font-medium text-gray-700">
+                        Budgetary Control
+                      </Label>
+                    </div>
+                    <div>
+                      <Label htmlFor="externalInterfaces">External Interfaces (comma-separated list)</Label>
+                      <Input
+                        id="externalInterfaces"
+                        name="externalInterfaces"
+                        value={formData.externalInterfaces}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Customers, Suppliers, Partners"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="internalInterfaces">Internal Interfaces</Label>
+                      <textarea
+                        id="internalInterfaces"
+                        name="internalInterfaces"
+                        value={formData.internalInterfaces}
+                        onChange={handleInputChange}
+                        placeholder="Describe internal interfaces..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Core JD Fields */}
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <Label htmlFor="jobScope">Job Scope</Label>
+                    <textarea
+                      id="jobScope"
+                      name="jobScope"
+                      value={formData.jobScope}
+                      onChange={handleInputChange}
+                      placeholder="Describe the job scope..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                      rows={4}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="accountabilities">Accountabilities</Label>
+                    <textarea
+                      id="accountabilities"
+                      name="accountabilities"
+                      value={formData.accountabilities}
+                      onChange={handleInputChange}
+                      placeholder="List key accountabilities..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                      rows={4}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="qualificationsExperience">Qualifications and Experience</Label>
+                    <textarea
+                      id="qualificationsExperience"
+                      name="qualificationsExperience"
+                      value={formData.qualificationsExperience}
+                      onChange={handleInputChange}
+                      placeholder="Required qualifications and experience..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                      rows={4}
+                    />
+                  </div>
+                </div>
+
+                {/* Special Conditions */}
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-gray-500 mb-3">Special Conditions That May Apply</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="restrictions">Restrictions</Label>
+                      <textarea
+                        id="restrictions"
+                        name="restrictions"
+                        value={formData.restrictions}
+                        onChange={handleInputChange}
+                        placeholder="Any restrictions..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="authority">Authority</Label>
+                      <textarea
+                        id="authority"
+                        name="authority"
+                        value={formData.authority}
+                        onChange={handleInputChange}
+                        placeholder="Authority levels and limits..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="demands">Demands</Label>
+                      <textarea
+                        id="demands"
+                        name="demands"
+                        value={formData.demands}
+                        onChange={handleInputChange}
+                        placeholder="Physical, mental, or other demands..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Action Buttons */}

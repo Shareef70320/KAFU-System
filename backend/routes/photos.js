@@ -117,30 +117,31 @@ router.post('/upload-multiple', upload.array('photos', 50), (req, res) => {
 router.get('/:sid', (req, res) => {
   try {
     const { sid } = req.params;
-    const photoPath = path.join(__dirname, '../uploads/photos', `${sid}.jpg`);
+    const photosDir = path.join(__dirname, '../uploads/photos');
+    const photoPath = path.join(photosDir, `${sid}.jpg`);
     
     if (fs.existsSync(photoPath)) {
       res.sendFile(photoPath);
     } else {
-      // Try other extensions
-      const extensions = ['.png', '.jpeg', '.webp'];
-      let found = false;
-      
+      // Try other extensions (case-insensitive)
+      const extensions = ['.png', '.jpeg', '.webp', '.jpg', '.JPG', '.PNG', '.JPEG', '.WEBP'];
       for (const ext of extensions) {
-        const altPath = path.join(__dirname, '../uploads/photos', `${sid}${ext}`);
-        if (fs.existsSync(altPath)) {
-          res.sendFile(altPath);
-          found = true;
-          break;
-        }
+        const altPath = path.join(photosDir, `${sid}${ext}`);
+        if (fs.existsSync(altPath)) return res.sendFile(altPath);
       }
-      
-      if (!found) {
-        res.status(404).json({ 
-          success: false, 
-          message: 'Photo not found' 
-        });
+
+      // Last resort: scan directory for any file matching sid + any extension, case-insensitive
+      if (fs.existsSync(photosDir)) {
+        const files = fs.readdirSync(photosDir);
+        const regex = new RegExp(`^${sid}\.`, 'i');
+        const match = files.find(f => regex.test(f));
+        if (match) return res.sendFile(path.join(photosDir, match));
       }
+
+      res.status(404).json({ 
+        success: false, 
+        message: 'Photo not found' 
+      });
     }
   } catch (error) {
     console.error('Photo retrieval error:', error);

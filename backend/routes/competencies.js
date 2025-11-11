@@ -342,7 +342,8 @@ router.get('/', async (req, res) => {
         },
         _count: {
           select: {
-            assessments: true
+            assessments: true,
+            elements: true
           }
         }
       },
@@ -358,7 +359,9 @@ router.get('/', async (req, res) => {
       ...c,
       relatedDivision: c.related_division || null,
       relatedDocuments: c.related_documents || [],
-      assessmentCount: c._count?.assessments || 0
+      assessmentCount: c._count?.assessments || 0,
+      elements: [], // Empty array, will be populated if needed
+      elementsCount: c._count?.elements || 0
     }));
 
     // Get total count for pagination
@@ -408,6 +411,200 @@ router.get('/levels', async (req, res) => {
   }
 });
 
+// ========== COMPETENCY ELEMENTS ROUTES (must come before /:id) ==========
+
+// Get all elements for a competency
+router.get('/:id/elements', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.query;
+
+    const where = { competencyId: id };
+    if (isActive !== undefined) {
+      where.isActive = isActive === 'true';
+    }
+
+    const elements = await prisma.competencyElement.findMany({
+      where,
+      orderBy: [
+        { order: 'asc' },
+        { createdAt: 'asc' }
+      ]
+    });
+
+    res.json(elements);
+  } catch (error) {
+    console.error('Error fetching competency elements:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Create a new competency element
+router.post('/:id/elements', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, order, isActive } = req.body;
+
+    // Validate competency exists
+    const competency = await prisma.competency.findUnique({
+      where: { id }
+    });
+
+    if (!competency) {
+      return res.status(404).json({ message: 'Competency not found' });
+    }
+
+    // Get max order if not provided
+    let elementOrder = order;
+    if (elementOrder === undefined || elementOrder === null) {
+      const maxOrder = await prisma.competencyElement.findFirst({
+        where: { competencyId: id },
+        orderBy: { order: 'desc' },
+        select: { order: true }
+      });
+      elementOrder = maxOrder ? maxOrder.order + 1 : 0;
+    }
+
+    const element = await prisma.competencyElement.create({
+      data: {
+        competencyId: id,
+        name: name.trim(),
+        description: description?.trim() || null,
+        order: elementOrder,
+        isActive: isActive !== undefined ? isActive : true
+      }
+    });
+
+    res.status(201).json(element);
+  } catch (error) {
+    console.error('Error creating competency element:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Element with this name already exists' });
+    }
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Bulk create competency elements
+router.post('/:id/elements/bulk', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { elements } = req.body; // Array of { name, description?, order?, isActive? }
+
+    if (!Array.isArray(elements) || elements.length === 0) {
+      return res.status(400).json({ message: 'Elements array is required' });
+    }
+
+    // Validate competency exists
+    const competency = await prisma.competency.findUnique({
+      where: { id }
+    });
+
+    if (!competency) {
+      return res.status(404).json({ message: 'Competency not found' });
+    }
+
+    // Get current max order
+    const maxOrder = await prisma.competencyElement.findFirst({
+      where: { competencyId: id },
+      orderBy: { order: 'desc' },
+      select: { order: true }
+    });
+    let currentOrder = maxOrder ? maxOrder.order + 1 : 0;
+
+    // Create elements
+    const createdElements = await prisma.competencyElement.createMany({
+      data: elements.map((el, index) => ({
+        competencyId: id,
+        name: el.name.trim(),
+        description: el.description?.trim() || null,
+        order: el.order !== undefined ? el.order : currentOrder + index,
+        isActive: el.isActive !== undefined ? el.isActive : true
+      }))
+    });
+
+    // Fetch created elements to return
+    const allElements = await prisma.competencyElement.findMany({
+      where: { competencyId: id },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
+    });
+
+    res.status(201).json({
+      message: `Created ${createdElements.count} elements`,
+      elements: allElements
+    });
+  } catch (error) {
+    console.error('Error bulk creating competency elements:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Update competency element
+router.put('/:id/elements/:elementId', async (req, res) => {
+  try {
+    const { id, elementId } = req.params;
+    const { name, description, order, isActive } = req.body;
+
+    // Verify element belongs to competency
+    const element = await prisma.competencyElement.findUnique({
+      where: { id: elementId }
+    });
+
+    if (!element) {
+      return res.status(404).json({ message: 'Element not found' });
+    }
+
+    if (element.competencyId !== id) {
+      return res.status(400).json({ message: 'Element does not belong to this competency' });
+    }
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name.trim();
+    if (description !== undefined) updateData.description = description?.trim() || null;
+    if (order !== undefined) updateData.order = order;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const updatedElement = await prisma.competencyElement.update({
+      where: { id: elementId },
+      data: updateData
+    });
+
+    res.json(updatedElement);
+  } catch (error) {
+    console.error('Error updating competency element:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete competency element
+router.delete('/:id/elements/:elementId', async (req, res) => {
+  try {
+    const { id, elementId } = req.params;
+
+    // Verify element belongs to competency
+    const element = await prisma.competencyElement.findUnique({
+      where: { id: elementId }
+    });
+
+    if (!element) {
+      return res.status(404).json({ message: 'Element not found' });
+    }
+
+    if (element.competencyId !== id) {
+      return res.status(400).json({ message: 'Element does not belong to this competency' });
+    }
+
+    await prisma.competencyElement.delete({
+      where: { id: elementId }
+    });
+
+    res.json({ message: 'Element deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting competency element:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get single competency with all details
 router.get('/:id', async (req, res) => {
   try {
@@ -425,6 +622,12 @@ router.get('/:id', async (req, res) => {
           orderBy: {
             createdAt: 'desc'
           }
+        },
+        elements: {
+          orderBy: [
+            { order: 'asc' },
+            { createdAt: 'asc' }
+          ]
         },
         assessments: {
           include: {
@@ -511,7 +714,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, type, family, definition, description, relatedDivision, relatedDocuments, levels } = req.body;
+    const { name, code, type, family, definition, description, relatedDivision, relatedDocuments, levels } = req.body;
 
     // Check if competency exists
     const existingCompetency = await prisma.competency.findUnique({
@@ -533,11 +736,28 @@ router.put('/:id', async (req, res) => {
       }
     }
 
+    // Check for duplicate code if being updated
+    if (code !== undefined && code !== null) {
+      const trimmedCode = code.trim();
+      
+      // If code is being changed, check for uniqueness
+      if (trimmedCode && trimmedCode !== existingCompetency.code) {
+        const duplicateCode = await prisma.competency.findUnique({
+          where: { code: trimmedCode }
+        });
+        
+        if (duplicateCode) {
+          return res.status(400).json({ message: `Competency code "${trimmedCode}" already exists. Please use a unique code.` });
+        }
+      }
+    }
+
     // Update competency
     const competency = await prisma.competency.update({
       where: { id },
       data: {
         name,
+        code: code !== undefined ? (code ? code.trim() : null) : undefined,
         type,
         family,
         definition,

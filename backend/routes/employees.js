@@ -40,13 +40,16 @@ router.get('/', async (req, res) => {
       searchConditions.push(`(
         first_name ILIKE '%${search}%' OR 
         last_name ILIKE '%${search}%' OR 
+        full_name ILIKE '%${search}%' OR
         email ILIKE '%${search}%' OR 
         id ILIKE '%${search}%' OR 
         job_title ILIKE '%${search}%' OR 
         division ILIKE '%${search}%' OR 
         location ILIKE '%${search}%' OR 
         sid ILIKE '%${search}%' OR 
-        job_code ILIKE '%${search}%'
+        job_code ILIKE '%${search}%' OR
+        mobile_number ILIKE '%${search}%' OR
+        nationality ILIKE '%${search}%'
       )`);
     }
     if (division) {
@@ -95,7 +98,45 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get all unique divisions and locations for filters
+// Search employees for autocomplete (MUST be before /:sid route)
+router.get('/search', async (req, res) => {
+  try {
+    const { q = '', limit = 20 } = req.query;
+    const searchLimit = Math.min(parseInt(limit) || 20, 50); // Max 50 results
+    
+    if (!q || q.trim().length === 0) {
+      return res.json({ employees: [] });
+    }
+
+    const searchTerm = String(q).trim().replace(/'/g, "''");
+    
+    const searchQuery = `
+      SELECT sid, first_name, last_name, full_name, email, job_title, division, location, unit, line_manager_sid
+      FROM employees 
+      WHERE (
+        sid ILIKE '%${searchTerm}%' OR 
+        first_name ILIKE '%${searchTerm}%' OR 
+        last_name ILIKE '%${searchTerm}%' OR 
+        full_name ILIKE '%${searchTerm}%' OR
+        email ILIKE '%${searchTerm}%'
+      )
+      AND sid IS NOT NULL
+      ORDER BY 
+        CASE WHEN sid ILIKE '${searchTerm}%' THEN 1 ELSE 2 END,
+        first_name, last_name
+      LIMIT ${searchLimit}
+    `;
+    
+    const employees = await prisma.$queryRawUnsafe(searchQuery);
+    
+    res.json({ employees });
+  } catch (error) {
+    console.error('Error searching employees:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get all unique divisions, locations, units, and managers for filters
 router.get('/filters', async (req, res) => {
   try {
     // Get unique divisions
@@ -116,9 +157,37 @@ router.get('/filters', async (req, res) => {
     `;
     const locations = await prisma.$queryRawUnsafe(locationsQuery);
 
+    // Get unique units
+    const unitsQuery = `
+      SELECT DISTINCT unit 
+      FROM employees 
+      WHERE unit IS NOT NULL AND unit != ''
+      ORDER BY unit
+    `;
+    const units = await prisma.$queryRawUnsafe(unitsQuery);
+
+    // Get unique managers (employees who have direct reports)
+    const managersQuery = `
+      SELECT DISTINCT e.sid, e.first_name, e.last_name, e.full_name, e.job_title
+      FROM employees e
+      WHERE e.sid IN (
+        SELECT DISTINCT line_manager_sid 
+        FROM employees 
+        WHERE line_manager_sid IS NOT NULL AND line_manager_sid != ''
+      )
+      ORDER BY e.first_name, e.last_name
+    `;
+    const managers = await prisma.$queryRawUnsafe(managersQuery);
+
     res.json({
       divisions: divisions.map(row => row.division),
-      locations: locations.map(row => row.location)
+      locations: locations.map(row => row.location),
+      units: units.map(row => row.unit),
+      managers: managers.map(m => ({
+        sid: m.sid,
+        name: m.full_name || `${m.first_name} ${m.last_name}`,
+        jobTitle: m.job_title
+      }))
     });
   } catch (error) {
     console.error('Error fetching filter options:', error);
@@ -132,7 +201,7 @@ router.get('/:sid', async (req, res) => {
     const { sid } = req.params;
     
     const employees = await prisma.$queryRawUnsafe(
-      'SELECT * FROM employees WHERE sid = $1', sid
+      `SELECT * FROM employees WHERE sid = '${String(sid).replace(/'/g, "''")}'`
     );
 
     if (employees.length === 0) {
@@ -207,6 +276,25 @@ router.put('/:id', async (req, res) => {
         return res.status(400).json({ message: 'Line manager SID not found' });
       }
     }
+    
+    // Validate competency_supervisor_sid if provided and not empty
+    if (updateData.competency_supervisor_sid && updateData.competency_supervisor_sid.trim() !== '') {
+      const supervisorExists = await prisma.$queryRawUnsafe(
+        'SELECT id FROM employees WHERE sid = $1', updateData.competency_supervisor_sid.trim()
+      );
+      
+      if (supervisorExists.length === 0) {
+        return res.status(400).json({ message: 'Competency supervisor SID not found' });
+      }
+    }
+    
+    // Handle date fields
+    if (updateData.date_of_birth && typeof updateData.date_of_birth === 'string') {
+      updateData.date_of_birth = new Date(updateData.date_of_birth);
+    }
+    if (updateData.joining_date && typeof updateData.joining_date === 'string') {
+      updateData.joining_date = new Date(updateData.joining_date);
+    }
 
     // Build dynamic update query
     const updateFields = [];
@@ -214,10 +302,14 @@ router.put('/:id', async (req, res) => {
     let paramCount = 1;
 
     const allowedFields = [
-      'first_name', 'last_name', 'email', 'sid', 'erp_id', 'job_code', 'job_title',
-      'division', 'unit', 'department', 'section', 'sub_section', 'position_remark',
-      'grade', 'location', 'photo_url', 'line_manager_sid', 'employment_status',
-      'is_active'
+      'first_name', 'last_name', 'full_name', 'name_ar', 'email', 'sid', 'erp_id', 
+      'job_code', 'jcp_code', 'job_title', 'division', 'division1', 'unit', 'department', 
+      'section', 'sub_section', 'position_remark', 'position', 'job', 'chief_office',
+      'grade', 'location', 'photo_url', 'line_manager_sid', 'competency_supervisor_sid',
+      'date_of_birth', 'age', 'gender', 'nationality', 'mobile_number', 'id_resident_card_no',
+      'joining_date', 'previous_experience', 'oamc_experience', 'total_experience',
+      'person_type', 'employee_category', 'employee_local', 'qualification', 'specialization',
+      'employment_status', 'is_active'
     ];
 
     for (const [key, value] of Object.entries(updateData)) {

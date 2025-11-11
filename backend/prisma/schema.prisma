@@ -13,38 +13,66 @@ datasource db {
 // User and Group models removed - using Employee model only
 
 model Employee {
-  id                String    @id @default(cuid()) @map("id")
-  sid               String?   @unique @map("sid") // SID from HR data
-  erp_id            String?   @map("erp_id") // ERPID from HR data
-  first_name        String    @map("first_name")
-  last_name         String    @map("last_name")
-  email             String    @unique @map("email")
-  job_code          String?   @map("job_code") // JobCode from HR data
-  job_title         String?   @map("job_title")
-  division          String?   @map("division") // Division from HR data
-  unit              String?   @map("unit") // Unit from HR data
-  department        String?   @map("department")
-  section           String?   @map("section") // Section from HR data
-  sub_section       String?   @map("sub_section") // Sub Section from HR data
-  position_remark   String?   @map("position_remark") // Position Remark from HR data
-  grade             String?   @map("grade") // Grade from HR data
-  location          String?   @map("location") // Location from HR data
-  photo_url         String?   @map("photo_url") // Path to employee photo
-  line_manager_sid  String?   @map("line_manager_sid") // SID of the line manager
-  is_active         Boolean   @default(true) @map("is_active")
-  employment_status String    @default("ACTIVE") @map("employment_status")
-  employment_type   String?   @map("employment_type")
-  created_at        DateTime  @default(now()) @map("created_at")
-  updated_at        DateTime  @updatedAt @map("updated_at")
+  id                       String    @id @default(cuid()) @map("id")
+  sid                      String?   @unique @map("sid") // SID from HR data
+  erp_id                   String?   @map("erp_id") // ERPID from HR data
+  first_name               String    @map("first_name")
+  last_name                String    @map("last_name")
+  full_name                String?   @map("full_name") // Full employee name from Excel
+  name_ar                  String?   @map("name_ar") // Arabic name
+  email                    String    @unique @map("email")
+  job_code                 String?   @map("job_code") // JobCode from HR data
+  jcp_code                 String?   @map("jcp_code") // JCPCode from Excel
+  job_title                String?   @map("job_title")
+  division                 String?   @map("division") // Division from HR data
+  division1                String?   @map("division1") // DIVISION1 from Excel
+  unit                     String?   @map("unit") // Unit from HR data
+  department               String?   @map("department")
+  section                  String?   @map("section") // Section from HR data
+  sub_section              String?   @map("sub_section") // Sub Section from HR data
+  position_remark          String?   @map("position_remark") // Position Remark from HR data
+  position                 String?   @map("position") // POSITION from Excel
+  job                      String?   @map("job") // JOB from Excel
+  chief_office             String?   @map("chief_office") // Chief Office from Excel
+  grade                    String?   @map("grade") // Grade from HR data
+  location                 String?   @map("location") // Location from HR data
+  photo_url                String?   @map("photo_url") // Path to employee photo
+  line_manager_sid         String?   @map("line_manager_sid") // SID of the line manager
+  competency_supervisor_sid String?   @map("competency_supervisor_sid") // Competency supervisor SID (initially same as line_manager_sid)
+  is_active                Boolean   @default(true) @map("is_active")
+  employment_status        String    @default("ACTIVE") @map("employment_status")
+  employment_type          String?   @map("employment_type")
+  
+  // Personal Information
+  date_of_birth            DateTime? @map("date_of_birth") // DATE OF BIRTH from Excel
+  age                      Int?      @map("age") // Calculated age from date_of_birth
+  gender                   Gender?   @map("gender") // GENDER from Excel
+  nationality              String?   @map("nationality") // NATIONALITY from Excel
+  mobile_number            String?   @map("mobile_number") // MOBILE NUMBER from Excel
+  id_resident_card_no      String?   @map("id_resident_card_no") // ID/Resident Card No from Excel
+  
+  // Employment Information
+  joining_date             DateTime? @map("joining_date") // JOINING DATE from Excel
+  previous_experience      Float?    @map("previous_experience") // PREVIOUS EXPERIANCE (years)
+  oamc_experience          Float?    @map("oamc_experience") // OAMC EXPERIENCE (calculated from joining_date)
+  total_experience         Float?    @map("total_experience") // TOTAL EXPERIANCE (previous + oamc)
+  person_type              String?   @map("person_type") // PERSON TYPE from Excel
+  employee_category        String?   @map("employee_category") // EMPLOYEE CATEGORY from Excel
+  employee_local           String?   @map("employee_local") // EMPLOYEE_LOCAL from Excel
+  qualification            String?   @map("qualification") // Qualification from Excel
+  specialization           String?   @map("specialization") // Specialization from Excel
+  
+  created_at               DateTime  @default(now()) @map("created_at")
+  updated_at               DateTime  @updatedAt @map("updated_at")
   
   // Relations
-  competencyAssessments CompetencyAssessment[]
-  employeeAssessments EmployeeAssessment[]
-  jobEvaluations     JobEvaluation[]
+  competencyAssessments    CompetencyAssessment[]
+  employeeAssessments       EmployeeAssessment[]
+  jobEvaluations           JobEvaluation[]
   
   // Self-referencing relationship for line manager
-  lineManager       Employee? @relation("LineManager", fields: [line_manager_sid], references: [sid])
-  directReports     Employee[] @relation("LineManager")
+  lineManager              Employee? @relation("LineManager", fields: [line_manager_sid], references: [sid])
+  directReports            Employee[] @relation("LineManager")
   
   @@map("employees")
 }
@@ -99,6 +127,7 @@ enum PayFrequency {
 
 model Competency {
   id                String    @id @default(cuid())
+  code              String?   @unique // Unique competency code (user-defined or system-generated)
   name              String
   type              CompetencyType
   family            String    // e.g., Finance, HR, Technical Services
@@ -117,6 +146,7 @@ model Competency {
   jobCompetencies   JobCompetency[]
   questions         Question[]
   assessments_new   Assessment[]
+  elements          CompetencyElement[]
   
   @@map("competencies")
   @@unique([name, type, family])
@@ -141,6 +171,22 @@ model CompetencyLevel {
   
   @@unique([competencyId, level])
   @@map("competency_levels")
+}
+
+model CompetencyElement {
+  id                String    @id @default(cuid()) @map("id")
+  competencyId      String    @map("competency_id")
+  name              String    @map("name") // Element name/title
+  description       String?   @map("description") // Optional description
+  order             Int       @default(0) @map("order") // Order/sequence for display
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  
+  @@map("competency_elements")
 }
 
 model CompetencyDocument {
@@ -250,6 +296,7 @@ model Job {
   title       String
   description String?
   code        String   @unique
+  jcpCode     String?  @map("jcp_code")
   unit        String?
   division    String?
   department  String?
@@ -258,6 +305,17 @@ model Job {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Job Description (JD) fields
+  budgetaryControl      Boolean? @map("budgetary_control")
+  externalInterfaces    String?  @map("external_interfaces") // JSON array or comma-separated
+  internalInterfaces    String?  @map("internal_interfaces")
+  jobScope              String?  @map("job_scope")
+  accountabilities      String?  @map("accountabilities")
+  qualificationsExperience String? @map("qualifications_experience")
+  restrictions          String?  @map("restrictions")
+  authority             String?  @map("authority")
+  demands               String?  @map("demands")
 
   // Relationship with competencies
   jobCompetencies JobCompetency[]
@@ -464,4 +522,17 @@ enum AssessmentAttemptStatus {
   COMPLETED
   ABANDONED
   TIME_EXCEEDED
+}
+
+model AppSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique // Setting key (e.g., "assessment_cycle")
+  value       String   // JSON string containing the setting value
+  description String?  // Human-readable description
+  category    String?  // Category for grouping (e.g., "assessment", "system")
+  updatedBy   String?  @map("updated_by") // Employee SID who last updated
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  @@map("app_settings")
 }

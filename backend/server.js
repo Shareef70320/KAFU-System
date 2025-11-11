@@ -26,6 +26,7 @@ const performanceReviewRoutes = require('./routes/performanceReviews');
 const developmentPathRoutes = require('./routes/developmentPaths');
 const ldInterventionRoutes = require('./routes/ldInterventions');
 const idpRoutes = require('./routes/idp');
+const settingsRoutes = require('./routes/settings');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -115,6 +116,7 @@ app.use('/api/competency-reviews', performanceReviewRoutes);
 app.use('/api/development-paths', developmentPathRoutes);
 app.use('/api/ld-interventions', ldInterventionRoutes);
 app.use('/api/idp', idpRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check - MUST be before 404 handler
 app.get('/api/health', (req, res) => {

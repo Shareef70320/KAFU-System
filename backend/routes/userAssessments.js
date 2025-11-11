@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const router = express.Router();
 const prisma = new PrismaClient();
+const { canCreateOrActivateAssessment, getCycleStatusMessage } = require('../utils/assessmentCycle');
 
 // Helper function to ensure level columns exist
 async function ensureLevelColumns() {
@@ -224,6 +225,16 @@ router.post('/start', async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         error: 'Competency ID and User ID are required' 
+      });
+    }
+
+    // Check assessment cycle restrictions before allowing user to start assessment
+    const cycleCheck = await canCreateOrActivateAssessment(userId);
+    if (!cycleCheck.allowed) {
+      return res.status(403).json({
+        success: false,
+        error: cycleCheck.reason,
+        cycleStatus: await getCycleStatusMessage()
       });
     }
 

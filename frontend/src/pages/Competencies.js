@@ -28,7 +28,8 @@ import {
   Clock,
   AlertCircle,
   UserCheck,
-  X
+  X,
+  List
 } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
@@ -53,6 +54,10 @@ const Competencies = () => {
   const [selectedCompetency, setSelectedCompetency] = useState(null);
   const [assessors, setAssessors] = useState([]);
   const [assessorsLoading, setAssessorsLoading] = useState(false);
+  const [showElementsModal, setShowElementsModal] = useState(false);
+  const [selectedCompetencyForElements, setSelectedCompetencyForElements] = useState(null);
+  const [elements, setElements] = useState([]);
+  const [elementsLoading, setElementsLoading] = useState(false);
   const searchInputRef = useRef(null);
 
   // These will be populated from actual data
@@ -125,7 +130,34 @@ const Competencies = () => {
     };
   }, [competencies]);
 
-  // Populate filter options from stats data
+  // Calculate available filter options based on current selections
+  const availableTypes = useMemo(() => {
+    if (!competencies.length) return [];
+    
+    let filtered = competencies;
+    
+    // If family is selected, only show types that have that family
+    if (selectedFamily) {
+      filtered = filtered.filter(c => c.family === selectedFamily);
+    }
+    
+    return [...new Set(filtered.map(c => c.type).filter(Boolean))].sort();
+  }, [competencies, selectedFamily]);
+  
+  const availableFamilies = useMemo(() => {
+    if (!competencies.length) return [];
+    
+    let filtered = competencies;
+    
+    // If type is selected, only show families that belong to that type
+    if (selectedType) {
+      filtered = filtered.filter(c => c.type === selectedType);
+    }
+    
+    return [...new Set(filtered.map(c => c.family).filter(Boolean))].sort();
+  }, [competencies, selectedType]);
+  
+  // Populate filter options from stats data (for initial load)
   useEffect(() => {
     if (stats.types && stats.families) {
       // Get unique types from stats
@@ -137,6 +169,26 @@ const Competencies = () => {
       setCompetencyFamilies(uniqueFamilies);
     }
   }, [stats]);
+  
+  // Reset family when type changes (if current family is not available for new type)
+  useEffect(() => {
+    if (selectedType && selectedFamily) {
+      const familyExists = competencies.some(c => c.type === selectedType && c.family === selectedFamily);
+      if (!familyExists) {
+        setSelectedFamily('');
+      }
+    }
+  }, [selectedType, competencies, selectedFamily]);
+  
+  // Reset type when family changes (if current type is not available for new family)
+  useEffect(() => {
+    if (selectedFamily && selectedType) {
+      const typeExists = competencies.some(c => c.type === selectedType && c.family === selectedFamily);
+      if (!typeExists) {
+        setSelectedType('');
+      }
+    }
+  }, [selectedFamily, competencies, selectedType]);
 
   const handleFileUpload = async () => {
     if (!file) {
@@ -353,6 +405,30 @@ const Competencies = () => {
     fetchAssessors(competency.id);
   };
 
+  const fetchElements = async (competencyId) => {
+    setElementsLoading(true);
+    try {
+      const response = await api.get(`/competencies/${competencyId}/elements`);
+      setElements(response.data || []);
+    } catch (error) {
+      console.error('Error fetching elements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load elements for this competency.",
+        variant: "destructive",
+      });
+      setElements([]);
+    } finally {
+      setElementsLoading(false);
+    }
+  };
+
+  const openElementsModal = (competency) => {
+    setSelectedCompetencyForElements(competency);
+    setShowElementsModal(true);
+    fetchElements(competency.id);
+  };
+
   // Check if competency has assessors (we'll need to track this)
   const [competencyAssessors, setCompetencyAssessors] = useState({});
   
@@ -528,8 +604,8 @@ const Competencies = () => {
                 className="loyverse-input mt-1"
               >
                 <option value="">All Types</option>
-                {competencyTypes.map(type => (
-                  <option key={type} value={type}>{type.replace('_', ' ')}</option>
+                {availableTypes.map(type => (
+                  <option key={type} value={type}>{type.replace(/_/g, ' ')}</option>
                 ))}
               </select>
             </div>
@@ -542,7 +618,7 @@ const Competencies = () => {
                 className="loyverse-input mt-1"
               >
                 <option value="">All Families</option>
-                {competencyFamilies.map(family => (
+                {availableFamilies.map(family => (
                   <option key={family} value={family}>{family}</option>
                 ))}
               </select>
@@ -595,6 +671,14 @@ const Competencies = () => {
                       <span className="flex items-center">
                         <Document className="h-3 w-3 mr-1" />
                         {competency.documents.length} Documents
+                      </span>
+                      <span 
+                        className="flex items-center cursor-pointer hover:text-orange-600"
+                        onClick={() => openElementsModal(competency)}
+                        title="View Elements"
+                      >
+                        <List className="h-3 w-3 mr-1" />
+                        {competency.elementsCount || 0} Elements
                       </span>
                       <span className="flex items-center">
                         <Users className="h-3 w-3 mr-1" />
@@ -860,6 +944,91 @@ const Competencies = () => {
                                   <span>{assessor.division || 'No Division'}</span>
                                 </div>
                               </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Elements Modal */}
+      {showElementsModal && selectedCompetencyForElements && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-orange-50 to-yellow-50">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <List className="h-6 w-6 text-orange-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">Elements for {selectedCompetencyForElements.name}</h3>
+                  <p className="text-sm text-gray-600">{selectedCompetencyForElements.type} • {selectedCompetencyForElements.family}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowElementsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {elementsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading elements...</p>
+                  </div>
+                </div>
+              ) : elements.length === 0 ? (
+                <div className="text-center py-12">
+                  <List className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 text-lg font-medium mb-2">No Elements Found</p>
+                  <p className="text-gray-500 text-sm">This competency doesn't have any elements yet.</p>
+                  <Button
+                    onClick={() => {
+                      setShowElementsModal(false);
+                      navigate(`/competencies/edit/${selectedCompetencyForElements.id}`);
+                    }}
+                    className="mt-4 loyverse-button"
+                  >
+                    Add Elements
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-sm text-gray-600">
+                      {elements.length} {elements.length === 1 ? 'Element' : 'Elements'} found
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {elements.map((element) => (
+                      <div 
+                        key={element.id} 
+                        className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="font-medium text-gray-900">{element.name}</h4>
+                              {!element.isActive && (
+                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">Inactive</span>
+                              )}
+                            </div>
+                            {element.description && (
+                              <p className="text-sm text-gray-600">{element.description}</p>
+                            )}
+                            <div className="mt-2 text-xs text-gray-500">
+                              Order: {element.order}
                             </div>
                           </div>
                         </div>

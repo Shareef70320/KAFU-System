@@ -8,12 +8,18 @@ const router = express.Router();
 // Get all categories
 router.get('/categories', async (req, res) => {
   try {
+    const { is_active } = req.query;
+    let whereClause = '';
+    if (is_active !== undefined) {
+      whereClause = `WHERE ic.is_active = ${is_active === 'true'}`;
+    }
     const categories = await prisma.$queryRawUnsafe(`
       SELECT ic.*, 
-             COUNT(it.id)::int as type_count
+             COUNT(CASE WHEN it.is_active = true THEN it.id END)::int as type_count
       FROM intervention_categories ic
-      LEFT JOIN intervention_types it ON ic.id = it.category_id AND it.is_active = true
-      GROUP BY ic.id, ic.name, ic.description, ic.color, ic.icon, ic.created_at, ic.updated_at
+      LEFT JOIN intervention_types it ON ic.id = it.category_id
+      ${whereClause}
+      GROUP BY ic.id, ic.name, ic.description, ic.color, ic.icon, ic.is_active, ic.created_at, ic.updated_at
       ORDER BY ic.name
     `);
     res.json({ categories });
@@ -26,16 +32,16 @@ router.get('/categories', async (req, res) => {
 // Create category
 router.post('/categories', async (req, res) => {
   try {
-    const { name, description, color, icon } = req.body;
+    const { name, description, color, icon, is_active } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Name is required' });
     }
     
     const id = `IC-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
     const rows = await prisma.$queryRawUnsafe(
-      `INSERT INTO intervention_categories (id, name, description, color, icon, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`,
-      id, name.trim(), description || null, color || '#3B82F6', icon || 'BookOpen'
+      `INSERT INTO intervention_categories (id, name, description, color, icon, is_active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6, TRUE), NOW(), NOW()) RETURNING *`,
+      id, name.trim(), description || null, color || '#3B82F6', icon || 'BookOpen', is_active === undefined ? null : !!is_active
     );
     res.status(201).json({ message: 'Category created', category: rows[0] });
   } catch (err) {
@@ -48,7 +54,7 @@ router.post('/categories', async (req, res) => {
 router.put('/categories/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, color, icon } = req.body;
+    const { name, description, color, icon, is_active } = req.body;
     
     const rows = await prisma.$queryRawUnsafe(
       `UPDATE intervention_categories SET 
@@ -56,9 +62,10 @@ router.put('/categories/:id', async (req, res) => {
         description = COALESCE($3, description),
         color = COALESCE($4, color),
         icon = COALESCE($5, icon),
+        is_active = COALESCE($6, is_active),
         updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      id, name || null, description || null, color || null, icon || null
+      id, name || null, description || null, color || null, icon || null, (is_active === undefined ? null : !!is_active)
     );
     
     if (rows.length === 0) return res.status(404).json({ message: 'Category not found' });
@@ -217,7 +224,7 @@ router.put('/types/:id', async (req, res) => {
       id, name || null, description || null, duration_range || null,
       delivery_mode || null, cost_level || null, complexity_level || null,
       prerequisites || null, learning_objectives || null, assessment_method || null,
-      certification_provided || null, external_provider || null, is_active || null
+      certification_provided || null, external_provider || null, (is_active === undefined ? null : !!is_active)
     );
     
     if (rows.length === 0) return res.status(404).json({ message: 'Type not found' });
@@ -261,7 +268,7 @@ router.delete('/types/:id', async (req, res) => {
 // Get all instances with type and category info
 router.get('/instances', async (req, res) => {
   try {
-    const { status, intervention_type_id } = req.query;
+    const { status, intervention_type_id, is_active } = req.query;
     
     let whereClause = '';
     const params = [];
@@ -275,6 +282,11 @@ router.get('/instances', async (req, res) => {
       whereClause += params.length > 0 ? ' AND' : ' WHERE';
       whereClause += ` ii.intervention_type_id = $${params.length + 1}`;
       params.push(intervention_type_id);
+    }
+    if (is_active !== undefined) {
+      whereClause += params.length > 0 ? ' AND' : ' WHERE';
+      whereClause += ` ii.is_active = $${params.length + 1}`;
+      params.push(is_active === 'true');
     }
     
     const instances = await prisma.$queryRawUnsafe(`
@@ -374,7 +386,7 @@ router.put('/instances/:id', async (req, res) => {
     const { id } = req.params;
     const { 
       title, description, instructor, location, start_date, end_date,
-      max_participants, cost_per_participant, status, notes 
+      max_participants, cost_per_participant, status, notes, is_active 
     } = req.body;
     
     const rows = await prisma.$queryRawUnsafe(
@@ -389,11 +401,12 @@ router.put('/instances/:id', async (req, res) => {
         cost_per_participant = COALESCE($9, cost_per_participant),
         status = COALESCE($10, status),
         notes = COALESCE($11, notes),
+        is_active = COALESCE($12, is_active),
         updated_at = NOW()
        WHERE id = $1 RETURNING *`,
       id, title || null, description || null, instructor || null, location || null,
       start_date || null, end_date || null, max_participants || null,
-      cost_per_participant || null, status || null, notes || null
+      cost_per_participant || null, status || null, notes || null, (is_active === undefined ? null : !!is_active)
     );
     
     if (rows.length === 0) return res.status(404).json({ message: 'Instance not found' });

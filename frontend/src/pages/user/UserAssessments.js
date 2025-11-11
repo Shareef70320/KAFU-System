@@ -19,7 +19,8 @@ import {
   ArrowLeft,
   RotateCcw,
   X,
-  Loader2
+  Loader2,
+  Calendar
 } from 'lucide-react';
 import { useToast } from '../../components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -76,6 +77,22 @@ const UserAssessments = () => {
     }
   }, [currentStep]);
 
+  // Fetch assessment cycle status
+  const { data: cycleStatus } = useQuery({
+    queryKey: ['assessment-cycle-status'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/settings/assessment-cycle/status');
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching cycle status:', error);
+        return null;
+      }
+    },
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
   // Fetch available competencies
   const { data: competenciesData, isLoading: competenciesLoading } = useQuery({
     queryKey: ['user-assessments-competencies', currentUserId],
@@ -124,9 +141,12 @@ const UserAssessments = () => {
       });
     },
     onError: (error) => {
+      const errorMessage = error.response?.data?.error || "Failed to start assessment";
+      const cycleStatus = error.response?.data?.cycleStatus;
+      
       toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to start assessment",
+        title: "Cannot Start Assessment",
+        description: cycleStatus ? `${errorMessage}\n\n${cycleStatus}` : errorMessage,
         variant: "destructive",
       });
     }
@@ -402,6 +422,38 @@ const UserAssessments = () => {
   if (currentStep === 'select') {
     return (
       <div className="space-y-6">
+        {/* Assessment Cycle Status Banner */}
+        {cycleStatus && (
+          <div className={`p-4 rounded-lg border ${
+            cycleStatus.canCreate 
+              ? 'bg-green-50 border-green-200' 
+              : 'bg-amber-50 border-amber-200'
+          }`}>
+            <div className="flex items-start">
+              <Calendar className={`h-5 w-5 mt-0.5 mr-3 ${
+                cycleStatus.canCreate ? 'text-green-600' : 'text-amber-600'
+              }`} />
+              <div className="flex-1">
+                <h3 className={`text-sm font-semibold ${
+                  cycleStatus.canCreate ? 'text-green-800' : 'text-amber-800'
+                }`}>
+                  {cycleStatus.canCreate ? 'Assessments Available' : 'Assessments Currently Unavailable'}
+                </h3>
+                <p className={`text-sm mt-1 ${
+                  cycleStatus.canCreate ? 'text-green-700' : 'text-amber-700'
+                }`}>
+                  {cycleStatus.statusMessage || 'No assessment cycle configured'}
+                </p>
+                {!cycleStatus.canCreate && cycleStatus.reason && (
+                  <p className="text-xs mt-2 text-amber-600">
+                    {cycleStatus.reason}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Debug banner */}
         <div className="text-xs text-gray-500 bg-yellow-50 border border-yellow-200 rounded p-2">
           SID: {String(currentUserId)} | competencies: {competenciesData?.competencies?.length ?? 0}

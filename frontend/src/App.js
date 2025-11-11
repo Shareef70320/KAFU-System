@@ -14,6 +14,7 @@ import EditEmployee from './pages/EditEmployee';
 import Competencies from './pages/Competencies';
 import EditCompetency from './pages/EditCompetency';
 import Jobs from './pages/Jobs';
+import ViewJob from './pages/ViewJob';
 import EditJob from './pages/EditJob';
 import JobCompetencyMapping from './pages/JobCompetencyMapping';
 import AddMapping from './pages/AddMapping';
@@ -48,6 +49,7 @@ import TeamJCPs from './pages/manager/TeamJCPs';
 import ManagerAssessments from './pages/manager/ManagerAssessments';
 // Admin Routes
 import AssessorDashboard from './pages/AssessorDashboard';
+import Settings from './pages/Settings';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -78,6 +80,7 @@ function App() {
                 <Route path="competencies" element={<AdminRoute><Competencies /></AdminRoute>} />
                 <Route path="competencies/edit/:id" element={<AdminRoute><EditCompetency /></AdminRoute>} />
                 <Route path="jobs" element={<AdminRoute><Jobs /></AdminRoute>} />
+                <Route path="jobs/view/:id" element={<AdminRoute><ViewJob /></AdminRoute>} />
                 <Route path="jobs/edit/:id" element={<AdminRoute><EditJob /></AdminRoute>} />
                 <Route path="job-competency-mapping" element={<AdminRoute><JobCompetencyMapping /></AdminRoute>} />
                 <Route path="add-mapping" element={<AdminRoute><AddMapping /></AdminRoute>} />
@@ -92,6 +95,8 @@ function App() {
                 <Route path="assessments" element={<AdminRoute><NewAssessments /></AdminRoute>} />
                 <Route path="question-bank" element={<AdminRoute><QuestionBank /></AdminRoute>} />
                 <Route path="photo-upload" element={<AdminRoute><PhotoUpload /></AdminRoute>} />
+                <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
+                <Route path="settings/assessment-cycle" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="test" element={<Test />} />
                 {/* User Login */}
                 <Route path="user-login" element={<UserLogin />} />
