@@ -53,10 +53,10 @@ const AddMapping = () => {
     retry: 1,
   });
 
-  // Fetch existing job competency mappings
+  // Fetch existing job competency mappings - get all mappings without pagination
   const { data: mappingsData, error: mappingsError } = useQuery({
     queryKey: ['jobCompetencies'],
-    queryFn: () => api.get('/job-competencies').then(res => res.data),
+    queryFn: () => api.get('/job-competencies?limit=10000').then(res => res.data),
     retry: 1,
   });
 

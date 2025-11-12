@@ -379,7 +379,8 @@ router.post('/', async (req, res) => {
           select: {
             id: true,
             title: true,
-            code: true
+            code: true,
+            jcpCode: true
           }
         },
         competency: {
@@ -391,6 +392,20 @@ router.post('/', async (req, res) => {
         }
       }
     });
+
+    // Ensure job has a JCP code if it has mappings
+    if (mapping.job && (!mapping.job.jcpCode || mapping.job.jcpCode.trim() === '')) {
+      try {
+        await prisma.job.update({
+          where: { id: jobId },
+          data: { jcpCode: mapping.job.code }
+        });
+        console.log(`Auto-set JCP code for job ${mapping.job.code} (${jobId})`);
+      } catch (jcpError) {
+        console.warn(`Failed to auto-set JCP code for job ${jobId}:`, jcpError);
+        // Don't fail the whole operation if JCP code setting fails
+      }
+    }
 
     res.status(201).json(mapping);
   } catch (error) {
@@ -544,6 +559,29 @@ router.post('/bulk', async (req, res) => {
           mapping,
           error: error.message
         });
+      }
+    }
+
+    // Ensure all jobs with mappings have a JCP code
+    // Get unique job IDs from successful mappings
+    const jobIdsWithMappings = [...new Set(results.map(r => r.jobId))];
+    for (const jobId of jobIdsWithMappings) {
+      try {
+        const job = await prisma.job.findUnique({
+          where: { id: jobId },
+          select: { id: true, code: true, jcpCode: true }
+        });
+        if (job && (!job.jcpCode || job.jcpCode.trim() === '')) {
+          // Set JCP code to job code if not set
+          await prisma.job.update({
+            where: { id: jobId },
+            data: { jcpCode: job.code }
+          });
+          console.log(`Auto-set JCP code for job ${job.code} (${jobId})`);
+        }
+      } catch (jcpError) {
+        console.warn(`Failed to auto-set JCP code for job ${jobId}:`, jcpError);
+        // Don't fail the whole operation if JCP code setting fails
       }
     }
 
