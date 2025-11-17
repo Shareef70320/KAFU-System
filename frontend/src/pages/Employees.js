@@ -163,7 +163,6 @@ const Employees = () => {
   // Calculate static statistics from all employees (not filtered)
   const stats = useMemo(() => {
     const total = allEmployees.length;
-    const active = allEmployees.filter(emp => emp.employment_status === 'ACTIVE').length;
     const divisions = new Set(allEmployees.map(emp => emp.division).filter(Boolean)).size;
     
     // Calculate JCP (Job Competency Profile) - employees whose job codes are linked to competencies
@@ -173,7 +172,12 @@ const Employees = () => {
       emp.job_code && jobCodesWithCompetencies.has(emp.job_code)
     ).length;
     
-    return { total, active, divisions, jcp };
+    // Calculate Without JCP - employees whose job codes are NOT linked to competencies or have no job_code
+    const withoutJcp = allEmployees.filter(emp => 
+      !emp.job_code || !jobCodesWithCompetencies.has(emp.job_code)
+    ).length;
+    
+    return { total, withoutJcp, divisions, jcp };
   }, [allEmployees, jobCompetencyMappings]);
 
   // Fetch all unique divisions and locations for filters
@@ -390,12 +394,12 @@ const Employees = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <UserCheck className="h-6 w-6 text-green-600" />
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <BookOpen className="h-6 w-6 text-amber-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Active</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.active || 0}</p>
+                <p className="text-sm font-medium text-gray-500">Without JCP</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.withoutJcp || 0}</p>
               </div>
             </div>
           </CardContent>

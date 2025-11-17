@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import EmployeePhoto from '../components/EmployeePhoto';
 
 const Competencies = () => {
@@ -43,7 +43,6 @@ const Competencies = () => {
   const [searchInput, setSearchInput] = useState(''); // Search input for client-side filtering
   const [selectedType, setSelectedType] = useState('');
   const [selectedFamily, setSelectedFamily] = useState('');
-  const [showAddCompetency, setShowAddCompetency] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [expandedCompetency, setExpandedCompetency] = useState(null);
@@ -63,6 +62,30 @@ const Competencies = () => {
   // These will be populated from actual data
   const [competencyTypes, setCompetencyTypes] = useState([]);
   const [competencyFamilies, setCompetencyFamilies] = useState([]);
+
+  // All available types
+  const allTypes = [
+    'TECHNICAL',
+    'NON_TECHNICAL',
+    'BEHAVIORAL',
+    'LEADERSHIP',
+    'FUNCTIONAL',
+    'CERTIFICATION_AND_COMPLIANCE',
+    'COMMERCIAL',
+    'FINANCE_AND_PROCUREMENT',
+    'FIRE',
+    'HR_AND_ADMIN',
+    'HSE',
+    'ICT',
+    'INTERNAL_AUDIT',
+    'LEGAL_AND_REGULATORY',
+    'MAINTENANCE',
+    'MEDIA',
+    'OPERATIONS',
+    'QUALITY',
+    'SECURITY',
+    'TECHNICAL_SERVICES'
+  ];
 
   // No debouncing needed - client-side filtering is instant
 
@@ -510,7 +533,14 @@ const Competencies = () => {
             Import Dictionary
           </Button>
           <Button
-            onClick={() => setShowAddCompetency(true)}
+            onClick={() => navigate('/competency-families')}
+            className="loyverse-button-secondary"
+          >
+            <Building2 className="h-4 w-4 mr-2" />
+            Add Family
+          </Button>
+          <Button
+            onClick={() => navigate('/competencies/add')}
             className="loyverse-button"
           >
             <Plus className="h-4 w-4 mr-2" />

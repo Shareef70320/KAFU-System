@@ -13,6 +13,8 @@ import Employees from './pages/Employees';
 import EditEmployee from './pages/EditEmployee';
 import Competencies from './pages/Competencies';
 import EditCompetency from './pages/EditCompetency';
+import AddCompetency from './pages/AddCompetency';
+import CompetencyFamilies from './pages/CompetencyFamilies';
 import Jobs from './pages/Jobs';
 import ViewJob from './pages/ViewJob';
 import EditJob from './pages/EditJob';
@@ -78,7 +80,9 @@ function App() {
                 <Route path="employees" element={<AdminRoute><Employees /></AdminRoute>} />
                 <Route path="employees/edit/:sid" element={<AdminRoute><EditEmployee /></AdminRoute>} />
                 <Route path="competencies" element={<AdminRoute><Competencies /></AdminRoute>} />
+                <Route path="competencies/add" element={<AdminRoute><AddCompetency /></AdminRoute>} />
                 <Route path="competencies/edit/:id" element={<AdminRoute><EditCompetency /></AdminRoute>} />
+                <Route path="competency-families" element={<AdminRoute><CompetencyFamilies /></AdminRoute>} />
                 <Route path="jobs" element={<AdminRoute><Jobs /></AdminRoute>} />
                 <Route path="jobs/view/:id" element={<AdminRoute><ViewJob /></AdminRoute>} />
                 <Route path="jobs/edit/:id" element={<AdminRoute><EditJob /></AdminRoute>} />

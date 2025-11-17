@@ -668,7 +668,7 @@ router.get('/:id', async (req, res) => {
 // Create new competency
 router.post('/', async (req, res) => {
   try {
-    const { name, type, family, definition, description, relatedDivision, relatedDocuments, levels } = req.body;
+    const { code, name, type, family, definition, description, relatedDivision, relatedDocuments, levels } = req.body;
 
     // Check if competency name already exists
     const existingCompetency = await prisma.competency.findUnique({
@@ -679,9 +679,22 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Competency name already exists' });
     }
 
+    // Check if code is provided and if it already exists
+    if (code && code.trim()) {
+      const trimmedCode = code.trim();
+      const duplicateCode = await prisma.competency.findUnique({
+        where: { code: trimmedCode }
+      });
+      
+      if (duplicateCode) {
+        return res.status(400).json({ message: `Competency code "${trimmedCode}" already exists. Please use a unique code.` });
+      }
+    }
+
     // Create competency with levels
     const competency = await prisma.competency.create({
       data: {
+        code: code && code.trim() ? code.trim() : null,
         name,
         type,
         family,
@@ -706,6 +719,15 @@ router.post('/', async (req, res) => {
     res.status(201).json(competency);
   } catch (error) {
     console.error('Error creating competency:', error);
+    if (error.code === 'P2002') {
+      // Unique constraint violation
+      if (error.meta?.target?.includes('code')) {
+        return res.status(400).json({ message: 'Competency code already exists. Please use a unique code.' });
+      }
+      if (error.meta?.target?.includes('name')) {
+        return res.status(400).json({ message: 'Competency name already exists.' });
+      }
+    }
     res.status(500).json({ message: 'Internal server error' });
   }
 });

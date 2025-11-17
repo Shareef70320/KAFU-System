@@ -131,6 +131,7 @@ model Competency {
   name              String
   type              CompetencyType
   family            String    // e.g., Finance, HR, Technical Services
+  familyId          String?   @map("familyId") // Link to CompetencyFamily model
   definition        String
   description       String?
   related_division  String?   // Division from HR data
@@ -140,6 +141,7 @@ model Competency {
   updatedAt         DateTime  @updatedAt
   
   // Relations
+  competencyFamily  CompetencyFamily? @relation(fields: [familyId], references: [id])
   levels            CompetencyLevel[]
   documents         CompetencyDocument[]
   assessments       CompetencyAssessment[]
@@ -150,6 +152,22 @@ model Competency {
   
   @@map("competencies")
   @@unique([name, type, family])
+}
+
+model CompetencyFamily {
+  id          String    @id @default(cuid())
+  name        String    // Family name (e.g., Finance, HR, Technical Services)
+  type        CompetencyType? // Associated type (optional, for backward compatibility)
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  competencies Competency[]
+  
+  @@unique([name, type])
+  @@map("competency_families")
 }
 
 model CompetencyLevel {

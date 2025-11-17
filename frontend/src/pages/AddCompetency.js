@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
-// Use native selects for Type/Family, keep Select for level dropdown
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
 import { 
@@ -23,8 +22,7 @@ import {
   Check
 } from 'lucide-react';
 
-const EditCompetency = () => {
-  const { id } = useParams();
+const AddCompetency = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -36,31 +34,37 @@ const EditCompetency = () => {
     type: 'TECHNICAL',
     family: '',
     definition: '',
+    description: '',
     relatedDivision: '',
     relatedDocuments: [],
     isActive: true
   });
 
-  const [levels, setLevels] = useState([]);
+  // Initialize with all 4 required levels
+  const [levels, setLevels] = useState([
+    { id: 'temp-basic', level: 'BASIC', title: 'BASIC Level', description: '', indicators: [] },
+    { id: 'temp-intermediate', level: 'INTERMEDIATE', title: 'INTERMEDIATE Level', description: '', indicators: [] },
+    { id: 'temp-advanced', level: 'ADVANCED', title: 'ADVANCED Level', description: '', indicators: [] },
+    { id: 'temp-mastery', level: 'MASTERY', title: 'MASTERY Level', description: '', indicators: [] }
+  ]);
   const [elements, setElements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [allFamilies, setAllFamilies] = useState([]);
   const [showAddElementModal, setShowAddElementModal] = useState(false);
   const [editingElement, setEditingElement] = useState(null);
   const [elementForm, setElementForm] = useState({ name: '', description: '' });
-  const [allTypes, setAllTypes] = useState([
+  const [allTypes] = useState([
     'TECHNICAL',
     'NON_TECHNICAL'
   ]);
 
-  // Fetch competency data
-  const { data: competency, isLoading: competencyLoading } = useQuery({
-    queryKey: ['competency', id],
+  // Fetch all competencies once to derive families list (for code generation)
+  const { data: allComps } = useQuery({
+    queryKey: ['competencies-for-edit'],
     queryFn: async () => {
-      const response = await api.get(`/competencies/${id}`);
-      return response.data;
-    },
-    enabled: !!id
+      const res = await api.get('/competencies', { params: { page: 1, limit: 1000 } });
+      return res.data?.competencies || [];
+    }
   });
 
   // Fetch competency families from API
@@ -87,61 +91,91 @@ const EditCompetency = () => {
     }
   }, [familiesData, formData.type]);
 
-  // Update form data when competency loads
-  useEffect(() => {
-    if (competency) {
-      const normType = (competency.type || 'TECHNICAL').toString();
-      const normFamily = (competency.family || '').toString().trim();
-      const normDivision = (competency.relatedDivision || '').toString().trim();
-      setFormData({
-        code: competency.code || '',
-        name: competency.name || '',
-        type: normType,
-        family: normFamily,
-        definition: competency.definition || '',
-        relatedDivision: normDivision,
-        relatedDocuments: Array.isArray(competency.relatedDocuments) ? competency.relatedDocuments : [],
-        isActive: competency.isActive !== false
-      });
+  // Function to generate suggested competency code
+  const generateSuggestedCode = useCallback((type, family, competenciesList) => {
+    try {
+      // Get type prefix (first 3-4 letters)
+      const typePrefix = type.substring(0, 4).toUpperCase();
       
-      // Ensure all 4 levels exist, merge with existing data
-      const requiredLevels = ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'];
-      const existingLevels = competency.levels || [];
-      const mergedLevels = requiredLevels.map(levelType => {
-        const existing = existingLevels.find(l => l.level === levelType);
-        return existing || {
-          id: `temp-${levelType.toLowerCase()}`,
-          level: levelType,
-          title: `${levelType} Level`,
-          description: '',
-          indicators: []
-        };
-      });
-      setLevels(mergedLevels);
-      setElements(competency.elements || []);
+      // Get family prefix (first 3-4 letters, remove spaces/special chars)
+      const familyPrefix = family.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      
+      // Find the next sequence number for this type-family combination
+      const existingCodes = competenciesList
+        .filter(c => c.code && c.code.startsWith(`${typePrefix}-${familyPrefix}-`))
+        .map(c => {
+          const parts = c.code.split('-');
+          const seq = parseInt(parts[parts.length - 1]);
+          return isNaN(seq) ? 0 : seq;
+        });
+      
+      const nextSeq = existingCodes.length > 0 ? Math.max(...existingCodes) + 1 : 1;
+      const suggested = `${typePrefix}-${familyPrefix}-${nextSeq.toString().padStart(3, '0')}`;
+      
+      setFormData(prev => ({ ...prev, code: suggested }));
+    } catch (error) {
+      console.error('Error generating code:', error);
     }
-  }, [competency]);
+  }, []);
 
-  // Update competency mutation
-  const updateCompetencyMutation = useMutation({
+  // Auto-generate code when type and family are both entered
+  useEffect(() => {
+    if (formData.type && formData.family && allComps && allComps.length > 0) {
+      // Only auto-generate if code is empty or was previously auto-generated
+      // This allows users to manually edit the code without it being overwritten
+      const currentCode = formData.code || '';
+      if (!currentCode || currentCode.match(/^[A-Z]{4}-[A-Z0-9]{4}-\d{3}$/)) {
+        generateSuggestedCode(formData.type, formData.family, allComps);
+      }
+    } else {
+      if (!formData.type || !formData.family) {
+        setFormData(prev => ({ ...prev, code: '' }));
+      }
+    }
+  }, [formData.type, formData.family, allComps, generateSuggestedCode]);
+
+  // Create competency mutation
+  const createCompetencyMutation = useMutation({
     mutationFn: async (data) => {
-      const response = await api.put(`/competencies/${id}`, data);
+      const response = await api.post('/competencies', data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (newCompetency) => {
       queryClient.invalidateQueries(['competencies']);
-      queryClient.invalidateQueries(['competency', id]);
+      queryClient.invalidateQueries(['competencies-for-edit']);
+      
+      // Add elements if any
+      if (elements.length > 0) {
+        try {
+          const elementsData = elements.map(el => ({
+            name: el.name.trim(),
+            description: el.description?.trim() || null
+          }));
+          
+          await api.post(`/competencies/${newCompetency.id}/elements/bulk`, { elements: elementsData });
+        } catch (error) {
+          console.error('Error adding elements:', error);
+          toast({
+            title: 'Warning',
+            description: 'Competency created but some elements could not be added',
+            variant: 'default'
+          });
+        }
+      }
+
       toast({
         title: 'Success',
-        description: 'Competency updated successfully!',
+        description: 'Competency created successfully!',
         variant: 'default'
       });
-      navigate('/competencies');
+      
+      // Navigate to edit page to allow adding documents and more elements
+      navigate(`/competencies/edit/${newCompetency.id}`);
     },
     onError: (error) => {
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to update competency',
+        description: error.response?.data?.message || 'Failed to create competency',
         variant: 'destructive'
       });
     }
@@ -162,106 +196,7 @@ const EditCompetency = () => {
 
   // Levels are fixed - always 4 levels: BASIC, INTERMEDIATE, ADVANCED, MASTERY
 
-  // Document upload state
-  const [docTitle, setDocTitle] = useState('');
-  const [docType, setDocType] = useState('OTHER');
-  const [docVersion, setDocVersion] = useState('1.0');
-  const [docDescription, setDocDescription] = useState('');
-  const [docFile, setDocFile] = useState(null);
-
-  const handleUploadDocument = async (e) => {
-    e.preventDefault();
-    if (!docFile) return;
-    const form = new FormData();
-    form.append('document', docFile);
-    form.append('title', docTitle || docFile.name);
-    form.append('description', docDescription || '');
-    form.append('documentType', docType);
-    form.append('version', docVersion || '1.0');
-    try {
-      await api.post(`/competencies/${id}/documents`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast({ title: 'Uploaded', description: 'Document uploaded successfully' });
-      // refresh competency
-      queryClient.invalidateQueries(['competency', id]);
-      setDocTitle(''); setDocType('OTHER'); setDocVersion('1.0'); setDocDescription(''); setDocFile(null);
-    } catch (err) {
-      toast({ title: 'Upload failed', description: err.response?.data?.message || 'Error uploading document', variant: 'destructive' });
-    }
-  };
-
-  // Levels cannot be removed - always 4 levels required
-
-  // Element mutations
-  const createElementMutation = useMutation({
-    mutationFn: async (data) => {
-      const response = await api.post(`/competencies/${id}/elements`, data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['competency', id]);
-      toast({
-        title: 'Success',
-        description: 'Element added successfully!',
-        variant: 'default'
-      });
-      setShowAddElementModal(false);
-      setElementForm({ name: '', description: '' });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to add element',
-        variant: 'destructive'
-      });
-    }
-  });
-
-  const updateElementMutation = useMutation({
-    mutationFn: async ({ elementId, data }) => {
-      const response = await api.put(`/competencies/${id}/elements/${elementId}`, data);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['competency', id]);
-      toast({
-        title: 'Success',
-        description: 'Element updated successfully!',
-        variant: 'default'
-      });
-      setEditingElement(null);
-      setElementForm({ name: '', description: '' });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to update element',
-        variant: 'destructive'
-      });
-    }
-  });
-
-  const deleteElementMutation = useMutation({
-    mutationFn: async (elementId) => {
-      const response = await api.delete(`/competencies/${id}/elements/${elementId}`);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['competency', id]);
-      toast({
-        title: 'Success',
-        description: 'Element deleted successfully!',
-        variant: 'default'
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to delete element',
-        variant: 'destructive'
-      });
-    }
-  });
-
+  // Element management (local state only, will be added after competency creation)
   const handleAddElement = () => {
     if (!elementForm.name.trim()) {
       toast({
@@ -271,10 +206,15 @@ const EditCompetency = () => {
       });
       return;
     }
-    createElementMutation.mutate({
+    const newElement = {
+      id: `temp-${Date.now()}`,
       name: elementForm.name.trim(),
-      description: elementForm.description.trim() || null
-    });
+      description: elementForm.description?.trim() || null,
+      isActive: true
+    };
+    setElements(prev => [...prev, newElement]);
+    setElementForm({ name: '', description: '' });
+    setShowAddElementModal(false);
   };
 
   const handleEditElement = (element) => {
@@ -292,19 +232,18 @@ const EditCompetency = () => {
       });
       return;
     }
-    updateElementMutation.mutate({
-      elementId: editingElement.id,
-      data: {
-        name: elementForm.name.trim(),
-        description: elementForm.description.trim() || null
-      }
-    });
+    setElements(prev => prev.map(el => 
+      el.id === editingElement.id 
+        ? { ...el, name: elementForm.name.trim(), description: elementForm.description?.trim() || null }
+        : el
+    ));
+    setEditingElement(null);
+    setElementForm({ name: '', description: '' });
+    setShowAddElementModal(false);
   };
 
   const handleDeleteElement = (elementId) => {
-    if (window.confirm('Are you sure you want to delete this element?')) {
-      deleteElementMutation.mutate(elementId);
-    }
+    setElements(prev => prev.filter(el => el.id !== elementId));
   };
 
   const handleBulkAddElements = () => {
@@ -324,24 +263,19 @@ const EditCompetency = () => {
       return;
     }
 
-    const elementsData = elementNames.map(name => ({ name }));
+    const newElements = elementNames.map((name, index) => ({
+      id: `temp-${Date.now()}-${index}`,
+      name: name,
+      description: null,
+      isActive: true
+    }));
     
-    api.post(`/competencies/${id}/elements/bulk`, { elements: elementsData })
-      .then(() => {
-        queryClient.invalidateQueries(['competency', id]);
-        toast({
-          title: 'Success',
-          description: `Added ${elementNames.length} elements successfully!`,
-          variant: 'default'
-        });
-      })
-      .catch((error) => {
-        toast({
-          title: 'Error',
-          description: error.response?.data?.message || 'Failed to add elements',
-          variant: 'destructive'
-        });
-      });
+    setElements(prev => [...prev, ...newElements]);
+    toast({
+      title: 'Success',
+      description: `Added ${elementNames.length} elements to the list`,
+      variant: 'default'
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -349,10 +283,21 @@ const EditCompetency = () => {
     setIsLoading(true);
 
     try {
-      const updateData = {
+      // Validation
+      if (!formData.name || !formData.type || !formData.family || !formData.definition) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please fill in all required fields: Name, Type, Family, and Definition',
+          variant: 'destructive'
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const createData = {
         ...formData,
+        code: formData.code && formData.code.trim() ? formData.code.trim() : undefined,
         levels: levels.map(level => ({
-          id: level.id,
           level: level.level,
           title: `${level.level} Level`,
           description: level.description,
@@ -360,38 +305,13 @@ const EditCompetency = () => {
         }))
       };
 
-      await updateCompetencyMutation.mutateAsync(updateData);
+      await createCompetencyMutation.mutateAsync(createData);
     } catch (error) {
-      console.error('Update error:', error);
+      console.error('Create error:', error);
     } finally {
       setIsLoading(false);
     }
   };
-
-  if (competencyLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading competency...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!competency) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600">Competency not found</p>
-          <Button onClick={() => navigate('/competencies')} className="mt-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Competencies
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -406,8 +326,8 @@ const EditCompetency = () => {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Competencies
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900">Edit Competency</h1>
-          <p className="text-gray-600 mt-2">Modify competency details and levels</p>
+          <h1 className="text-3xl font-bold text-gray-900">Add New Competency</h1>
+          <p className="text-gray-600 mt-2">Create a new competency in the framework</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -422,7 +342,7 @@ const EditCompetency = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="name">Competency Name</Label>
+                  <Label htmlFor="name">Competency Name *</Label>
                   <Input
                     id="name"
                     value={formData.name}
@@ -432,49 +352,47 @@ const EditCompetency = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="code">Competency Code <span className="text-gray-500 text-xs">(Unique)</span></Label>
+                  <Label htmlFor="code">Competency Code <span className="text-gray-500 text-xs">(Auto-generated)</span></Label>
                   <Input
                     id="code"
                     value={formData.code || ''}
                     onChange={(e) => handleInputChange('code', e.target.value)}
-                    placeholder="e.g., TECH-ICT-001"
+                    placeholder="Will be generated after selecting Type and Family"
                     className="font-mono"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Unique identifier for this competency</p>
+                  {formData.type && formData.family && formData.code && (
+                    <p className="text-xs text-gray-500 mt-1">Code auto-generated. You can edit if needed.</p>
+                  )}
                 </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div>
-                  <Label htmlFor="type">Type</Label>
+                  <Label htmlFor="type">Type *</Label>
                   <select
                     id="type"
                     className="mt-1 block w-full h-10 border border-gray-300 rounded-md bg-white px-3 text-sm text-gray-900"
                     value={formData.type || ''}
                     onChange={(e) => handleInputChange('type', e.target.value)}
+                    required
                   >
                     {!formData.type && <option value="" disabled>Select Type</option>}
-                    {formData.type && !allTypes.includes(formData.type) && (
-                      <option value={formData.type}>{String(formData.type).replaceAll('_',' ')}</option>
-                    )}
                     {allTypes.map(t => (
                       <option key={t} value={t}>{t === 'TECHNICAL' ? 'Technical' : 'Non Technical'}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <Label htmlFor="family">Competency Family</Label>
+                  <Label htmlFor="family">Competency Family *</Label>
                   <div className="flex items-center space-x-2">
                     <select
                       id="family"
                       className="loyverse-input mt-1 flex-1"
                       value={formData.family}
                       onChange={(e) => handleInputChange('family', e.target.value)}
+                      required
                     >
-                      {/* Ensure current value is selectable even if not in list */}
-                      {formData.family && !allFamilies.includes(formData.family) && (
-                        <option value={formData.family}>{formData.family}</option>
-                      )}
+                      <option value="">Select family</option>
                       {allFamilies.map(f => (
                         <option key={f} value={f}>{f}</option>
                       ))}
@@ -489,6 +407,9 @@ const EditCompetency = () => {
                       <Building2 className="h-4 w-4" />
                     </Button>
                   </div>
+                  {formData.family && !allFamilies.includes(formData.family) && (
+                    <p className="text-xs text-amber-600 mt-1">Family not found in list. Please add it first.</p>
+                  )}
                 </div>
               </div>
               
@@ -506,7 +427,7 @@ const EditCompetency = () => {
               
 
               <div>
-                <Label htmlFor="definition">Definition</Label>
+                <Label htmlFor="definition">Definition *</Label>
                 <textarea
                   id="definition"
                   value={formData.definition}
@@ -515,6 +436,18 @@ const EditCompetency = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={4}
                   required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="description">Description</Label>
+                <textarea
+                  id="description"
+                  value={formData.description || ''}
+                  onChange={(e) => handleInputChange('description', e.target.value)}
+                  placeholder="Enter additional description (optional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  rows={3}
                 />
               </div>
 
@@ -542,66 +475,6 @@ const EditCompetency = () => {
               </div>
             </CardContent>
           </Card>
-
-        {/* Documents Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Award className="h-5 w-5 mr-2 text-purple-600" />
-              Related Documents
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {competency?.documents?.length > 0 && (
-              <div className="space-y-2">
-                {competency.documents.map(doc => (
-                  <div key={doc.id} className="flex items-center justify-between border rounded p-2">
-                    <div className="text-sm truncate mr-2">
-                      <span className="font-medium">{doc.title}</span>
-                      <span className="text-gray-500 ml-2">{doc.documentType} • v{doc.version}</span>
-                    </div>
-                    <a href={`/${doc.filePath}`} target="_blank" rel="noreferrer" className="text-blue-600 text-sm">View</a>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <form onSubmit={handleUploadDocument} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-              <div>
-                <Label htmlFor="docTitle">Title</Label>
-                <Input id="docTitle" value={docTitle} onChange={e=>setDocTitle(e.target.value)} placeholder="Document title" />
-              </div>
-              <div>
-                <Label htmlFor="docType">Type</Label>
-                <select id="docType" className="loyverse-input mt-1 w-full" value={docType} onChange={e=>setDocType(e.target.value)}>
-                  <option value="SOP">SOP</option>
-                  <option value="MANUAL">MANUAL</option>
-                  <option value="GUIDELINE">GUIDELINE</option>
-                  <option value="PROCEDURE">PROCEDURE</option>
-                  <option value="REFERENCE">REFERENCE</option>
-                  <option value="TRAINING_MATERIAL">TRAINING_MATERIAL</option>
-                  <option value="POLICY">POLICY</option>
-                  <option value="OTHER">OTHER</option>
-                </select>
-              </div>
-              <div>
-                <Label htmlFor="docVersion">Version</Label>
-                <Input id="docVersion" value={docVersion} onChange={e=>setDocVersion(e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="docFile">File</Label>
-                <Input id="docFile" type="file" onChange={e=>setDocFile(e.target.files?.[0]||null)} />
-              </div>
-              <div className="md:col-span-2">
-                <Label htmlFor="docDescription">Description</Label>
-                <Input id="docDescription" value={docDescription} onChange={e=>setDocDescription(e.target.value)} placeholder="Short description (optional)" />
-              </div>
-              <div className="md:col-span-2 flex justify-end">
-                <Button type="submit" disabled={!docFile}>Upload Document</Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
 
           {/* Competency Elements */}
           <Card>
@@ -640,7 +513,7 @@ const EditCompetency = () => {
             </CardHeader>
             <CardContent>
               {elements.length === 0 ? (
-                <p className="text-gray-500 text-sm">No elements added yet. Click "Add Element" to get started.</p>
+                <p className="text-gray-500 text-sm">No elements added yet. Click "Add Element" to get started. Elements will be added after the competency is created.</p>
               ) : (
                 <div className="space-y-3">
                   {elements.map((element) => (
@@ -797,7 +670,6 @@ const EditCompetency = () => {
                     <Button
                       type="button"
                       onClick={editingElement ? handleUpdateElement : handleAddElement}
-                      disabled={createElementMutation.isLoading || updateElementMutation.isLoading}
                     >
                       {editingElement ? (
                         <>
@@ -834,12 +706,12 @@ const EditCompetency = () => {
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Saving...
+                  Creating...
                 </>
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+                  Create Competency
                 </>
               )}
             </Button>
@@ -850,4 +722,5 @@ const EditCompetency = () => {
   );
 };
 
-export default EditCompetency;
+export default AddCompetency;
+
