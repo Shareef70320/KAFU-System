@@ -385,7 +385,7 @@ const JobCompetencyMapping = () => {
   };
   
   // Save changes from edit modal
-  const handleSaveEditProfile = () => {
+  const handleSaveEditProfile = async () => {
     if (editSelectedJobs.length === 0) {
       toast({
         title: "Missing Information",
@@ -395,86 +395,107 @@ const JobCompetencyMapping = () => {
       return;
     }
     
-    // Add new competencies to all selected jobs
-    if (editJobCompetencies.length > 0) {
+    try {
       const jobIds = editSelectedJobs.map(j => j.id);
-      const mappings = [];
-      for (const jobId of jobIds) {
-        for (const comp of editJobCompetencies) {
-          mappings.push({
-            jobId,
-            competencyId: comp.competency.id,
-            requiredLevel: comp.level,
-            isRequired: true
-          });
+      const sourceJobId = editingJobProfile?.job?.id;
+      
+      // Identify newly added jobs (jobs that don't have the same JCP code or don't have existing mappings)
+      const newlyAddedJobs = [];
+      const existingJobs = [];
+      
+      for (const job of editSelectedJobs) {
+        const hasExistingMappings = mappingsData?.mappings?.some(m => m.jobId === job.id);
+        if (!hasExistingMappings && job.id !== sourceJobId) {
+          newlyAddedJobs.push(job.id);
+        } else {
+          existingJobs.push(job.id);
         }
       }
       
-      // Create mappings in bulk
-      api.post('/job-competencies/bulk', { mappings })
-        .then(() => {
-          // Update JCP code if changed
-          if (editJcpCode && editJcpCode.trim().length > 0) {
-            return api.post('/jobs/set-jcp-code', { 
-              jobIds, 
-              jcpCode: editJcpCode.trim() 
+      // If there are newly added jobs, copy all existing competencies from source job to them
+      if (newlyAddedJobs.length > 0 && sourceJobId && editingJobProfile?.competencies?.length > 0) {
+        const existingMappings = editingJobProfile.competencies.map(comp => ({
+          jobId: null, // Will be set for each new job
+          competencyId: comp.competency.id,
+          requiredLevel: comp.requiredLevel,
+          isRequired: comp.isRequired !== false
+        }));
+        
+        // Create mappings for newly added jobs (copy existing competencies)
+        const copyMappings = [];
+        for (const newJobId of newlyAddedJobs) {
+          for (const mapping of existingMappings) {
+            copyMappings.push({
+              ...mapping,
+              jobId: newJobId
             });
           }
-        })
-        .then(() => {
-          toast({
-            title: "Job Profile Updated",
-            description: `Applied ${editJobCompetencies.length} new competencies to ${editSelectedJobs.length} job(s)`,
-          });
-          queryClient.invalidateQueries(['jobCompetencies']);
-          queryClient.invalidateQueries(['jobs']);
-          setShowJobProfileModal(false);
-          setEditingJobProfile(null);
-          setEditSelectedJobs([]);
-          setEditJcpCode('');
-          setEditJobCompetencies([]);
-        })
-        .catch((error) => {
-          toast({
-            title: "Error",
-            description: error.response?.data?.message || "Failed to update job profile",
-            variant: "destructive",
-          });
-        });
-    } else {
-      // Just update JCP code if no new competencies
+        }
+        
+        if (copyMappings.length > 0) {
+          await api.post('/job-competencies/bulk', { mappings: copyMappings });
+        }
+      }
+      
+      // Add new competencies to all selected jobs
+      if (editJobCompetencies.length > 0) {
+        const mappings = [];
+        for (const jobId of jobIds) {
+          for (const comp of editJobCompetencies) {
+            mappings.push({
+              jobId,
+              competencyId: comp.competency.id,
+              requiredLevel: comp.level,
+              isRequired: true
+            });
+          }
+        }
+        
+        if (mappings.length > 0) {
+          await api.post('/job-competencies/bulk', { mappings });
+        }
+      }
+      
+      // Update JCP code for all selected jobs
       if (editJcpCode && editJcpCode.trim().length > 0) {
-        const jobIds = editSelectedJobs.map(j => j.id);
-        api.post('/jobs/set-jcp-code', { 
+        await api.post('/jobs/set-jcp-code', { 
           jobIds, 
           jcpCode: editJcpCode.trim() 
-        })
-        .then(() => {
-          toast({
-            title: "JCP Code Updated",
-            description: `Updated JCP code for ${editSelectedJobs.length} job(s)`,
-          });
-          queryClient.invalidateQueries(['jobs']);
-          setShowJobProfileModal(false);
-          setEditingJobProfile(null);
-          setEditSelectedJobs([]);
-          setEditJcpCode('');
-        })
-        .catch((error) => {
-          toast({
-            title: "Error",
-            description: error.response?.data?.message || "Failed to update JCP code",
-            variant: "destructive",
-          });
         });
-      } else {
-        // No changes, just close
-        setShowJobProfileModal(false);
-        setEditingJobProfile(null);
-        setEditSelectedJobs([]);
-        setEditJcpCode('');
-        setEditJobCompetencies([]);
       }
+      
+      const newJobsCount = newlyAddedJobs.length;
+      const newCompsCount = editJobCompetencies.length;
+      let message = '';
+      if (newJobsCount > 0 && newCompsCount > 0) {
+        message = `Added ${newJobsCount} job(s) to profile with existing competencies, and added ${newCompsCount} new competency(ies) to all ${jobIds.length} job(s)`;
+      } else if (newJobsCount > 0) {
+        message = `Added ${newJobsCount} job(s) to profile with existing competencies`;
+      } else if (newCompsCount > 0) {
+        message = `Applied ${newCompsCount} new competency(ies) to ${jobIds.length} job(s)`;
+      } else {
+        message = `Updated JCP code for ${jobIds.length} job(s)`;
+      }
+      
+      toast({
+        title: "Job Profile Updated",
+        description: message,
+      });
+      
+      queryClient.invalidateQueries(['jobCompetencies']);
+      queryClient.invalidateQueries(['jobs']);
+      setShowJobProfileModal(false);
+      setEditingJobProfile(null);
+      setEditSelectedJobs([]);
+      setEditJcpCode('');
+      setEditJobCompetencies([]);
+      
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to update job profile",
+        variant: "destructive",
+      });
     }
   };
   
