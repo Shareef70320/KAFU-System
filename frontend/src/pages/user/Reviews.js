@@ -40,6 +40,10 @@ const Reviews = () => {
   const [selectedCompetency, setSelectedCompetency] = useState('');
   const [requestNotes, setRequestNotes] = useState('');
   const [availableAssessors, setAvailableAssessors] = useState([]);
+  const [selectedAssessor, setSelectedAssessor] = useState('');
+  const [showBookReviewModal, setShowBookReviewModal] = useState(false);
+  const [bookingCompetency, setBookingCompetency] = useState(null);
+  const [loadingAssessors, setLoadingAssessors] = useState(false);
   const [activeTab, setActiveTab] = useState('competency'); // 'competency' or 'annual'
 
   const { currentSid } = useUser();
@@ -54,6 +58,16 @@ const Reviews = () => {
       const employees = response.data.employees || response.data;
       const normalizedSid = String(currentSid || '').trim();
       return employees.find(emp => String(emp.sid).trim() === normalizedSid);
+    },
+    enabled: !!currentSid
+  });
+
+  // Fetch user's assessment history to show all assessments
+  const { data: assessmentHistoryData, isLoading: assessmentHistoryLoading } = useQuery({
+    queryKey: ['user-assessment-history', currentSid],
+    queryFn: async () => {
+      const response = await api.get(`/user-assessments/history/${currentSid}`);
+      return response.data;
     },
     enabled: !!currentSid
   });
@@ -87,7 +101,7 @@ const Reviews = () => {
   const { data: reviewRequestsData, isLoading: requestsLoading } = useQuery({
     queryKey: ['user-review-requests', currentSid],
     queryFn: async () => {
-      const response = await api.get(`/competency-reviews/requests?employeeId=${currentSid}`);
+      const response = await api.get(`/competency-reviews/requests?employeeId=${currentSid}&includeHistory=true`);
       return response.data;
     },
     enabled: !!currentSid
@@ -112,8 +126,11 @@ const Reviews = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['user-review-requests']);
       setShowRequestModal(false);
+      setShowBookReviewModal(false);
       setSelectedCompetency('');
+      setBookingCompetency(null);
       setRequestNotes('');
+      setSelectedAssessor('');
       setAvailableAssessors([]);
       toast({
         title: "Success",
@@ -129,7 +146,28 @@ const Reviews = () => {
     }
   });
 
-  // Fetch available assessors for a competency and level
+  // Fetch available assessors for a competency (all assessors for that competency)
+  const fetchAssessorsForCompetency = async (competencyId) => {
+    try {
+      setLoadingAssessors(true);
+      const response = await api.get(`/assessors/competency/${competencyId}`);
+      const assessors = response.data.assessors || response.data || [];
+      console.log('Fetched assessors for competency:', competencyId, assessors);
+      return assessors;
+    } catch (error) {
+      console.error('Error fetching assessors:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch assessors. Please try again.",
+        variant: "destructive",
+      });
+      return [];
+    } finally {
+      setLoadingAssessors(false);
+    }
+  };
+
+  // Fetch available assessors for a competency and level (for old modal)
   const fetchAvailableAssessors = async (competencyId, requiredLevel) => {
     try {
       const response = await api.get(`/competency-reviews/assessors?competencyId=${competencyId}&requiredLevel=${requiredLevel}`);
@@ -138,6 +176,72 @@ const Reviews = () => {
       console.error('Error fetching assessors:', error);
       setAvailableAssessors([]);
     }
+  };
+
+  // Handle booking review with assessor
+  const handleBookReview = async (competency) => {
+    const competencyId = competency.competencyId || competency.id;
+    if (!competencyId) {
+      toast({
+        title: "Unavailable",
+        description: "Unable to determine competency ID. Please contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Store competency info for modal (ensure competencyId is present)
+    setBookingCompetency({ ...competency, competencyId });
+    setSelectedAssessor('');
+    setAvailableAssessors([]);
+    setLoadingAssessors(true);
+    setShowBookReviewModal(true);
+    // Fetch assessors after modal is shown
+    const assessors = await fetchAssessorsForCompetency(competencyId);
+    setAvailableAssessors(assessors);
+  };
+
+  // Handle submit booking
+  const handleSubmitBooking = () => {
+    if (!bookingCompetency || !selectedAssessor) {
+      toast({
+        title: "Error",
+        description: "Please select an assessor",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const competencyId = bookingCompetency.competencyId || bookingCompetency.id;
+    if (!competencyId) {
+      toast({
+        title: "Error",
+        description: "Unable to determine competency ID for this review.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Determine requested level - use manager level if available, otherwise user confirmed level, otherwise system level
+    const assessments = assessmentHistoryData?.assessments || [];
+    const competencyAssessments = assessments.filter(a => a.competencyId === competencyId);
+    const latestAssessment = competencyAssessments[0] || null;
+    
+    let requestedLevel = 'BASIC'; // Default
+    if (latestAssessment) {
+      requestedLevel = latestAssessment.managerSelectedLevel || 
+                      latestAssessment.userConfirmedLevel || 
+                      latestAssessment.systemLevel || 
+                      'BASIC';
+    }
+
+    createRequestMutation.mutate({
+      employeeId: currentSid,
+      competencyId,
+      requestedLevel: requestedLevel,
+      notes: requestNotes,
+      assessorId: selectedAssessor
+    });
   };
 
   const handleCompetencyChange = (competencyId) => {
@@ -185,9 +289,11 @@ const Reviews = () => {
     switch (status) {
       case 'REQUESTED': return 'bg-yellow-100 text-yellow-800';
       case 'SCHEDULED': return 'bg-blue-100 text-blue-800';
+      case 'ACCEPTED': return 'bg-emerald-100 text-emerald-800';
       case 'IN_PROGRESS': return 'bg-purple-100 text-purple-800';
       case 'COMPLETED': return 'bg-green-100 text-green-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
+      case 'REJECTED': return 'bg-red-100 text-red-800';
+      case 'CANCELLED': return 'bg-gray-100 text-gray-500';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -202,6 +308,32 @@ const Reviews = () => {
     }
   };
 
+  const formatStatusLabel = (status) => {
+    switch (status) {
+      case 'REQUESTED': return 'Requested';
+      case 'SCHEDULED': return 'Scheduled';
+      case 'ACCEPTED': return 'Accepted';
+      case 'IN_PROGRESS': return 'In Progress';
+      case 'COMPLETED': return 'Completed';
+      case 'REJECTED': return 'Rejected';
+      case 'CANCELLED': return 'Cancelled';
+      default: return status || 'Unknown';
+    }
+  };
+
+  const getStatusDotColor = (status) => {
+    switch (status) {
+      case 'REQUESTED': return 'bg-blue-300';
+      case 'SCHEDULED': return 'bg-amber-400';
+      case 'ACCEPTED': return 'bg-emerald-400';
+      case 'IN_PROGRESS': return 'bg-indigo-400';
+      case 'COMPLETED': return 'bg-green-400';
+      case 'REJECTED': return 'bg-red-400';
+      case 'CANCELLED': return 'bg-gray-400';
+      default: return 'bg-gray-300';
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -209,6 +341,53 @@ const Reviews = () => {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
+  const ReviewTimeline = ({ history }) => {
+    if (!history || history.length === 0) {
+      return null;
+    }
+    return (
+      <div className="mt-4 pt-3 border-t border-gray-100">
+        <h4 className="text-xs font-semibold text-gray-500 tracking-wide uppercase mb-2">
+          Review Progress
+        </h4>
+        <div className="space-y-3">
+          {history.map((entry, index) => (
+            <div key={`${entry.status}-${entry.createdAt}-${index}`} className="flex items-start">
+              <div className="flex flex-col items-center mr-3">
+                <span className={`w-2 h-2 rounded-full ${getStatusDotColor(entry.status)}`}></span>
+                {index < history.length - 1 && <span className="w-px flex-1 bg-gray-200 mt-1"></span>}
+              </div>
+              <div className="flex-1 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">{formatStatusLabel(entry.status)}</span>
+                  <span className="text-xs text-gray-500">{formatDateTime(entry.createdAt)}</span>
+                </div>
+                <div className="text-xs text-gray-600">
+                  {entry.actorRole ? (entry.actorRole === 'ASSESSOR' ? 'Assessor' : entry.actorRole === 'EMPLOYEE' ? 'Employee' : entry.actorRole) : 'System'}
+                  {entry.actorFirstName ? ` • ${entry.actorFirstName} ${entry.actorLastName || ''}` : entry.actorSid ? ` • ${entry.actorSid}` : ''}
+                </div>
+                {entry.notes && (
+                  <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   // Mock review data
@@ -384,7 +563,7 @@ const Reviews = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold text-yellow-600">
-                  {reviewRequests.filter(r => ['REQUESTED', 'SCHEDULED', 'IN_PROGRESS'].includes(r.status)).length}
+                  {reviewRequests.filter(r => ['REQUESTED', 'SCHEDULED', 'ACCEPTED', 'IN_PROGRESS'].includes(r.status)).length}
                 </div>
                 <p className="text-sm text-gray-500">Awaiting review</p>
               </CardContent>
@@ -494,6 +673,111 @@ const Reviews = () => {
         <CardContent>
           {activeTab === 'competency' ? (
             <div className="space-y-6">
+              {/* My Assessments - Book Review */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center">
+                  <BarChart3 className="h-5 w-5 mr-2" />
+                  My Assessments - Book Review
+                </h3>
+                {assessmentHistoryLoading ? (
+                  <div className="flex items-center justify-center h-32">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                  </div>
+                ) : !assessmentHistoryData?.assessments || assessmentHistoryData.assessments.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                    <p>No assessments yet</p>
+                    <p className="text-sm">Complete assessments to book reviews</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {(() => {
+                      // Group assessments by competency
+                      const competencyMap = new Map();
+                      assessmentHistoryData.assessments.forEach(assessment => {
+                        if (!competencyMap.has(assessment.competencyId)) {
+                          competencyMap.set(assessment.competencyId, {
+                            competencyId: assessment.competencyId,
+                            competencyName: assessment.competencyName,
+                            assessments: [],
+                            latestSystemLevel: null,
+                            latestUserLevel: null,
+                            latestManagerLevel: null,
+                            latestScore: null
+                          });
+                        }
+                        const comp = competencyMap.get(assessment.competencyId);
+                        comp.assessments.push(assessment);
+                        if (assessment.systemLevel && !comp.latestSystemLevel) comp.latestSystemLevel = assessment.systemLevel;
+                        if (assessment.userConfirmedLevel && !comp.latestUserLevel) comp.latestUserLevel = assessment.userConfirmedLevel;
+                        if (assessment.managerSelectedLevel && !comp.latestManagerLevel) comp.latestManagerLevel = assessment.managerSelectedLevel;
+                        if (assessment.percentageScore !== null && assessment.percentageScore !== undefined && !comp.latestScore) {
+                          comp.latestScore = assessment.percentageScore;
+                        }
+                      });
+                      return Array.from(competencyMap.values());
+                    })().map((competency) => {
+                      // Check if there's already a pending review for this competency
+                      const activeRequest = reviewRequests.find(r => 
+                        r.competency_id === competency.competencyId && 
+                        ['REQUESTED', 'SCHEDULED', 'ACCEPTED', 'IN_PROGRESS'].includes(r.status)
+                      );
+                      const hasPendingReview = Boolean(activeRequest);
+                      
+                      return (
+                        <div key={competency.competencyId} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3 mb-3">
+                                <h4 className="font-semibold text-gray-900">{competency.competencyName}</h4>
+                                {competency.latestManagerLevel && (
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.latestManagerLevel)}`}>
+                                    Manager: {competency.latestManagerLevel}
+                                  </span>
+                                )}
+                                {competency.latestUserLevel && !competency.latestManagerLevel && (
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.latestUserLevel)}`}>
+                                    Self: {competency.latestUserLevel}
+                                  </span>
+                                )}
+                                {competency.latestSystemLevel && !competency.latestUserLevel && !competency.latestManagerLevel && (
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.latestSystemLevel)}`}>
+                                    System: {competency.latestSystemLevel}
+                                  </span>
+                                )}
+                                {competency.latestScore !== null && (
+                                  <span className="text-sm text-gray-600">
+                                    Score: {competency.latestScore}%
+                                  </span>
+                                )}
+                              </div>
+                      <div className="text-sm text-gray-600 mb-3">
+                        <span className="font-medium">Total Attempts:</span> {competency.assessments.length}
+                      </div>
+                              {hasPendingReview && (
+                                <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded mb-2">
+                                  <Clock className="h-4 w-4 inline mr-1" />
+                          You have a {formatStatusLabel(activeRequest.status)} review request for this competency
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              onClick={() => handleBookReview(competency)}
+                              disabled={hasPendingReview}
+                              className="bg-green-600 hover:bg-green-700"
+                              size="sm"
+                            >
+                              <Calendar className="h-4 w-4 mr-2" />
+                              {hasPendingReview ? formatStatusLabel(activeRequest.status) : 'Book Review'}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Current Review Requests */}
               <div>
                 <h3 className="text-lg font-semibold mb-4 flex items-center">
@@ -535,6 +819,10 @@ const Reviews = () => {
                                 <div>{formatDate(request.scheduled_date)}</div>
                               </div>
                               <div>
+                                <span className="font-medium">Location:</span>
+                                <div>{request.scheduled_location || 'TBD'}</div>
+                              </div>
+                              <div>
                                 <span className="font-medium">Assessor:</span>
                                 <div>
                                   {request.assessor_first_name ? 
@@ -548,6 +836,21 @@ const Reviews = () => {
                                 <div>{formatDate(request.completed_date)}</div>
                               </div>
                             </div>
+                            {request.status === 'ACCEPTED' && (
+                              <div className="mt-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded p-2">
+                                <span className="font-medium">Assessor accepted the review</span>
+                                {request.scheduled_date && (
+                                  <span className="block text-xs text-emerald-600 mt-1">
+                                    Meeting: {formatDateTime(request.scheduled_date)}
+                                  </span>
+                                )}
+                                {request.scheduled_location && (
+                                  <span className="block text-xs text-emerald-600">
+                                    Location: {request.scheduled_location}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             {request.notes && (
                               <div className="mt-2">
                                 <span className="text-sm font-medium text-gray-700">Notes:</span>
@@ -556,6 +859,7 @@ const Reviews = () => {
                             )}
                           </div>
                         </div>
+                        <ReviewTimeline history={request.history} />
                       </div>
                     ))}
                   </div>
@@ -858,6 +1162,112 @@ const Reviews = () => {
                   Close
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Book Review Modal */}
+      {showBookReviewModal && bookingCompetency && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold mb-4">Book Review with Assessor</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Competency</label>
+                <div className="p-3 bg-blue-50 rounded-lg border">
+                  <span className="text-sm font-medium text-blue-800">
+                    {bookingCompetency.competencyName || bookingCompetency.name}
+                  </span>
+                </div>
+              </div>
+              
+              {loadingAssessors ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                  <span className="ml-2 text-sm text-gray-600">Loading assessors...</span>
+                </div>
+              ) : availableAssessors.length > 0 ? (
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Select Assessor ({availableAssessors.length} available)
+                  </label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {availableAssessors.map((assessor) => (
+                      <div
+                        key={assessor.id || assessor.assessor_sid}
+                        onClick={() => setSelectedAssessor(assessor.assessor_sid)}
+                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedAssessor === assessor.assessor_sid
+                            ? 'bg-green-50 border-green-300'
+                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {assessor.first_name} {assessor.last_name}
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">
+                              {assessor.email}
+                            </div>
+                            {assessor.job_title && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {assessor.job_title}
+                              </div>
+                            )}
+                            {assessor.division && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {assessor.division}
+                              </div>
+                            )}
+                          </div>
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded ${getLevelColor(assessor.competency_level)}`}>
+                            {assessor.competency_level}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <span className="text-sm text-yellow-800">
+                    No assessors available for this competency. Please contact your administrator to assign assessors.
+                  </span>
+                </div>
+              )}
+              
+              <div>
+                <label className="text-sm font-medium text-gray-700">Notes (Optional)</label>
+                <Textarea
+                  placeholder="Add any additional notes for the assessor..."
+                  value={requestNotes}
+                  onChange={(e) => setRequestNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 mt-6">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowBookReviewModal(false);
+                  setBookingCompetency(null);
+                  setSelectedAssessor('');
+                  setRequestNotes('');
+                  setAvailableAssessors([]);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSubmitBooking}
+                disabled={!selectedAssessor || createRequestMutation.isPending || loadingAssessors || availableAssessors.length === 0}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {createRequestMutation.isPending ? 'Booking...' : 'Book Review'}
+              </Button>
             </div>
           </div>
         </div>

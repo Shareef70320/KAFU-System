@@ -118,16 +118,27 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'No required level mapping for this job and competency' });
     }
 
-    // Get latest completed assessment session for this employee/competency
+    // Get latest assessment session for this employee/competency
+    // For self-assessment only (no system assessment), we check for user_confirmed_level
+    // For system assessment, we check for status = 'COMPLETED'
     const latest = await prisma.$queryRaw`
-      SELECT id, system_level, user_confirmed_level, manager_selected_level
+      SELECT id, system_level, user_confirmed_level, manager_selected_level, status, completed_at
       FROM assessment_sessions
-      WHERE user_id = ${employeeId} AND competency_id = ${competencyId} AND status = 'COMPLETED'
-      ORDER BY completed_at DESC
+      WHERE user_id = ${employeeId} 
+        AND competency_id = ${competencyId} 
+        AND (status = 'COMPLETED' OR user_confirmed_level IS NOT NULL)
+      ORDER BY 
+        CASE WHEN completed_at IS NOT NULL THEN completed_at ELSE updated_at END DESC,
+        updated_at DESC
       LIMIT 1
     `;
     if (!latest || latest.length === 0) {
-      return res.status(400).json({ success: false, error: 'Employee has no completed assessment for this competency' });
+      return res.status(400).json({ success: false, error: 'Employee has no assessment for this competency. Please ensure the employee has completed their self-assessment.' });
+    }
+    
+    // Ensure we have at least a user_confirmed_level or manager_selected_level
+    if (!latest[0].user_confirmed_level && !latest[0].manager_selected_level && !latest[0].system_level) {
+      return res.status(400).json({ success: false, error: 'Employee has not confirmed their level for this competency. Please ensure the employee has completed their self-assessment.' });
     }
 
     const requiredLevel = jc[0].requiredLevel;

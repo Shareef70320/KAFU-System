@@ -48,6 +48,8 @@ const Assessors = () => {
   // Search states for modal
   const [assessorSearchTerm, setAssessorSearchTerm] = useState('');
   const [competencySearchTerm, setCompetencySearchTerm] = useState('');
+  const [selectedCompetencyType, setSelectedCompetencyType] = useState('');
+  const [selectedCompetencyFamily, setSelectedCompetencyFamily] = useState('');
 
   // Form state for editing mapping
   const [editMapping, setEditMapping] = useState({
@@ -135,6 +137,8 @@ const Assessors = () => {
         setNewMapping({ assessorSid: '', competencies: [] });
         setAssessorSearchTerm('');
         setCompetencySearchTerm('');
+        setSelectedCompetencyType('');
+        setSelectedCompetencyFamily('');
         fetchData();
       }
     } catch (error) {
@@ -240,14 +244,26 @@ const Assessors = () => {
     );
   });
 
+  // Get unique types and families for filters
+  const uniqueTypes = [...new Set(competencies.map(c => c.type).filter(Boolean))].sort();
+  const uniqueFamilies = [...new Set(competencies.map(c => c.family).filter(Boolean))].sort();
+  
+  // Filter families based on selected type
+  const availableFamilies = selectedCompetencyType
+    ? [...new Set(competencies.filter(c => c.type === selectedCompetencyType).map(c => c.family).filter(Boolean))].sort()
+    : uniqueFamilies;
+
   const filteredCompetencies = competencies.filter(competency => {
     const searchLower = competencySearchTerm.toLowerCase();
-    return (
+    const matchesSearch = !competencySearchTerm || (
       competency.name?.toLowerCase().includes(searchLower) ||
       competency.type?.toLowerCase().includes(searchLower) ||
       competency.family?.toLowerCase().includes(searchLower) ||
       competency.definition?.toLowerCase().includes(searchLower)
     );
+    const matchesType = !selectedCompetencyType || competency.type === selectedCompetencyType;
+    const matchesFamily = !selectedCompetencyFamily || competency.family === selectedCompetencyFamily;
+    return matchesSearch && matchesType && matchesFamily;
   });
 
   if (loading) {
@@ -539,6 +555,8 @@ const Assessors = () => {
                   setShowAddModal(false);
                   setAssessorSearchTerm('');
                   setCompetencySearchTerm('');
+                  setSelectedCompetencyType('');
+                  setSelectedCompetencyFamily('');
                   setNewMapping({ assessorSid: '', competencyId: '', competencyLevel: 'BASIC' });
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -618,15 +636,53 @@ const Assessors = () => {
                   <label className="text-lg font-medium text-gray-900">Select Competency</label>
                 </div>
                 
-                {/* Search for Competency */}
-                <div className="relative">
-                  <BookOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Search competencies by name, type, or family..."
-                    value={competencySearchTerm}
-                    onChange={(e) => setCompetencySearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
+                {/* Filters for Competency */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Search for Competency */}
+                  <div className="relative md:col-span-1">
+                    <BookOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder="Search competencies..."
+                      value={competencySearchTerm}
+                      onChange={(e) => setCompetencySearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  
+                  {/* Type Filter */}
+                  <div>
+                    <select
+                      value={selectedCompetencyType}
+                      onChange={(e) => {
+                        setSelectedCompetencyType(e.target.value);
+                        // Reset family when type changes
+                        if (e.target.value) {
+                          setSelectedCompetencyFamily('');
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">All Types</option>
+                      {uniqueTypes.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* Family Filter */}
+                  <div>
+                    <select
+                      value={selectedCompetencyFamily}
+                      onChange={(e) => setSelectedCompetencyFamily(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      disabled={!selectedCompetencyType && availableFamilies.length === 0}
+                    >
+                      <option value="">All Families</option>
+                      {availableFamilies.map(family => (
+                        <option key={family} value={family}>{family}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Competency Cards Grid */}
@@ -809,6 +865,8 @@ const Assessors = () => {
                   setShowAddModal(false);
                   setAssessorSearchTerm('');
                   setCompetencySearchTerm('');
+                  setSelectedCompetencyType('');
+                  setSelectedCompetencyFamily('');
                   setNewMapping({ assessorSid: '', competencies: [] });
                 }}
                 className="px-6"

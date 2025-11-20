@@ -53,6 +53,14 @@ const AssessorDashboard = () => {
     gapsList: [],
     recommendationsList: []
   });
+  const [acceptingRequestId, setAcceptingRequestId] = useState(null);
+  const [acceptForm, setAcceptForm] = useState({
+    date: '',
+    location: '',
+    notes: ''
+  });
+  const [rejectingRequestId, setRejectingRequestId] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   // Fetch assessor's review requests
   const { data: reviewRequestsData, isLoading: requestsLoading } = useQuery({
@@ -133,6 +141,62 @@ const AssessorDashboard = () => {
       toast({
         title: "Error",
         description: error.response?.data?.message || "Failed to start review",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const acceptReviewMutation = useMutation({
+    mutationFn: async ({ requestId, scheduledDate, location, notes }) => {
+      const response = await api.post(`/competency-reviews/requests/${requestId}/accept`, {
+        assessorId: currentSid,
+        scheduledDate,
+        location,
+        notes
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['assessor-review-requests']);
+      queryClient.invalidateQueries(['user-review-requests']);
+      setAcceptingRequestId(null);
+      setAcceptForm({ date: '', location: '', notes: '' });
+      toast({
+        title: "Review accepted",
+        description: "The employee will see the scheduled details."
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to accept review",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const rejectReviewMutation = useMutation({
+    mutationFn: async ({ requestId, reason }) => {
+      const response = await api.post(`/competency-reviews/requests/${requestId}/reject`, {
+        assessorId: currentSid,
+        reason
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['assessor-review-requests']);
+      queryClient.invalidateQueries(['unassigned-review-requests']);
+      setRejectingRequestId(null);
+      setRejectReason('');
+      toast({
+        title: "Request rejected",
+        description: "The employee has been notified.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to reject review",
         variant: "destructive",
       });
     }
@@ -282,9 +346,11 @@ const AssessorDashboard = () => {
     switch (status) {
       case 'REQUESTED': return 'bg-yellow-100 text-yellow-800';
       case 'SCHEDULED': return 'bg-blue-100 text-blue-800';
+      case 'ACCEPTED': return 'bg-emerald-100 text-emerald-800';
       case 'IN_PROGRESS': return 'bg-purple-100 text-purple-800';
       case 'COMPLETED': return 'bg-green-100 text-green-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
+      case 'REJECTED': return 'bg-red-100 text-red-800';
+      case 'CANCELLED': return 'bg-gray-100 text-gray-500';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -308,8 +374,56 @@ const AssessorDashboard = () => {
     });
   };
 
+  const handleOpenAcceptForm = (request) => {
+    setAcceptingRequestId(request.id);
+    setRejectingRequestId(null);
+    setAcceptForm({
+      date: request.scheduled_date ? new Date(request.scheduled_date).toISOString().slice(0, 16) : '',
+      location: request.scheduled_location || '',
+      notes: ''
+    });
+  };
+
+  const handleCancelAccept = () => {
+    setAcceptingRequestId(null);
+    setAcceptForm({ date: '', location: '', notes: '' });
+  };
+
+  const handleConfirmAccept = (requestId) => {
+    const payload = {
+      requestId,
+      scheduledDate: acceptForm.date ? new Date(acceptForm.date).toISOString() : null,
+      location: acceptForm.location?.trim() || null,
+      notes: acceptForm.notes?.trim() || null
+    };
+    acceptReviewMutation.mutate(payload);
+  };
+
+  const handleOpenRejectForm = (request) => {
+    setRejectingRequestId(request.id);
+    setAcceptingRequestId(null);
+    setRejectReason('');
+  };
+
+  const handleCancelReject = () => {
+    setRejectingRequestId(null);
+    setRejectReason('');
+  };
+
+  const handleConfirmReject = (requestId) => {
+    if (!rejectReason.trim()) {
+      toast({
+        title: "Reason required",
+        description: "Please provide a reason for rejection.",
+        variant: "destructive",
+      });
+      return;
+    }
+    rejectReviewMutation.mutate({ requestId, reason: rejectReason.trim() });
+  };
+
   const pendingRequests = reviewRequestsData?.requests?.filter(r => 
-    ['REQUESTED', 'SCHEDULED', 'IN_PROGRESS'].includes(r.status)
+    ['SCHEDULED', 'ACCEPTED', 'IN_PROGRESS'].includes(r.status)
   ) || [];
   const completedReviews = completedReviewsData?.requests || [];
   const unassignedRequests = unassignedRequestsData?.requests?.filter(r => 
@@ -450,6 +564,10 @@ const AssessorDashboard = () => {
                           <span className="font-medium">Scheduled:</span>
                           <div>{formatDate(request.scheduled_date)}</div>
                         </div>
+                        <div className="md:col-span-2">
+                          <span className="font-medium">Location:</span>
+                          <div>{request.scheduled_location || 'Awaiting confirmation'}</div>
+                        </div>
                       </div>
                       {request.notes && (
                         <div className="mb-3">
@@ -458,8 +576,27 @@ const AssessorDashboard = () => {
                         </div>
                       )}
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex flex-wrap gap-2">
                       {request.status === 'SCHEDULED' && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenAcceptForm(request)}
+                            disabled={acceptReviewMutation.isPending && acceptingRequestId === request.id}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenRejectForm(request)}
+                            disabled={rejectReviewMutation.isPending && rejectingRequestId === request.id}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                      {request.status === 'ACCEPTED' && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -482,6 +619,76 @@ const AssessorDashboard = () => {
                       )}
                     </div>
                   </div>
+                  {acceptingRequestId === request.id && (
+                    <div className="mt-3 p-4 bg-blue-50 border border-blue-100 rounded-lg space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Meeting Date & Time</label>
+                          <Input
+                            type="datetime-local"
+                            value={acceptForm.date}
+                            onChange={(e) => setAcceptForm(form => ({ ...form, date: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-gray-600">Location</label>
+                          <Input
+                            placeholder="e.g., Training Room A"
+                            value={acceptForm.location}
+                            onChange={(e) => setAcceptForm(form => ({ ...form, location: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600">Notes (optional)</label>
+                        <Textarea
+                          rows={2}
+                          placeholder="Additional details to share with the employee"
+                          value={acceptForm.notes}
+                          onChange={(e) => setAcceptForm(form => ({ ...form, notes: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={handleCancelAccept}>
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleConfirmAccept(request.id)}
+                          disabled={acceptReviewMutation.isPending}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          {acceptReviewMutation.isPending ? 'Saving...' : 'Confirm'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {rejectingRequestId === request.id && (
+                    <div className="mt-3 p-4 bg-red-50 border border-red-100 rounded-lg space-y-3">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600">Reason for rejection</label>
+                        <Textarea
+                          rows={2}
+                          placeholder="Explain why you cannot take this review"
+                          value={rejectReason}
+                          onChange={(e) => setRejectReason(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={handleCancelReject}>
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleConfirmReject(request.id)}
+                          disabled={rejectReviewMutation.isPending}
+                        >
+                          {rejectReviewMutation.isPending ? 'Rejecting...' : 'Reject Request'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

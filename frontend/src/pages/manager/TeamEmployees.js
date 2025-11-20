@@ -447,9 +447,10 @@ const TeamEmployees = () => {
       setManagerLevels(updatedManagerLevels);
     } catch (e) {
       console.error('Failed to save manager level:', e);
+      const errorMessage = e?.response?.data?.error || e?.message || 'Failed to save manager level';
       toast({
         title: "Error",
-        description: "Failed to save manager level",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -1365,12 +1366,18 @@ const TeamEmployees = () => {
                                 >
                                   {latest.managerSelectedLevel ? 'Saved' : 'Save'}
                                 </Button>
-                                {/* Add IDP when gap exists: user/system below required level */}
+                                {/* Add IDP when gap exists: only show after manager saves level and if there is a gap */}
                                 {(() => {
+                                  // Only show if manager has saved the level
+                                  if (!latest.managerSelectedLevel) {
+                                    return null;
+                                  }
+                                  
                                   const jcp = getEmployeeJCP(selectedEmployee).find(j => (j.competency && j.competency.id === compId) || j.competencyId === compId);
                                   const required = jcp?.requiredLevel;
                                   const toRank = (l)=>({BASIC:0,INTERMEDIATE:1,ADVANCED:2,MASTERY:3}[String(l||'').toUpperCase()] ?? -1);
-                                  const eff = latest.managerSelectedLevel || latest.userConfirmedLevel || latest.systemLevel;
+                                  // Use manager level as the effective level (since it's saved)
+                                  const eff = latest.managerSelectedLevel;
                                   const showGap = required && toRank(eff) > -1 && toRank(eff) < toRank(required);
                                   return showGap ? (
                                     <Button 

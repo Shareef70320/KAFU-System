@@ -36,17 +36,31 @@ router.get('/assessment-cycle/status', async (req, res) => {
   try {
     const { canCreateOrActivateAssessment, getCycleStatusMessage, getActiveCycle, getAssessmentCycles } = require('../utils/assessmentCycle');
     
+    // Get employee SID from query parameter (userId or employeeSid)
+    const employeeSid = req.query.userId || req.query.employeeSid || null;
+    
     const cycles = await getAssessmentCycles();
     const activeCycle = await getActiveCycle();
     const statusMessage = await getCycleStatusMessage();
-    const checkResult = await canCreateOrActivateAssessment();
+    // Pass employeeSid to check for exceptions - exceptions override cycle period
+    const checkResult = await canCreateOrActivateAssessment(employeeSid);
+    
+    // Get active components from the active cycle
+    const activeComponents = activeCycle?.components || {
+      systemAssessment: true,
+      employeeSelfAssessment: true,
+      assessorAssessment: true,
+      managerAssessment: true
+    };
     
     res.json({
       cycles: cycles,
       activeCycle: activeCycle,
       statusMessage: statusMessage,
       canCreate: checkResult.allowed,
-      reason: checkResult.reason
+      reason: checkResult.reason,
+      components: activeComponents,
+      hasException: !!checkResult.exception // Indicate if user has an exception
     });
   } catch (error) {
     console.error('Error fetching assessment cycle status:', error);

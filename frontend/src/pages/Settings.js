@@ -17,6 +17,7 @@ import {
   Target,
   User,
   UserCheck,
+  ClipboardCheck,
   Plus,
   Edit,
   Trash2,
@@ -60,7 +61,13 @@ const Settings = () => {
     endDate: '',
     activationStartDate: '',
     activationEndDate: '',
-    isActive: false
+    isActive: false,
+    components: {
+      systemAssessment: true,
+      employeeSelfAssessment: true,
+      assessorAssessment: true,
+      managerAssessment: true
+    }
   });
 
   // Exceptions state
@@ -101,12 +108,6 @@ const Settings = () => {
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
   const groupSearchTimeoutRef = React.useRef(null);
 
-  // Assessment Components state
-  const [assessmentComponents, setAssessmentComponents] = useState({
-    systemAssessment: true,
-    employeeSelfAssessment: true,
-    managerAssessment: true
-  });
 
   // Fetch assessment cycles setting
   const { data: cyclesData, isLoading: cyclesLoading } = useQuery({
@@ -275,21 +276,6 @@ const Settings = () => {
     };
   }, [groupSearchQuery, exceptionForm.groupType, groupFilters]);
 
-  // Fetch assessment components setting
-  const { data: componentsData, isLoading: componentsLoading } = useQuery({
-    queryKey: ['settings', 'assessment_components'],
-    queryFn: async () => {
-      try {
-        const response = await api.get('/settings/assessment_components');
-        return response.data;
-      } catch (error) {
-        if (error.response?.status === 404) {
-          return null; // Setting doesn't exist yet
-        }
-        throw error;
-      }
-    }
-  });
 
   // Update form when data loads
   useEffect(() => {
@@ -304,11 +290,6 @@ const Settings = () => {
     }
   }, [exceptionsData]);
 
-  useEffect(() => {
-    if (componentsData?.parsedValue) {
-      setAssessmentComponents(componentsData.parsedValue);
-    }
-  }, [componentsData]);
 
   // Save cycles mutation
   const saveCyclesMutation = useMutation({
@@ -336,7 +317,13 @@ const Settings = () => {
         endDate: '',
         activationStartDate: '',
         activationEndDate: '',
-        isActive: false
+        isActive: false,
+        components: {
+          systemAssessment: true,
+          employeeSelfAssessment: true,
+          assessorAssessment: true,
+          managerAssessment: true
+        }
       });
     },
     onError: (error) => {
@@ -385,39 +372,23 @@ const Settings = () => {
     }
   });
 
-  // Save assessment components mutation
-  const saveComponentsMutation = useMutation({
-    mutationFn: async (data) => {
-      const response = await api.put('/settings/assessment_components', {
-        value: data,
-        description: 'Assessment Components configuration - enable/disable System, Employee Self, and Manager assessments',
-        category: 'assessment',
-        updatedBy: currentSid
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['settings', 'assessment_components']);
-      toast({
-        title: 'Success',
-        description: 'Assessment Components settings saved successfully!',
-        variant: 'default'
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to save settings',
-        variant: 'destructive'
-      });
-    }
-  });
 
   // Cycle form handlers
   const handleCycleFormChange = (field, value) => {
     setCycleForm(prev => ({
       ...prev,
       [field]: value
+    }));
+  };
+
+  // Handle component toggle in cycle form
+  const handleCycleComponentToggle = (componentName) => {
+    setCycleForm(prev => ({
+      ...prev,
+      components: {
+        ...prev.components,
+        [componentName]: !prev.components[componentName]
+      }
     }));
   };
 
@@ -429,14 +400,32 @@ const Settings = () => {
       endDate: '',
       activationStartDate: '',
       activationEndDate: '',
-      isActive: false
+      isActive: false,
+      components: {
+        systemAssessment: true,
+        employeeSelfAssessment: true,
+        assessorAssessment: true,
+        managerAssessment: true
+      }
     });
     setShowCycleForm(true);
   };
 
   const handleEditCycle = (cycle, index) => {
     setEditingCycle(index);
-    setCycleForm({ ...cycle });
+    setCycleForm({
+      name: cycle.name || '',
+      startDate: cycle.startDate || '',
+      endDate: cycle.endDate || '',
+      activationStartDate: cycle.activationStartDate || '',
+      activationEndDate: cycle.activationEndDate || '',
+      isActive: cycle.isActive || false,
+      components: cycle.components || {
+        systemAssessment: true,
+        employeeSelfAssessment: true,
+        managerAssessment: true
+      }
+    });
     setShowCycleForm(true);
   };
 
@@ -485,6 +474,17 @@ const Settings = () => {
         });
         return;
       }
+    }
+
+    // Validate that at least one component is enabled
+    const enabledComponents = Object.values(cycleForm.components || {}).filter(Boolean);
+    if (enabledComponents.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'At least one assessment component must be enabled',
+        variant: 'destructive'
+      });
+      return;
     }
 
     let updatedCycles;
@@ -681,28 +681,8 @@ const Settings = () => {
     }
   };
 
-  const handleComponentToggle = (component) => {
-    setAssessmentComponents(prev => ({
-      ...prev,
-      [component]: !prev[component]
-    }));
-  };
 
-  const handleSaveComponents = () => {
-    const enabledCount = Object.values(assessmentComponents).filter(Boolean).length;
-    if (enabledCount === 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'At least one assessment component must be enabled',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    saveComponentsMutation.mutate(assessmentComponents);
-  };
-
-  const isLoading = cyclesLoading || exceptionsLoading || componentsLoading;
+  const isLoading = cyclesLoading || exceptionsLoading;
 
   if (isLoading) {
     return (
@@ -798,7 +778,7 @@ const Settings = () => {
                                 </span>
                               )}
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-3">
                               <div>
                                 <span className="font-medium">Cycle Period:</span>{' '}
                                 {cycle.startDate} to {cycle.endDate}
@@ -810,6 +790,43 @@ const Settings = () => {
                                 </div>
                               )}
                             </div>
+                            {cycle.components && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <div className="text-xs font-medium text-gray-700 mb-2">Enabled Components:</div>
+                                <div className="flex flex-wrap gap-2">
+                                  {cycle.components.systemAssessment && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                                      <Target className="h-3 w-3 mr-1" />
+                                      System
+                                    </span>
+                                  )}
+                                  {cycle.components.employeeSelfAssessment && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
+                                      <User className="h-3 w-3 mr-1" />
+                                      Self
+                                    </span>
+                                  )}
+                                  {cycle.components.assessorAssessment && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-indigo-100 text-indigo-800">
+                                      <ClipboardCheck className="h-3 w-3 mr-1" />
+                                      Assessor
+                                    </span>
+                                  )}
+                                  {cycle.components.managerAssessment && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-800">
+                                      <UserCheck className="h-3 w-3 mr-1" />
+                                      Manager
+                                    </span>
+                                  )}
+                                  {(!cycle.components.systemAssessment && 
+                                    !cycle.components.employeeSelfAssessment && 
+                                    !cycle.components.assessorAssessment &&
+                                    !cycle.components.managerAssessment) && (
+                                    <span className="text-xs text-amber-600">No components enabled</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                           <div className="flex space-x-2">
                             <Button
@@ -916,6 +933,134 @@ const Settings = () => {
                                 onChange={(e) => handleCycleFormChange('activationEndDate', e.target.value)}
                                 className="mt-1"
                               />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t pt-4">
+                          <div className="flex items-center mb-4">
+                            <Target className="h-4 w-4 mr-2 text-gray-500" />
+                            <Label className="text-base font-semibold">Assessment Components</Label>
+                          </div>
+                          <p className="text-sm text-gray-500 mb-4">
+                            Select which assessment components are enabled for this cycle
+                          </p>
+                          
+                          <div className="space-y-3">
+                            {/* System Assessment */}
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <div className="p-2 bg-blue-100 rounded-lg">
+                                  <Target className="h-5 w-5 text-blue-600" />
+                                </div>
+                                <div>
+                                  <Label className="text-sm font-semibold">System Assessment</Label>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Automated system-based competency assessment
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                aria-pressed={cycleForm.components?.systemAssessment}
+                                onClick={() => handleCycleComponentToggle('systemAssessment')}
+                                className={`relative w-11 h-6 rounded-full transition-colors ${
+                                  cycleForm.components?.systemAssessment ? 'bg-green-500' : 'bg-gray-300'
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                                    cycleForm.components?.systemAssessment ? 'translate-x-5' : ''
+                                  }`}
+                                />
+                              </button>
+                            </div>
+
+                            {/* Employee Self Assessment */}
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <div className="p-2 bg-purple-100 rounded-lg">
+                                  <User className="h-5 w-5 text-purple-600" />
+                                </div>
+                                <div>
+                                  <Label className="text-sm font-semibold">Employee Self Assessment</Label>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Employees assess their own competencies
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                aria-pressed={cycleForm.components?.employeeSelfAssessment}
+                                onClick={() => handleCycleComponentToggle('employeeSelfAssessment')}
+                                className={`relative w-11 h-6 rounded-full transition-colors ${
+                                  cycleForm.components?.employeeSelfAssessment ? 'bg-green-500' : 'bg-gray-300'
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                                    cycleForm.components?.employeeSelfAssessment ? 'translate-x-5' : ''
+                                  }`}
+                                />
+                              </button>
+                            </div>
+
+                            {/* Assessor Assessment */}
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <div className="p-2 bg-indigo-100 rounded-lg">
+                                  <ClipboardCheck className="h-5 w-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                  <Label className="text-sm font-semibold">Assessor Assessment</Label>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Assessors evaluate employee competencies
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                aria-pressed={cycleForm.components?.assessorAssessment}
+                                onClick={() => handleCycleComponentToggle('assessorAssessment')}
+                                className={`relative w-11 h-6 rounded-full transition-colors ${
+                                  cycleForm.components?.assessorAssessment ? 'bg-green-500' : 'bg-gray-300'
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                                    cycleForm.components?.assessorAssessment ? 'translate-x-5' : ''
+                                  }`}
+                                />
+                              </button>
+                            </div>
+
+                            {/* Manager Assessment */}
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <div className="p-2 bg-orange-100 rounded-lg">
+                                  <UserCheck className="h-5 w-5 text-orange-600" />
+                                </div>
+                                <div>
+                                  <Label className="text-sm font-semibold">Manager Assessment</Label>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Managers assess their team members' competencies
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                aria-pressed={cycleForm.components?.managerAssessment}
+                                onClick={() => handleCycleComponentToggle('managerAssessment')}
+                                className={`relative w-11 h-6 rounded-full transition-colors ${
+                                  cycleForm.components?.managerAssessment ? 'bg-green-500' : 'bg-gray-300'
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
+                                    cycleForm.components?.managerAssessment ? 'translate-x-5' : ''
+                                  }`}
+                                />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1379,161 +1524,6 @@ const Settings = () => {
         </Card>
         )}
 
-        {/* Assessment Components Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="h-5 w-5 mr-2 text-blue-600" />
-              Assessment Components
-            </CardTitle>
-            <CardDescription>
-              Enable or disable assessment components. At least one component must be enabled.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* System Assessment */}
-            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <Target className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <Label className="text-base font-semibold">System Assessment</Label>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Automated system-based competency assessments
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                aria-pressed={assessmentComponents.systemAssessment}
-                onClick={() => handleComponentToggle('systemAssessment')}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  assessmentComponents.systemAssessment ? 'bg-green-500' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                    assessmentComponents.systemAssessment ? 'translate-x-6' : ''
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Employee Self Assessment */}
-            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-purple-100 rounded-lg">
-                  <User className="h-6 w-6 text-purple-600" />
-                </div>
-                <div>
-                  <Label className="text-base font-semibold">Employee Self Assessment</Label>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Employees assess their own competencies
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                aria-pressed={assessmentComponents.employeeSelfAssessment}
-                onClick={() => handleComponentToggle('employeeSelfAssessment')}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  assessmentComponents.employeeSelfAssessment ? 'bg-green-500' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                    assessmentComponents.employeeSelfAssessment ? 'translate-x-6' : ''
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Manager Assessment */}
-            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-orange-100 rounded-lg">
-                  <UserCheck className="h-6 w-6 text-orange-600" />
-                </div>
-                <div>
-                  <Label className="text-base font-semibold">Manager Assessment</Label>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Managers assess their team members' competencies
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                aria-pressed={assessmentComponents.managerAssessment}
-                onClick={() => handleComponentToggle('managerAssessment')}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  assessmentComponents.managerAssessment ? 'bg-green-500' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                    assessmentComponents.managerAssessment ? 'translate-x-6' : ''
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Status Summary */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <div className="flex items-center space-x-2 mb-2">
-                <Info className="h-4 w-4 text-gray-500" />
-                <Label className="text-sm font-medium text-gray-700">Current Configuration</Label>
-              </div>
-              <div className="space-y-1 text-sm text-gray-600">
-                {assessmentComponents.systemAssessment && (
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span>System Assessment is enabled</span>
-                  </div>
-                )}
-                {assessmentComponents.employeeSelfAssessment && (
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span>Employee Self Assessment is enabled</span>
-                  </div>
-                )}
-                {assessmentComponents.managerAssessment && (
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span>Manager Assessment is enabled</span>
-                  </div>
-                )}
-                {Object.values(assessmentComponents).filter(Boolean).length === 0 && (
-                  <div className="flex items-center space-x-2 text-amber-600">
-                    <AlertCircle className="h-4 w-4" />
-                    <span>No components enabled. At least one must be enabled.</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Save Button */}
-            <div className="flex justify-end pt-4 border-t">
-              <Button
-                onClick={handleSaveComponents}
-                disabled={saveComponentsMutation.isLoading}
-                className="loyverse-button-primary"
-              >
-                {saveComponentsMutation.isLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Assessment Components
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

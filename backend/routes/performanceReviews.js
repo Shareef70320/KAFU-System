@@ -4,6 +4,18 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const router = express.Router();
 
+const logReviewHistory = async ({ reviewRequestId, status, actorSid = null, actorRole = null, notes = null }) => {
+  if (!reviewRequestId || !status) return;
+  try {
+    await prisma.$queryRaw`
+      INSERT INTO review_request_history (review_request_id, status, actor_sid, actor_role, notes)
+      VALUES (${reviewRequestId}, ${status}::review_status, ${actorSid || null}, ${actorRole || null}, ${notes || null})
+    `;
+  } catch (error) {
+    console.error('Failed to log review history:', error);
+  }
+};
+
 // Get available assessors for a competency and required level
 router.get('/assessors', async (req, res) => {
   try {
@@ -33,7 +45,6 @@ router.get('/assessors', async (req, res) => {
         ac.assessor_sid,
         ac.competency_id,
         ac.competency_level,
-        ac.is_active,
         e.first_name,
         e.last_name,
         e.email,
@@ -41,7 +52,6 @@ router.get('/assessors', async (req, res) => {
       FROM assessor_competencies ac
       JOIN employees e ON ac.assessor_sid = e.sid
       WHERE ac.competency_id = ${competencyId}
-        AND ac.is_active = true
         AND (
           ac.competency_level = 'BASIC' AND ${requiredLevelValue} <= 1 OR
           ac.competency_level = 'INTERMEDIATE' AND ${requiredLevelValue} <= 2 OR
@@ -87,11 +97,13 @@ router.get('/requests', async (req, res) => {
       employeeId = '', 
       assessorId = '', 
       status = '',
-      competencyId = ''
+      competencyId = '',
+      includeHistory = 'false'
     } = req.query;
     
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
+    const shouldIncludeHistory = String(includeHistory).toLowerCase() === 'true';
 
     // Build where clause with proper parameterization
     let whereClause = '';
@@ -131,6 +143,7 @@ router.get('/requests', async (req, res) => {
           rr.review_type,
           rr.requested_date,
           rr.scheduled_date,
+          rr.scheduled_location,
           rr.completed_date,
           rr.notes,
           rr.created_at,
@@ -160,8 +173,52 @@ router.get('/requests', async (req, res) => {
       `, ...params)
     ]);
 
+    let historyByRequest = {};
+    if (shouldIncludeHistory && requests.length > 0) {
+      const requestIds = requests.map(r => r.id);
+      const historyRows = await prisma.$queryRawUnsafe(`
+        SELECT 
+          h.review_request_id,
+          h.status,
+          h.actor_sid,
+          h.actor_role,
+          h.notes,
+          h.created_at,
+          emp.first_name AS actor_first_name,
+          emp.last_name AS actor_last_name
+        FROM review_request_history h
+        LEFT JOIN employees emp ON h.actor_sid = emp.sid
+        WHERE h.review_request_id = ANY($1::text[])
+        ORDER BY h.created_at ASC
+      `, requestIds);
+      
+      historyByRequest = historyRows.reduce((acc, entry) => {
+        const normalized = {
+          status: entry.status,
+          actorSid: entry.actor_sid,
+          actorRole: entry.actor_role,
+          notes: entry.notes,
+          createdAt: entry.created_at,
+          actorFirstName: entry.actor_first_name,
+          actorLastName: entry.actor_last_name
+        };
+        if (!acc[entry.review_request_id]) {
+          acc[entry.review_request_id] = [];
+        }
+        acc[entry.review_request_id].push(normalized);
+        return acc;
+      }, {});
+    }
+
+    const enrichedRequests = shouldIncludeHistory
+      ? requests.map(request => ({
+          ...request,
+          history: historyByRequest[request.id] || []
+        }))
+      : requests;
+
     res.json({
-      requests,
+      requests: enrichedRequests,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -178,7 +235,7 @@ router.get('/requests', async (req, res) => {
 // Create review request
 router.post('/requests', async (req, res) => {
   try {
-    const { employeeId, competencyId, requestedLevel, notes } = req.body;
+    const { employeeId, competencyId, requestedLevel, notes, assessorId } = req.body;
 
     // Validate required fields
     if (!employeeId || !competencyId || !requestedLevel) {
@@ -214,7 +271,7 @@ router.post('/requests', async (req, res) => {
       SELECT id FROM review_requests 
       WHERE employee_id = ${employeeId} 
         AND competency_id = ${competencyId} 
-        AND status IN ('REQUESTED', 'SCHEDULED', 'IN_PROGRESS')
+        AND status IN ('REQUESTED', 'SCHEDULED', 'ACCEPTED', 'IN_PROGRESS')
       LIMIT 1
     `;
 
@@ -222,18 +279,69 @@ router.post('/requests', async (req, res) => {
       return res.status(400).json({ message: 'A pending review request already exists for this competency' });
     }
 
+    // If assessorId is provided, validate it
+    if (assessorId) {
+      const assessorCheck = await prisma.$queryRaw`
+        SELECT id FROM assessor_competencies 
+        WHERE assessor_sid = ${assessorId} 
+          AND competency_id = ${competencyId}
+        LIMIT 1
+      `;
+      
+      if (!assessorCheck || assessorCheck.length === 0) {
+        return res.status(400).json({ message: 'Selected assessor is not qualified for this competency' });
+      }
+    }
+
     // Create review request
-    const newRequest = await prisma.$queryRaw`
-      INSERT INTO review_requests (
-        employee_id, competency_id, requested_level, status, review_type, 
-        requested_date, notes, created_at, updated_at
-      )
-      VALUES (
-        ${employeeId}, ${competencyId}, ${requestedLevel}, 'REQUESTED', 'COMPETENCY_REVIEW',
-        NOW(), ${notes || null}, NOW(), NOW()
-      )
-      RETURNING *
-    `;
+    const status = assessorId ? 'SCHEDULED' : 'REQUESTED';
+    let newRequest;
+    if (assessorId) {
+      // If assessor is assigned, set scheduled_date
+      newRequest = await prisma.$queryRaw`
+        INSERT INTO review_requests (
+          employee_id, competency_id, requested_level, status, review_type, 
+          requested_date, notes, assessor_id, scheduled_date, created_at, updated_at
+        )
+        VALUES (
+          ${employeeId}, ${competencyId}, ${requestedLevel}, ${status}::review_status, 'COMPETENCY_REVIEW',
+          NOW(), ${notes || null}, ${assessorId}, NOW(), NOW(), NOW()
+        )
+        RETURNING *
+      `;
+    } else {
+      // If no assessor, scheduled_date is NULL
+      newRequest = await prisma.$queryRaw`
+        INSERT INTO review_requests (
+          employee_id, competency_id, requested_level, status, review_type, 
+          requested_date, notes, assessor_id, scheduled_date, created_at, updated_at
+        )
+        VALUES (
+          ${employeeId}, ${competencyId}, ${requestedLevel}, ${status}::review_status, 'COMPETENCY_REVIEW',
+          NOW(), ${notes || null}, NULL, NULL, NOW(), NOW()
+        )
+        RETURNING *
+      `;
+    }
+
+    // Always log initial request from employee
+    await logReviewHistory({
+      reviewRequestId: newRequest[0].id,
+      status: 'REQUESTED',
+      actorSid: employeeId,
+      actorRole: 'EMPLOYEE',
+      notes: notes || null
+    });
+
+    if (assessorId) {
+      await logReviewHistory({
+        reviewRequestId: newRequest[0].id,
+        status: 'SCHEDULED',
+        actorSid: assessorId,
+        actorRole: 'ASSESSOR',
+        notes: 'Assessor accepted review booking'
+      });
+    }
 
     res.status(201).json({
       message: 'Review request created successfully',
@@ -290,7 +398,6 @@ router.put('/requests/:id/assign', async (req, res) => {
       SELECT competency_level FROM assessor_competencies 
       WHERE assessor_sid = ${assessorId} 
         AND competency_id = ${request[0].competency_id}
-        AND is_active = true
         AND (
           competency_level = 'BASIC' AND ${requestedLevelValue} <= 1 OR
           competency_level = 'INTERMEDIATE' AND ${requestedLevelValue} <= 2 OR
@@ -315,12 +422,119 @@ router.put('/requests/:id/assign', async (req, res) => {
       RETURNING *
     `, assessorId, scheduledDate || null, id);
 
+    if (updatedRequest && updatedRequest[0]) {
+      await logReviewHistory({
+        reviewRequestId: updatedRequest[0].id,
+        status: 'SCHEDULED',
+        actorSid: assessorId,
+        actorRole: 'ASSESSOR',
+        notes: scheduledDate ? `Scheduled for ${scheduledDate}` : 'Assessor accepted review booking'
+      });
+    }
+
     res.json({
       message: 'Assessor assigned successfully',
       request: updatedRequest[0]
     });
   } catch (error) {
     console.error('Error assigning assessor:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Assessor accepts review request (adds location, optional date)
+router.post('/requests/:id/accept', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assessorId, scheduledDate, location, notes } = req.body;
+    
+    if (!assessorId) {
+      return res.status(400).json({ message: 'assessorId is required' });
+    }
+    
+    const request = await prisma.$queryRaw`
+      SELECT * FROM review_requests WHERE id = ${id} LIMIT 1
+    `;
+    
+    if (!request || request.length === 0) {
+      return res.status(404).json({ message: 'Review request not found' });
+    }
+    
+    if (request[0].assessor_id !== assessorId) {
+      return res.status(403).json({ message: 'Assessor mismatch for this review request' });
+    }
+    
+    const updatedRequest = await prisma.$queryRawUnsafe(`
+      UPDATE review_requests
+      SET status = 'ACCEPTED'::review_status,
+          scheduled_date = COALESCE($1::timestamp, scheduled_date),
+          scheduled_location = $2,
+          updated_at = NOW()
+      WHERE id = $3
+      RETURNING *
+    `, scheduledDate || request[0].scheduled_date || null, location || null, id);
+    
+    await logReviewHistory({
+      reviewRequestId: id,
+      status: 'ACCEPTED',
+      actorSid: assessorId,
+      actorRole: 'ASSESSOR',
+      notes: notes || (location ? `Location: ${location}` : null)
+    });
+    
+    res.json({
+      message: 'Review accepted successfully',
+      request: updatedRequest[0]
+    });
+  } catch (error) {
+    console.error('Error accepting review request:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Assessor rejects review request
+router.post('/requests/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assessorId, reason } = req.body;
+    
+    if (!assessorId) {
+      return res.status(400).json({ message: 'assessorId is required' });
+    }
+    
+    const request = await prisma.$queryRaw`
+      SELECT * FROM review_requests WHERE id = ${id} LIMIT 1
+    `;
+    
+    if (!request || request.length === 0) {
+      return res.status(404).json({ message: 'Review request not found' });
+    }
+    
+    if (request[0].assessor_id !== assessorId) {
+      return res.status(403).json({ message: 'Assessor mismatch for this review request' });
+    }
+    
+    const updatedRequest = await prisma.$queryRaw`
+      UPDATE review_requests
+      SET status = 'REJECTED', updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `;
+    
+    await logReviewHistory({
+      reviewRequestId: id,
+      status: 'REJECTED',
+      actorSid: assessorId,
+      actorRole: 'ASSESSOR',
+      notes: reason || 'Assessor rejected the request'
+    });
+    
+    res.json({
+      message: 'Review request rejected successfully',
+      request: updatedRequest[0]
+    });
+  } catch (error) {
+    console.error('Error rejecting review request:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -333,13 +547,21 @@ router.put('/requests/:id/start', async (req, res) => {
     const updatedRequest = await prisma.$queryRaw`
       UPDATE review_requests 
       SET status = 'IN_PROGRESS', updated_at = NOW()
-      WHERE id = ${id} AND status = 'SCHEDULED'
+      WHERE id = ${id} AND status IN ('SCHEDULED', 'ACCEPTED')
       RETURNING *
     `;
 
     if (!updatedRequest || updatedRequest.length === 0) {
-      return res.status(404).json({ message: 'Review request not found or not in scheduled status' });
+      return res.status(404).json({ message: 'Review request not found or not ready to start' });
     }
+
+    await logReviewHistory({
+      reviewRequestId: updatedRequest[0].id,
+      status: 'IN_PROGRESS',
+      actorSid: updatedRequest[0].assessor_id,
+      actorRole: 'ASSESSOR',
+      notes: 'Review started'
+    });
 
     res.json({
       message: 'Review started successfully',
@@ -452,6 +674,14 @@ router.post('/requests/:id/complete', async (req, res) => {
       SET status = 'COMPLETED', completed_date = NOW(), updated_at = NOW()
       WHERE id = ${id}
     `;
+
+    await logReviewHistory({
+      reviewRequestId: id,
+      status: 'COMPLETED',
+      actorSid: request[0].assessor_id,
+      actorRole: 'ASSESSOR',
+      notes: 'Review completed'
+    });
 
     res.status(201).json({
       message: 'Review completed successfully',

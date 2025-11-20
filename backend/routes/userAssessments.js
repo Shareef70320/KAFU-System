@@ -613,34 +613,78 @@ router.post('/submit', async (req, res) => {
   }
 });
 
-// Confirm user level for a session
+// Confirm user level for a session or competency (for self-assessment without system assessment)
 router.post('/confirm-level', async (req, res) => {
   try {
-    const { sessionId, userConfirmedLevel } = req.body;
-    if (!sessionId || !userConfirmedLevel) {
-      return res.status(400).json({ success: false, error: 'sessionId and userConfirmedLevel are required' });
+    const { sessionId, competencyId, userId, userConfirmedLevel } = req.body;
+    
+    if (!userConfirmedLevel) {
+      return res.status(400).json({ success: false, error: 'userConfirmedLevel is required' });
     }
-    console.log('Confirm level request:', { sessionId, userConfirmedLevel });
+    
+    // Either sessionId OR (competencyId AND userId) must be provided
+    if (!sessionId && (!competencyId || !userId)) {
+      return res.status(400).json({ success: false, error: 'Either sessionId or (competencyId and userId) are required' });
+    }
+    
+    console.log('Confirm level request:', { sessionId, competencyId, userId, userConfirmedLevel });
 
-    // Fetch session to derive user and competency
-    const sessionRows = await prisma.$queryRaw`
-      SELECT user_id, competency_id FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
-    `;
-    if (!sessionRows || sessionRows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Assessment session not found' });
+    let finalUserId, finalCompetencyId;
+
+    if (sessionId) {
+      // Fetch session to derive user and competency
+      const sessionRows = await prisma.$queryRaw`
+        SELECT user_id, competency_id FROM assessment_sessions WHERE id = ${sessionId} LIMIT 1
+      `;
+      if (!sessionRows || sessionRows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Assessment session not found' });
+      }
+      finalUserId = sessionRows[0].user_id;
+      finalCompetencyId = sessionRows[0].competency_id;
+    } else {
+      finalUserId = userId;
+      finalCompetencyId = competencyId;
     }
-    const userId = sessionRows[0].user_id;
-    const competencyId = sessionRows[0].competency_id;
+
     // Ensure columns exist
     await ensureLevelColumns();
 
     try {
-      // Persist the user's chosen level across all sessions for this competency
-      await prisma.$queryRaw`
-        UPDATE assessment_sessions
-        SET user_confirmed_level = ${userConfirmedLevel}, updated_at = NOW()
-        WHERE user_id = ${userId} AND competency_id = ${competencyId}
-      `;
+      if (sessionId) {
+        // Persist the user's chosen level across all sessions for this competency
+        await prisma.$queryRaw`
+          UPDATE assessment_sessions
+          SET user_confirmed_level = ${userConfirmedLevel}, updated_at = NOW()
+          WHERE user_id = ${finalUserId} AND competency_id = ${finalCompetencyId}
+        `;
+      } else {
+        // For self-assessment without system assessment, create a placeholder session or update existing ones
+        // First, check if there are any existing sessions
+        const existingSessions = await prisma.$queryRaw`
+          SELECT id FROM assessment_sessions 
+          WHERE user_id = ${finalUserId} AND competency_id = ${finalCompetencyId}
+          LIMIT 1
+        `;
+        
+        if (existingSessions && existingSessions.length > 0) {
+          // Update existing sessions
+          await prisma.$queryRaw`
+            UPDATE assessment_sessions
+            SET user_confirmed_level = ${userConfirmedLevel}, updated_at = NOW()
+            WHERE user_id = ${finalUserId} AND competency_id = ${finalCompetencyId}
+          `;
+        } else {
+          // Create a placeholder session for self-assessment only
+          await prisma.$queryRaw`
+            INSERT INTO assessment_sessions (
+              id, user_id, competency_id, status, user_confirmed_level, created_at, updated_at
+            ) VALUES (
+              gen_random_uuid()::text, ${finalUserId}, ${finalCompetencyId}, 'COMPLETED', 
+              ${userConfirmedLevel}, NOW(), NOW()
+            )
+          `;
+        }
+      }
     } catch (e) {
       console.error('Failed to update user_confirmed_level:', e);
       return res.status(500).json({ success: false, error: `Failed to save level: ${e.message || e}` });
@@ -700,31 +744,35 @@ router.post('/manager/confirm-level', async (req, res) => {
 router.post('/manager/confirm-level-by-competency', async (req, res) => {
   try {
     const { userId, competencyId, managerSelectedLevel } = req.body;
+    console.log('Manager confirm-level-by-competency request:', { userId, competencyId, managerSelectedLevel });
+    
     if (!userId || !competencyId || !managerSelectedLevel) {
       return res.status(400).json({ success: false, error: 'userId, competencyId and managerSelectedLevel are required' });
     }
 
     await ensureLevelColumns();
 
-    // Gate: at least one COMPLETED session with user_confirmed_level for this user+competency
+    // Gate: at least one session with user_confirmed_level for this user+competency
+    // Allow COMPLETED sessions OR sessions with user_confirmed_level (for self-assessment only cases)
     const ok = await prisma.$queryRaw`
       SELECT 1 FROM assessment_sessions
       WHERE user_id = ${userId}
         AND competency_id = ${competencyId}
-        AND status = 'COMPLETED'
         AND user_confirmed_level IS NOT NULL
       LIMIT 1
     `;
     if (!ok || ok.length === 0) {
-      return res.status(400).json({ success: false, error: 'Manager can select level only after employee completes assessment and selects their level for this competency' });
+      console.log('No session found with user_confirmed_level for user:', userId, 'competency:', competencyId);
+      return res.status(400).json({ success: false, error: 'Manager can select level only after employee selects their level for this competency. Please ensure the employee has completed their self-assessment.' });
     }
 
     try {
-      await prisma.$queryRaw`
+      const updateResult = await prisma.$queryRaw`
         UPDATE assessment_sessions
         SET manager_selected_level = ${managerSelectedLevel}, updated_at = NOW()
         WHERE user_id = ${userId} AND competency_id = ${competencyId}
       `;
+      console.log('Manager level updated successfully:', updateResult);
     } catch (e) {
       console.error('Failed to bulk update manager_selected_level:', e);
       return res.status(500).json({ success: false, error: `Failed to save manager level: ${e.message || e}` });
@@ -754,12 +802,15 @@ router.get('/history/:userId', async (req, res) => {
         "as".started_at,
         "as".completed_at,
         "as".status,
+        "as".system_level,
         COALESCE("as".manager_selected_level, NULL) AS manager_selected_level,
         COALESCE("as".user_confirmed_level, NULL) AS user_confirmed_level
       FROM assessment_sessions "as"
       JOIN competencies c ON "as".competency_id = c.id
       WHERE "as".user_id = ${userId}
-      ORDER BY "as".completed_at DESC
+      ORDER BY 
+        CASE WHEN "as".completed_at IS NOT NULL THEN "as".completed_at ELSE "as".updated_at END DESC,
+        "as".updated_at DESC
     `;
 
     res.json({
@@ -775,6 +826,7 @@ router.get('/history/:userId', async (req, res) => {
         startedAt: assessment.started_at,
         completedAt: assessment.completed_at,
         status: assessment.status,
+        systemLevel: assessment.system_level,
         managerSelectedLevel: assessment.manager_selected_level,
         userConfirmedLevel: assessment.user_confirmed_level
       }))
@@ -803,13 +855,16 @@ router.get('/latest-result/:userId/:competencyId', async (req, res) => {
         "as".completed_at,
         "as".status,
         "as".system_level,
-        "as".user_confirmed_level
+        "as".user_confirmed_level,
+        "as".manager_selected_level
       FROM assessment_sessions "as"
       JOIN competencies c ON "as".competency_id = c.id
       WHERE "as".user_id = ${userId} 
         AND "as".competency_id = ${competencyId}
-        AND "as".status = 'COMPLETED'
-      ORDER BY "as".completed_at DESC
+        AND ("as".status = 'COMPLETED' OR "as".user_confirmed_level IS NOT NULL)
+      ORDER BY 
+        CASE WHEN "as".completed_at IS NOT NULL THEN "as".completed_at ELSE "as".updated_at END DESC,
+        "as".updated_at DESC
       LIMIT 1
     `;
 

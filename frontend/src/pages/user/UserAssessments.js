@@ -20,7 +20,8 @@ import {
   RotateCcw,
   X,
   Loader2,
-  Calendar
+  Calendar,
+  AlertCircle
 } from 'lucide-react';
 import { useToast } from '../../components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -37,7 +38,7 @@ const UserAssessments = () => {
   console.log('UserAssessments component - currentSid:', currentSid, 'currentUserId:', currentUserId);
   
   // State for assessment flow
-  const [currentStep, setCurrentStep] = useState('select'); // select, taking, results
+  const [currentStep, setCurrentStep] = useState('select'); // select, taking, confirmLevel, results
   const [selectedCompetency, setSelectedCompetency] = useState(null);
   // Templates no longer used; settings come from backend assessment
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -51,6 +52,7 @@ const UserAssessments = () => {
   const [showDashboardModal, setShowDashboardModal] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [userConfirmedLevel, setUserConfirmedLevel] = useState(null);
+  const [currentComponent, setCurrentComponent] = useState(null); // Track which component we're in
 
   // Fetch assessment result when assessment is completed
   useEffect(() => {
@@ -77,12 +79,13 @@ const UserAssessments = () => {
     }
   }, [currentStep]);
 
-  // Fetch assessment cycle status
+  // Fetch assessment cycle status (with user SID to check for exceptions)
   const { data: cycleStatus } = useQuery({
-    queryKey: ['assessment-cycle-status'],
+    queryKey: ['assessment-cycle-status', currentUserId],
     queryFn: async () => {
       try {
-        const response = await api.get('/settings/assessment-cycle/status');
+        // Pass userId as query parameter so backend can check for exceptions
+        const response = await api.get(`/settings/assessment-cycle/status${currentUserId ? `?userId=${currentUserId}` : ''}`);
         return response.data;
       } catch (error) {
         console.error('Error fetching cycle status:', error);
@@ -91,6 +94,7 @@ const UserAssessments = () => {
     },
     retry: 1,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!currentUserId, // Only fetch when we have a user ID
   });
 
   // Fetch available competencies
@@ -102,6 +106,17 @@ const UserAssessments = () => {
       console.log('Competencies response:', response.data);
       return response.data;
     }
+  });
+
+  // Fetch full competency details for the confirm level step
+  const { data: fullCompetencyDetails, isLoading: competencyDetailsLoading } = useQuery({
+    queryKey: ['competency-details', selectedCompetency?.id],
+    queryFn: async () => {
+      if (!selectedCompetency?.id) return null;
+      const response = await api.get(`/competencies/${selectedCompetency.id}`);
+      return response.data;
+    },
+    enabled: currentStep === 'confirmLevel' && !!selectedCompetency?.id,
   });
 
   // Get attempt information for each competency
@@ -170,7 +185,24 @@ const UserAssessments = () => {
       if (selectedCompetency?.id && data.result?.sessionId) {
         setLastSessionByCompetency(prev => ({ ...prev, [selectedCompetency.id]: data.result.sessionId }));
       }
-      setCurrentStep('results');
+      
+      // Check if Employee Self Assessment is active and we just completed System Assessment
+      const components = cycleStatus?.components || {
+        systemAssessment: true,
+        employeeSelfAssessment: true,
+        assessorAssessment: true,
+        managerAssessment: true
+      };
+      
+      if (currentComponent === 'systemAssessment' && components.employeeSelfAssessment) {
+        // Move to level confirmation step
+        setCurrentStep('confirmLevel');
+        setCurrentComponent('employeeSelfAssessment');
+      } else {
+        // No more components, show results
+        setCurrentStep('results');
+      }
+      
       toast({
         title: "Assessment Completed",
         description: `You scored ${data.result.percentageScore}%!`,
@@ -203,9 +235,77 @@ const UserAssessments = () => {
     return () => clearInterval(interval);
   }, [currentStep, timeRemaining]);
 
+  // Helper function to get next active component
+  const getNextActiveComponent = (currentComp = null) => {
+    const components = cycleStatus?.components || {
+      systemAssessment: true,
+      employeeSelfAssessment: true,
+      assessorAssessment: true,
+      managerAssessment: true
+    };
+    
+    const componentOrder = [
+      { key: 'systemAssessment', name: 'System Assessment' },
+      { key: 'employeeSelfAssessment', name: 'Employee Self Assessment' },
+      { key: 'assessorAssessment', name: 'Assessor Assessment' },
+      { key: 'managerAssessment', name: 'Manager Assessment' }
+    ];
+    
+    if (!currentComp) {
+      // Find first active component
+      for (const comp of componentOrder) {
+        if (components[comp.key]) {
+          return comp.key;
+        }
+      }
+      return null;
+    }
+    
+    // Find next active component after current
+    const currentIndex = componentOrder.findIndex(c => c.key === currentComp);
+    if (currentIndex === -1) return null;
+    
+    for (let i = currentIndex + 1; i < componentOrder.length; i++) {
+      if (components[componentOrder[i].key]) {
+        return componentOrder[i].key;
+      }
+    }
+    
+    return null; // No more active components
+  };
+
   const handleStartAssessment = (competency) => {
+    // Check if cycle is activated
+    const cycleActivated = cycleStatus?.canCreate !== false;
+    if (!cycleActivated) {
+      const cycleMessage = cycleStatus?.reason || cycleStatus?.statusMessage || 'Assessment period is currently closed.';
+      toast({
+        title: "Assessment Period Closed",
+        description: cycleMessage,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setSelectedCompetency(competency);
-    startAssessmentMutation.mutate(competency.id);
+    
+    // Check if System Assessment is active
+    const components = cycleStatus?.components || {
+      systemAssessment: true,
+      employeeSelfAssessment: true,
+      assessorAssessment: true,
+      managerAssessment: true
+    };
+    
+    if (components.systemAssessment) {
+      // Start System Assessment (quiz)
+      setCurrentComponent('systemAssessment');
+      startAssessmentMutation.mutate(competency.id);
+    } else {
+      // Skip to Employee Self Assessment (level confirmation)
+      setCurrentComponent('employeeSelfAssessment');
+      setCurrentStep('confirmLevel');
+    }
   };
 
   const handleAnswerChange = (questionId, answer) => {
@@ -245,7 +345,6 @@ const UserAssessments = () => {
   const handleViewDashboard = async (competency) => {
     console.log('handleViewDashboard called with:', competency);
     console.log('currentUserId:', currentUserId);
-    console.log('lastSessionByCompetency:', lastSessionByCompetency);
     
     // Open modal immediately with loading state
     setDashboardData({
@@ -255,17 +354,39 @@ const UserAssessments = () => {
     });
     setShowDashboardModal(true);
     try {
-      const sessionId = lastSessionByCompetency[competency.id];
-      console.log('sessionId for competency:', sessionId);
+      // Fetch all assessment history for this competency
+      const historyResponse = await api.get(`/user-assessments/history/${currentUserId}`);
+      const allAssessments = historyResponse.data.assessments || [];
       
-      const url = sessionId
-        ? `/user-assessments/session/${sessionId}`
-        : `/user-assessments/latest-result/${currentUserId}/${competency.id}`;
+      // Filter assessments for this specific competency
+      const competencyAssessments = allAssessments.filter(a => a.competencyId === competency.id);
       
-      console.log('Making API call to:', url);
-      const response = await api.get(url);
-      console.log('API response:', response.data);
-      setDashboardData({ ...response.data.assessment, loading: false });
+      // Get the latest assessment with the most complete data
+      const latestAssessment = competencyAssessments[0] || null;
+      
+      // Get unique levels from all assessments for this competency
+      const systemLevel = competencyAssessments.find(a => a.systemLevel)?.systemLevel || null;
+      const userConfirmedLevel = competencyAssessments.find(a => a.userConfirmedLevel)?.userConfirmedLevel || null;
+      const managerSelectedLevel = competencyAssessments.find(a => a.managerSelectedLevel)?.managerSelectedLevel || null;
+      
+      // Get latest score if available
+      const latestScore = latestAssessment?.percentageScore || null;
+      
+      setDashboardData({
+        competencyId: competency.id,
+        competencyName: competency.name,
+        percentageScore: latestScore,
+        correctAnswers: latestAssessment?.correctAnswers || null,
+        totalQuestions: latestAssessment?.totalQuestions || null,
+        systemLevel: systemLevel,
+        userConfirmedLevel: userConfirmedLevel,
+        managerSelectedLevel: managerSelectedLevel,
+        completedAt: latestAssessment?.completedAt || null,
+        score: latestAssessment?.score || null,
+        allAssessments: competencyAssessments, // All attempts for this competency
+        details: [],
+        loading: false,
+      });
     } catch (error) {
       console.error('Error in handleViewDashboard:', error);
       console.error('Error response:', error?.response);
@@ -280,8 +401,10 @@ const UserAssessments = () => {
           totalQuestions: null,
           systemLevel: null,
           userConfirmedLevel: null,
+          managerSelectedLevel: null,
           completedAt: null,
           score: null,
+          allAssessments: [],
           details: [],
           loading: false,
         });
@@ -329,10 +452,16 @@ const UserAssessments = () => {
     const attemptsUsed = attemptsData?.attemptsUsed || 0;
     const maxAttempts = attemptsData?.maxAttempts || 0;
     const hasManagerLevel = Boolean(competency.managerSelectedLevel);
+    
+    // Check if cycle is activated
+    const cycleActivated = cycleStatus?.canCreate !== false;
+    const cycleDisabled = !cycleActivated;
+    const cycleMessage = cycleStatus?.reason || cycleStatus?.statusMessage || 'Assessment period is currently closed.';
+    
     const attemptsInfo = hasManagerLevel
       ? ' (Finalized)'
       : (attemptsLoading ? '' : (attemptsLeft > 0 ? ` (${attemptsLeft} left)` : ' (No attempts left)'));
-    const disabled = hasManagerLevel || (!attemptsLoading && attemptsLeft === 0);
+    const disabled = hasManagerLevel || (!attemptsLoading && attemptsLeft === 0) || cycleDisabled;
     return (
       <Card key={competency.id} className="hover:shadow-lg transition-shadow">
         <CardHeader>
@@ -355,6 +484,17 @@ const UserAssessments = () => {
               <span>{(typeof tlm === 'number' && tlm > 0) ? tlm : '…'} Minutes</span>
             </div>
             <div className="space-y-2">
+              {cycleDisabled && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
+                  <div className="flex items-start space-x-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-xs text-amber-800">
+                      <div className="font-medium mb-1">Assessment Period Closed</div>
+                      <div className="text-amber-700">{cycleMessage}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <Button 
                 onClick={() => handleStartAssessment(competency)}
                 className="w-full"
@@ -367,7 +507,12 @@ const UserAssessments = () => {
                     Starting...
                   </>
                 ) : disabled ? (
-                  hasManagerLevel ? (
+                  cycleDisabled ? (
+                    <>
+                      <X className="mr-2 h-4 w-4" />
+                      Assessment Period Closed
+                    </>
+                  ) : hasManagerLevel ? (
                     <>
                       <X className="mr-2 h-4 w-4" />
                       Finalized by Manager
@@ -400,12 +545,22 @@ const UserAssessments = () => {
     );
   };
 
-  // Retake button which respects attempt limits for the selected competency
+  // Retake button which respects attempt limits and cycle status for the selected competency
   const RetakeButton = ({ competencyId, onRetake }) => {
     const { data: attemptsData, isLoading } = useAttempts(competencyId);
     const attemptsLeft = attemptsData?.attemptsLeft || 0;
-    const disabled = !competencyId || (!isLoading && attemptsLeft === 0);
-    const label = disabled ? 'No Attempts Left' : 'Take Another Assessment';
+    const cycleActivated = cycleStatus?.canCreate !== false;
+    const cycleDisabled = !cycleActivated;
+    const attemptsDisabled = !competencyId || (!isLoading && attemptsLeft === 0);
+    const disabled = attemptsDisabled || cycleDisabled;
+    
+    let label = 'Take Another Assessment';
+    if (cycleDisabled) {
+      label = 'Assessment Period Closed';
+    } else if (attemptsDisabled) {
+      label = 'No Attempts Left';
+    }
+    
     return (
       <Button
         onClick={onRetake}
@@ -413,7 +568,11 @@ const UserAssessments = () => {
         className="flex items-center gap-2"
         disabled={disabled}
       >
-        <RotateCcw className="h-4 w-4" />
+        {cycleDisabled ? (
+          <X className="h-4 w-4" />
+        ) : (
+          <RotateCcw className="h-4 w-4" />
+        )}
         {label}
       </Button>
     );
@@ -444,8 +603,13 @@ const UserAssessments = () => {
                 }`}>
                   {cycleStatus.statusMessage || 'No assessment cycle configured'}
                 </p>
-                {!cycleStatus.canCreate && cycleStatus.reason && (
-                  <p className="text-xs mt-2 text-amber-600">
+                {/* Show reason if cycle is not active OR if there's an exception (exception overrides cycle) */}
+                {cycleStatus.reason && (
+                  <p className={`text-xs mt-2 ${
+                    cycleStatus.canCreate && cycleStatus.hasException 
+                      ? 'text-green-600 font-medium' 
+                      : 'text-amber-600'
+                  }`}>
                     {cycleStatus.reason}
                   </p>
                 )}
@@ -519,12 +683,12 @@ const UserAssessments = () => {
                   {!dashboardData.loading && (
                     <>
                       {/* Score Display or Empty State */}
-                      {!dashboardData.percentageScore ? (
+                      {!dashboardData.percentageScore && !dashboardData.userConfirmedLevel && !dashboardData.managerSelectedLevel ? (
                         <div className="text-center py-6">
                           <div className="text-xl font-semibold text-gray-900">No completed assessment yet</div>
                           <p className="text-gray-600 mt-2">Take the {dashboardData.competencyName} assessment to view your dashboard here.</p>
                         </div>
-                      ) : (
+                      ) : dashboardData.percentageScore ? (
                         <div className="text-center">
                           <div className={`text-6xl font-bold ${getScoreColor(dashboardData.percentageScore)}`}>
                             {dashboardData.percentageScore}%
@@ -533,26 +697,92 @@ const UserAssessments = () => {
                             {dashboardData.correctAnswers} out of {dashboardData.totalQuestions} correct
                           </div>
                         </div>
-                      )}
+                      ) : null}
 
-                      {dashboardData.systemLevel && (
+                      {/* All Assessment Levels */}
+                      {(dashboardData.systemLevel || dashboardData.userConfirmedLevel || dashboardData.managerSelectedLevel) && (
                         <div className="text-center">
-                          <div className="text-lg font-medium text-gray-900 mb-2">Competency Level</div>
+                          <div className="text-lg font-medium text-gray-900 mb-3">Assessment Levels</div>
                           <div className="space-y-2">
-                            <div>
-                              <span className="text-sm text-gray-600">System Assessment: </span>
-                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.systemLevel)}`}>
-                                {dashboardData.systemLevel}
-                              </span>
-                            </div>
+                            {dashboardData.systemLevel && (
+                              <div>
+                                <span className="text-sm text-gray-600">System Assessment: </span>
+                                <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.systemLevel)}`}>
+                                  {dashboardData.systemLevel}
+                                </span>
+                              </div>
+                            )}
                             {dashboardData.userConfirmedLevel && (
                               <div>
-                                <span className="text-sm text-gray-600">Your Confirmation: </span>
+                                <span className="text-sm text-gray-600">Your Self Assessment: </span>
                                 <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.userConfirmedLevel)}`}>
                                   {dashboardData.userConfirmedLevel}
                                 </span>
                               </div>
                             )}
+                            {dashboardData.managerSelectedLevel && (
+                              <div>
+                                <span className="text-sm text-gray-600">Manager Assessment: </span>
+                                <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.managerSelectedLevel)}`}>
+                                  {dashboardData.managerSelectedLevel}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* All Assessment Attempts */}
+                      {dashboardData.allAssessments && dashboardData.allAssessments.length > 0 && (
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 mb-3">All Assessment Attempts</h3>
+                          <div className="space-y-3">
+                            {dashboardData.allAssessments.map((assessment, index) => (
+                              <div key={assessment.sessionId || index} className="bg-gray-50 p-4 rounded-lg border">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    Attempt #{dashboardData.allAssessments.length - index}
+                                  </div>
+                                  {assessment.completedAt && (
+                                    <div className="text-xs text-gray-500">
+                                      {new Date(assessment.completedAt).toLocaleDateString()}
+                                    </div>
+                                  )}
+                                </div>
+                                {assessment.percentageScore !== null && assessment.percentageScore !== undefined && (
+                                  <div className="flex items-center gap-4">
+                                    <div>
+                                      <span className="text-sm text-gray-600">Score: </span>
+                                      <span className={`text-lg font-bold ${getScoreColor(assessment.percentageScore)}`}>
+                                        {assessment.percentageScore}%
+                                      </span>
+                                    </div>
+                                    {assessment.correctAnswers !== null && assessment.totalQuestions !== null && (
+                                      <div className="text-sm text-gray-600">
+                                        ({assessment.correctAnswers}/{assessment.totalQuestions} correct)
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {assessment.systemLevel && (
+                                    <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.systemLevel)}`}>
+                                      System: {assessment.systemLevel}
+                                    </span>
+                                  )}
+                                  {assessment.userConfirmedLevel && (
+                                    <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.userConfirmedLevel)}`}>
+                                      Self: {assessment.userConfirmedLevel}
+                                    </span>
+                                  )}
+                                  {assessment.managerSelectedLevel && (
+                                    <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.managerSelectedLevel)}`}>
+                                      Manager: {assessment.managerSelectedLevel}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -620,8 +850,20 @@ const UserAssessments = () => {
                             setShowDashboardModal(false);
                             handleStartAssessment({ id: dashboardData.competencyId, name: dashboardData.competencyName });
                           }}
+                          disabled={!cycleStatus?.canCreate}
+                          variant={!cycleStatus?.canCreate ? "secondary" : "default"}
                         >
-                          Retake Assessment
+                          {!cycleStatus?.canCreate ? (
+                            <>
+                              <X className="mr-2 h-4 w-4" />
+                              Assessment Period Closed
+                            </>
+                          ) : (
+                            <>
+                              <RotateCcw className="mr-2 h-4 w-4" />
+                              Retake Assessment
+                            </>
+                          )}
                         </Button>
                       </div>
                     </>
@@ -790,7 +1032,256 @@ const UserAssessments = () => {
     );
   }
 
-  if (currentStep === 'results' && assessmentResult) {
+  // Confirm Level step (Employee Self Assessment)
+  if (currentStep === 'confirmLevel' && selectedCompetency) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="text-center">
+          <Target className="h-16 w-16 text-purple-600 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Confirm Your Level</h1>
+          <p className="text-gray-600">
+            Please review the competency details and select your current level
+          </p>
+        </div>
+
+        {competencyDetailsLoading ? (
+          <Card>
+            <CardContent className="py-12">
+              <div className="flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <span className="ml-3 text-gray-600">Loading competency details...</span>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Full Competency Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-blue-600" />
+                  {fullCompetencyDetails?.name || selectedCompetency.name}
+                </CardTitle>
+                {fullCompetencyDetails?.code && (
+                  <CardDescription>Code: {fullCompetencyDetails.code}</CardDescription>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Competency Type and Family */}
+                <div className="flex flex-wrap gap-3">
+                  {fullCompetencyDetails?.type && (
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                      fullCompetencyDetails.type === 'TECHNICAL' 
+                        ? 'bg-blue-100 text-blue-800' 
+                        : 'bg-purple-100 text-purple-800'
+                    }`}>
+                      {fullCompetencyDetails.type === 'TECHNICAL' ? 'Technical' : 'Non Technical'}
+                    </span>
+                  )}
+                  {fullCompetencyDetails?.family && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      {fullCompetencyDetails.family}
+                    </span>
+                  )}
+                </div>
+
+                {/* Definition */}
+                {fullCompetencyDetails?.definition && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-2">Definition</h3>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {fullCompetencyDetails.definition}
+                    </p>
+                  </div>
+                )}
+
+                {/* Description */}
+                {fullCompetencyDetails?.description && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-2">Description</h3>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {fullCompetencyDetails.description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Competency Levels with Descriptions */}
+                {fullCompetencyDetails?.levels && fullCompetencyDetails.levels.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Competency Levels</h3>
+                    <div className="space-y-3">
+                      {fullCompetencyDetails.levels.map((level, index) => (
+                        <div
+                          key={level.id || index}
+                          className={`p-4 rounded-lg border-2 ${
+                            level.level === 'BASIC' ? 'bg-blue-50 border-blue-200' :
+                            level.level === 'INTERMEDIATE' ? 'bg-yellow-50 border-yellow-200' :
+                            level.level === 'ADVANCED' ? 'bg-orange-50 border-orange-200' :
+                            'bg-purple-50 border-purple-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${getLevelColor(level.level)}`}>
+                              {level.level}
+                            </span>
+                            {level.title && (
+                              <span className="text-sm font-medium text-gray-900">{level.title}</span>
+                            )}
+                          </div>
+                          {level.description && (
+                            <p className="text-sm text-gray-700 mt-2 leading-relaxed whitespace-pre-wrap">
+                              {level.description}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Competency Elements */}
+                {fullCompetencyDetails?.elements && fullCompetencyDetails.elements.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Competency Elements</h3>
+                    <ul className="space-y-2">
+                      {fullCompetencyDetails.elements.map((element, index) => (
+                        <li key={element.id || index} className="flex items-start gap-2 text-sm text-gray-700">
+                          <span className="text-blue-600 mt-1">•</span>
+                          <div>
+                            <span className="font-medium">{element.name}</span>
+                            {element.description && (
+                              <span className="text-gray-600 ml-2">- {element.description}</span>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* System Assessment Result (if available) */}
+            {assessmentResult && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center text-lg">System Assessment Result</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className={`inline-flex px-4 py-2 rounded-full text-sm font-medium ${getLevelColor(assessmentResult.competencyLevel)}`}>
+                      {assessmentResult.competencyLevel}
+                    </div>
+                    {assessmentResult.percentageScore !== undefined && (
+                      <div className="text-xs text-gray-600 mt-2">
+                        Score: {assessmentResult.percentageScore}%
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Level Selection */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-center">Employee Self Assessment</CardTitle>
+                <CardDescription className="text-center">
+                  Based on the competency details above, select the level that best represents your current competency
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="text-sm font-medium text-gray-900 mb-3 text-center">Select Your Level</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {['BASIC','INTERMEDIATE','ADVANCED','MASTERY'].map(level => {
+                      const levelDetails = fullCompetencyDetails?.levels?.find(l => l.level === level);
+                      return (
+                        <button
+                          key={level}
+                          onClick={async () => {
+                            try {
+                              // For confirmLevel step, we might not have a sessionId yet
+                              let sessionId = assessmentResult?.sessionId || assessmentData?.sessionId;
+                              
+                              // If no sessionId (skipped System Assessment), create a self-assessment record
+                              if (!sessionId && selectedCompetency) {
+                                // Create a self-assessment without a system assessment session
+                                await api.post('/user-assessments/confirm-level', {
+                                  competencyId: selectedCompetency.id,
+                                  userId: currentUserId,
+                                  userConfirmedLevel: level
+                                });
+                              } else if (sessionId) {
+                                await api.post('/user-assessments/confirm-level', {
+                                  sessionId: sessionId,
+                                  userConfirmedLevel: level
+                                });
+                              } else {
+                                throw new Error('Missing session or competency information');
+                              }
+                              
+                              setUserConfirmedLevel(level);
+                              toast({ title: 'Level Confirmed', description: `You selected ${level}` });
+                              
+                              // Check for next active component
+                              const nextComponent = getNextActiveComponent(currentComponent);
+                              if (nextComponent && (nextComponent === 'assessorAssessment' || nextComponent === 'managerAssessment')) {
+                                // These are handled by managers/assessors, so we're done
+                                setCurrentStep('results');
+                                // Create a minimal assessmentResult for display
+                                if (!assessmentResult) {
+                                  setAssessmentResult({
+                                    competencyLevel: level,
+                                    percentageScore: null,
+                                    correctAnswers: null,
+                                    totalQuestions: null
+                                  });
+                                }
+                              } else {
+                                // No more components, show results
+                                setCurrentStep('results');
+                                if (!assessmentResult) {
+                                  setAssessmentResult({
+                                    competencyLevel: level,
+                                    percentageScore: null,
+                                    correctAnswers: null,
+                                    totalQuestions: null
+                                  });
+                                }
+                              }
+                              
+                              // Refresh competencies data to show updated level
+                              queryClient.invalidateQueries(['user-assessments-competencies']);
+                            } catch (e) {
+                              const msg = e?.response?.data?.error || e?.message || 'Failed to confirm level';
+                              console.error('Confirm level failed:', e);
+                              toast({ title: 'Error', description: msg, variant: 'destructive' });
+                            }
+                          }}
+                          className={`px-4 py-4 rounded-lg border-2 text-sm font-semibold transition-all duration-200 ${getLevelColor(level)} hover:opacity-90 hover:scale-105 active:scale-95 border-transparent hover:border-current flex flex-col items-center justify-center min-h-[80px]`}
+                        >
+                          <span>{level}</span>
+                          {levelDetails?.title && (
+                            <span className="text-xs font-normal mt-1 opacity-80">{levelDetails.title}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-600 text-center">
+                    This confirms your view of your current level. Your line manager may adjust this level later.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (currentStep === 'results' && (assessmentResult || userConfirmedLevel)) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="text-center">
@@ -806,24 +1297,28 @@ const UserAssessments = () => {
             <CardTitle className="text-center">Your Results</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Score Display */}
-            <div className="text-center">
-              <div className={`text-6xl font-bold ${getScoreColor(assessmentResult.percentageScore)}`}>
-                {assessmentResult.percentageScore}%
+            {/* Score Display - only show if we have System Assessment results */}
+            {assessmentResult && assessmentResult.percentageScore !== null && assessmentResult.percentageScore !== undefined && (
+              <div className="text-center">
+                <div className={`text-6xl font-bold ${getScoreColor(assessmentResult.percentageScore)}`}>
+                  {assessmentResult.percentageScore}%
+                </div>
+                <div className="text-gray-600 mt-2">
+                  {assessmentResult.correctAnswers} out of {assessmentResult.totalQuestions} correct
+                </div>
               </div>
-              <div className="text-gray-600 mt-2">
-                {assessmentResult.correctAnswers} out of {assessmentResult.totalQuestions} correct
-              </div>
-            </div>
+            )}
 
             {/* Competency Level + Confirmation */}
             <div className="space-y-3">
-              <div className="text-center">
-                <div className="text-lg font-medium text-gray-900 mb-2">Competency Level (Assessment Result)</div>
-                <span className={`inline-flex px-4 py-2 rounded-full text-sm font-medium ${getLevelColor(assessmentResult.competencyLevel)}`}>
-                  {assessmentResult.competencyLevel}
-                </span>
-              </div>
+              {assessmentResult && assessmentResult.competencyLevel && (
+                <div className="text-center">
+                  <div className="text-lg font-medium text-gray-900 mb-2">Competency Level (Assessment Result)</div>
+                  <span className={`inline-flex px-4 py-2 rounded-full text-sm font-medium ${getLevelColor(assessmentResult.competencyLevel)}`}>
+                    {assessmentResult.competencyLevel}
+                  </span>
+                </div>
+              )}
               <div className="bg-gray-50 p-4 rounded-lg">
                 {userConfirmedLevel ? (
                   <div className="text-center">
@@ -972,122 +1467,203 @@ const UserAssessments = () => {
                 {dashboardData.loading && (
                   <div className="text-center py-6 text-gray-600">Loading dashboard…</div>
                 )}
-                {/* Score Display or Empty State */}
-                {!dashboardData.percentageScore ? (
-                  <div className="text-center py-6">
-                    <div className="text-xl font-semibold text-gray-900">No completed assessment yet</div>
-                    <p className="text-gray-600 mt-2">Take the {dashboardData.competencyName} assessment to view your dashboard here.</p>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <div className={`text-6xl font-bold ${getScoreColor(dashboardData.percentageScore)}`}>
-                      {dashboardData.percentageScore}%
-                    </div>
-                    <div className="text-gray-600 mt-2">
-                      {dashboardData.correctAnswers} out of {dashboardData.totalQuestions} correct
-                    </div>
-                  </div>
-                )}
-
-                {/* Competency Level */}
-                {dashboardData.systemLevel && (
-                  <div className="text-center">
-                    <div className="text-lg font-medium text-gray-900 mb-2">Competency Level</div>
-                    <div className="space-y-2">
-                      <div>
-                        <span className="text-sm text-gray-600">System Assessment: </span>
-                        <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.systemLevel)}`}>
-                          {dashboardData.systemLevel}
-                        </span>
+                {!dashboardData.loading && (
+                  <>
+                    {/* Score Display or Empty State */}
+                    {!dashboardData.percentageScore && !dashboardData.userConfirmedLevel && !dashboardData.managerSelectedLevel ? (
+                      <div className="text-center py-6">
+                        <div className="text-xl font-semibold text-gray-900">No completed assessment yet</div>
+                        <p className="text-gray-600 mt-2">Take the {dashboardData.competencyName} assessment to view your dashboard here.</p>
                       </div>
-                      {dashboardData.userConfirmedLevel && (
-                        <div>
-                          <span className="text-sm text-gray-600">Your Confirmation: </span>
-                          <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.userConfirmedLevel)}`}>
-                            {dashboardData.userConfirmedLevel}
-                          </span>
+                    ) : dashboardData.percentageScore ? (
+                      <div className="text-center">
+                        <div className={`text-6xl font-bold ${getScoreColor(dashboardData.percentageScore)}`}>
+                          {dashboardData.percentageScore}%
                         </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Assessment Details */}
-                {dashboardData.completedAt && (
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-medium text-gray-900 mb-3">Assessment Details</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600">Completed:</span>
-                      <div className="font-medium">
-                        {new Date(dashboardData.completedAt).toLocaleDateString()}
+                        <div className="text-gray-600 mt-2">
+                          {dashboardData.correctAnswers} out of {dashboardData.totalQuestions} correct
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Score:</span>
-                      <div className="font-medium">{dashboardData.score} points</div>
-                    </div>
-                  </div>
-                </div>
-                )}
+                    ) : null}
 
-                {/* Performance Feedback */}
-                {typeof dashboardData.percentageScore === 'number' && (
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="font-medium text-gray-900 mb-2">Performance Feedback</h3>
-                    <p className="text-gray-600 text-sm">
-                      {dashboardData.percentageScore >= 80 
-                        ? "Excellent work! You demonstrate mastery level understanding of this competency."
-                        : dashboardData.percentageScore >= 60
-                        ? "Good job! You show advanced understanding with room for improvement."
-                        : dashboardData.percentageScore >= 40
-                        ? "You have intermediate understanding. Consider reviewing the material and retaking the assessment."
-                        : "You may want to review the competency materials and practice before retaking the assessment."
-                      }
-                    </p>
-                  </div>
-                )}
-
-                {/* Detailed answers if available */}
-                {Array.isArray(dashboardData.details) && dashboardData.details.length > 0 && (
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="font-medium text-gray-900 mb-3">Your Answers</h3>
-                    <div className="space-y-3">
-                      {dashboardData.details.map((d) => (
-                        <div key={d.questionId} className="border-b pb-3">
-                          <div className="text-sm font-medium text-gray-900">{d.questionText}</div>
-                          <div className="mt-1 text-sm text-gray-700">
-                            <div>Your answer: {d.selectedOptionText || d.answerText || '—'}</div>
-                            <div className={d.isCorrect ? 'text-green-700' : 'text-red-700'}>
-                              {d.isCorrect ? 'Correct' : 'Incorrect'}
+                    {/* All Assessment Levels */}
+                    {(dashboardData.systemLevel || dashboardData.userConfirmedLevel || dashboardData.managerSelectedLevel) && (
+                      <div className="text-center">
+                        <div className="text-lg font-medium text-gray-900 mb-3">Assessment Levels</div>
+                        <div className="space-y-2">
+                          {dashboardData.systemLevel && (
+                            <div>
+                              <span className="text-sm text-gray-600">System Assessment: </span>
+                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.systemLevel)}`}>
+                                {dashboardData.systemLevel}
+                              </span>
                             </div>
-                            {assessmentData?.settings?.show_correct_answers && (
-                              <div>Correct answer: {d.correctOptionText || '—'}</div>
-                            )}
+                          )}
+                          {dashboardData.userConfirmedLevel && (
+                            <div>
+                              <span className="text-sm text-gray-600">Your Self Assessment: </span>
+                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.userConfirmedLevel)}`}>
+                                {dashboardData.userConfirmedLevel}
+                              </span>
+                            </div>
+                          )}
+                          {dashboardData.managerSelectedLevel && (
+                            <div>
+                              <span className="text-sm text-gray-600">Manager Assessment: </span>
+                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.managerSelectedLevel)}`}>
+                                {dashboardData.managerSelectedLevel}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* All Assessment Attempts */}
+                    {dashboardData.allAssessments && dashboardData.allAssessments.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-3">All Assessment Attempts</h3>
+                        <div className="space-y-3">
+                          {dashboardData.allAssessments.map((assessment, index) => (
+                            <div key={assessment.sessionId || index} className="bg-gray-50 p-4 rounded-lg border">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-sm font-medium text-gray-900">
+                                  Attempt #{dashboardData.allAssessments.length - index}
+                                </div>
+                                {assessment.completedAt && (
+                                  <div className="text-xs text-gray-500">
+                                    {new Date(assessment.completedAt).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </div>
+                              {assessment.percentageScore !== null && assessment.percentageScore !== undefined && (
+                                <div className="flex items-center gap-4">
+                                  <div>
+                                    <span className="text-sm text-gray-600">Score: </span>
+                                    <span className={`text-lg font-bold ${getScoreColor(assessment.percentageScore)}`}>
+                                      {assessment.percentageScore}%
+                                    </span>
+                                  </div>
+                                  {assessment.correctAnswers !== null && assessment.totalQuestions !== null && (
+                                    <div className="text-sm text-gray-600">
+                                      ({assessment.correctAnswers}/{assessment.totalQuestions} correct)
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                {assessment.systemLevel && (
+                                  <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.systemLevel)}`}>
+                                    System: {assessment.systemLevel}
+                                  </span>
+                                )}
+                                {assessment.userConfirmedLevel && (
+                                  <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.userConfirmedLevel)}`}>
+                                    Self: {assessment.userConfirmedLevel}
+                                  </span>
+                                )}
+                                {assessment.managerSelectedLevel && (
+                                  <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.managerSelectedLevel)}`}>
+                                    Manager: {assessment.managerSelectedLevel}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Assessment Details */}
+                    {dashboardData.completedAt && (
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h3 className="font-medium text-gray-900 mb-3">Assessment Details</h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-600">Completed:</span>
+                            <div className="font-medium">
+                              {new Date(dashboardData.completedAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Score:</span>
+                            <div className="font-medium">{dashboardData.score} points</div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      </div>
+                    )}
 
-                {/* Action Buttons */}
-                <div className="flex gap-4 justify-center">
-                  <Button
-                    onClick={() => setShowDashboardModal(false)}
-                    variant="outline"
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setShowDashboardModal(false);
-                      handleStartAssessment({ id: dashboardData.competencyId, name: dashboardData.competencyName });
-                    }}
-                  >
-                    Retake Assessment
-                  </Button>
-                </div>
+                    {/* Performance Feedback */}
+                    {typeof dashboardData.percentageScore === 'number' && (
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h3 className="font-medium text-gray-900 mb-2">Performance Feedback</h3>
+                        <p className="text-gray-600 text-sm">
+                          {dashboardData.percentageScore >= 80 
+                            ? "Excellent work! You demonstrate mastery level understanding of this competency."
+                            : dashboardData.percentageScore >= 60
+                            ? "Good job! You show advanced understanding with room for improvement."
+                            : dashboardData.percentageScore >= 40
+                            ? "You have intermediate understanding. Consider reviewing the material and retaking the assessment."
+                            : "You may want to review the competency materials and practice before retaking the assessment."
+                          }
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Detailed answers if available */}
+                    {Array.isArray(dashboardData.details) && dashboardData.details.length > 0 && (
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h3 className="font-medium text-gray-900 mb-3">Your Answers</h3>
+                        <div className="space-y-3">
+                          {dashboardData.details.map((d) => (
+                            <div key={d.questionId} className="border-b pb-3">
+                              <div className="text-sm font-medium text-gray-900">{d.questionText}</div>
+                              <div className="mt-1 text-sm text-gray-700">
+                                <div>Your answer: {d.selectedOptionText || d.answerText || '—'}</div>
+                                <div className={d.isCorrect ? 'text-green-700' : 'text-red-700'}>
+                                  {d.isCorrect ? 'Correct' : 'Incorrect'}
+                                </div>
+                                {assessmentData?.settings?.show_correct_answers && (
+                                  <div>Correct answer: {d.correctOptionText || '—'}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-4 justify-center">
+                      <Button
+                        onClick={() => setShowDashboardModal(false)}
+                        variant="outline"
+                      >
+                        Close
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setShowDashboardModal(false);
+                          handleStartAssessment({ id: dashboardData.competencyId, name: dashboardData.competencyName });
+                        }}
+                        disabled={!cycleStatus?.canCreate}
+                        variant={!cycleStatus?.canCreate ? "secondary" : "default"}
+                      >
+                        {!cycleStatus?.canCreate ? (
+                          <>
+                            <X className="mr-2 h-4 w-4" />
+                            Assessment Period Closed
+                          </>
+                        ) : (
+                          <>
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Retake Assessment
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
