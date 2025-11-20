@@ -9,6 +9,80 @@ const prisma = new PrismaClient();
 const router = express.Router();
 let xlsx;
 
+// Auto-migration helper: Ensure competency schema is up to date
+async function ensureCompetencySchema() {
+  try {
+    // Check if code column exists
+    const codeColumnCheck = await prisma.$queryRaw`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'competencies' AND column_name = 'code'
+      LIMIT 1
+    `;
+    
+    if (!codeColumnCheck || codeColumnCheck.length === 0) {
+      console.log('Auto-migrating: Adding code column to competencies table');
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE competencies ADD COLUMN IF NOT EXISTS code TEXT UNIQUE;
+      `);
+    }
+
+    // Check if familyId column exists
+    const familyIdColumnCheck = await prisma.$queryRaw`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'competencies' AND column_name = 'familyId'
+      LIMIT 1
+    `;
+    
+    if (!familyIdColumnCheck || familyIdColumnCheck.length === 0) {
+      console.log('Auto-migrating: Adding familyId column to competencies table');
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE competencies ADD COLUMN IF NOT EXISTS "familyId" TEXT;
+      `);
+    }
+
+    // Check if competency_families table exists
+    const familiesTableCheck = await prisma.$queryRaw`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'competency_families'
+      LIMIT 1
+    `;
+    
+    if (!familiesTableCheck || familiesTableCheck.length === 0) {
+      console.log('Auto-migrating: Creating competency_families table');
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS competency_families (
+          id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          name TEXT NOT NULL,
+          type TEXT,
+          description TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(name, type)
+        );
+      `);
+    }
+
+    // Add index on familyId if it doesn't exist
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS idx_competencies_family_id ON competencies("familyId");
+    `);
+
+    console.log('Competency schema migration check completed');
+  } catch (error) {
+    // Log but don't fail - schema might already be correct
+    console.log('Schema check note:', error.message);
+  }
+}
+
+// Run schema check once on module load (non-blocking)
+ensureCompetencySchema().catch(err => {
+  console.log('Initial schema check completed with note:', err.message);
+});
+
 // Configure multer for document uploads
 const documentStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -298,6 +372,9 @@ router.post('/upload-xlsx', xlsxUpload.single('file'), async (req, res) => {
 // Get all competencies with pagination and filters
 router.get('/', async (req, res) => {
   try {
+    // Ensure schema is up to date before querying
+    await ensureCompetencySchema();
+
     const { 
       page = 1, 
       limit = 10, 
@@ -378,7 +455,84 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching competencies:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    
+    // If it's a Prisma initialization error, try to fix schema and retry once
+    if (error.name === 'PrismaClientInitializationError' || error.message?.includes('column') || error.message?.includes('does not exist')) {
+      console.log('Detected schema issue, attempting auto-migration...');
+      try {
+        await ensureCompetencySchema();
+        // Retry the query once after migration
+        const competenciesRaw = await prisma.competency.findMany({
+          where: {
+            AND: [
+              {
+                OR: [
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { definition: { contains: search, mode: 'insensitive' } },
+                  { family: { contains: search, mode: 'insensitive' } }
+                ]
+              },
+              type ? { type } : {},
+              family ? { family: { contains: family, mode: 'insensitive' } } : {}
+            ].filter(condition => Object.keys(condition).length > 0)
+          },
+          include: {
+            levels: { orderBy: { level: 'asc' } },
+            documents: { orderBy: { createdAt: 'desc' } },
+            _count: { select: { assessments: true, elements: true } }
+          },
+          orderBy: { [sortBy]: sortOrder },
+          skip,
+          take
+        });
+        
+        const competencies = competenciesRaw.map(c => ({
+          ...c,
+          relatedDivision: c.related_division || null,
+          relatedDocuments: c.related_documents || [],
+          assessmentCount: c._count?.assessments || 0,
+          elements: [],
+          elementsCount: c._count?.elements || 0
+        }));
+        
+        const total = await prisma.competency.count({ 
+          where: {
+            AND: [
+              {
+                OR: [
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { definition: { contains: search, mode: 'insensitive' } },
+                  { family: { contains: search, mode: 'insensitive' } }
+                ]
+              },
+              type ? { type } : {},
+              family ? { family: { contains: family, mode: 'insensitive' } } : {}
+            ].filter(condition => Object.keys(condition).length > 0)
+          }
+        });
+        
+        return res.json({
+          competencies,
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total,
+            pages: Math.ceil(total / parseInt(limit))
+          }
+        });
+      } catch (retryError) {
+        console.error('Retry after migration also failed:', retryError);
+        return res.status(500).json({ 
+          message: 'Database schema issue. Please run the migration script.',
+          error: retryError.message 
+        });
+      }
+    }
+    
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -608,6 +762,9 @@ router.delete('/:id/elements/:elementId', async (req, res) => {
 // Get single competency with all details
 router.get('/:id', async (req, res) => {
   try {
+    // Ensure schema is up to date before querying
+    await ensureCompetencySchema();
+    
     const { id } = req.params;
     
     const compRaw = await prisma.competency.findUnique({
