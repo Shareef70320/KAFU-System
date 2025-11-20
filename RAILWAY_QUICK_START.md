@@ -14,7 +14,8 @@
 
 ### 3. Deploy Backend
 - Click "+ New" → "GitHub Repo" → Select your repo
-- Railway auto-detects `backend/Dockerfile`
+- In service Settings → General:
+  - **Dockerfile Path**: `Dockerfile.backend` (or leave empty if Railway auto-detects)
 - Go to Settings → Variables, add:
   ```
   DATABASE_URL = (paste from step 2)
@@ -26,7 +27,8 @@
 
 ### 4. Deploy Frontend
 - Click "+ New" → "GitHub Repo" → Select your repo again
-- Railway auto-detects `frontend/Dockerfile`
+- In service Settings → General:
+  - **Dockerfile Path**: `Dockerfile.frontend` (or leave empty if Railway auto-detects)
 - Go to Settings → Variables, add:
   ```
   REACT_APP_API_URL = https://your-backend-url.railway.app/api

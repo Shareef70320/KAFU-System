@@ -1,3 +1,4 @@
+# Railway Backend Dockerfile (builds from root directory)
 # Use Node.js 18 Alpine image
 FROM node:18-alpine
 
@@ -7,20 +8,23 @@ RUN apk add --no-cache openssl curl
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy backend package files
+COPY backend/package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy source code
-COPY . .
+# Copy Prisma schema
+COPY backend/prisma ./prisma
+
+# Generate Prisma client
+RUN npx prisma generate --schema=./prisma/schema.prisma
+
+# Copy rest of backend source code
+COPY backend/ .
 
 # Create uploads directory
 RUN mkdir -p uploads
-
-# Generate Prisma client
-RUN npx prisma generate
 
 # Expose port
 EXPOSE 5000
@@ -31,3 +35,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Start the application
 CMD ["npm", "start"]
+

@@ -39,8 +39,9 @@ git push origin main
 2. Select your repository again
 3. Railway will detect it's a Node.js project
 4. Configure the service:
-   - **Root Directory**: `backend`
-   - Railway will automatically detect the Dockerfile at `backend/Dockerfile`
+   - **Root Directory**: Leave empty (or set to `.` for root)
+   - **Dockerfile Path**: `Dockerfile.backend` (or set to `backend/Dockerfile` if using backend as root)
+   - Railway will build from root directory using `Dockerfile.backend`
 
 5. **Set Environment Variables** (in service Settings → Variables):
    - `DATABASE_URL` → Use the PostgreSQL connection string from Step 3
@@ -61,8 +62,9 @@ git push origin main
 1. In Railway project, click "+ New" → "GitHub Repo"
 2. Select your repository again
 3. Configure the service:
-   - **Root Directory**: `frontend`
-   - Railway will automatically detect the Dockerfile at `frontend/Dockerfile`
+   - **Root Directory**: Leave empty (or set to `.` for root)
+   - **Dockerfile Path**: `Dockerfile.frontend` (or set to `frontend/Dockerfile` if using frontend as root)
+   - Railway will build from root directory using `Dockerfile.frontend`
 
 4. **Set Environment Variables** (in service Settings → Variables):
    - `REACT_APP_API_URL` → We'll set this after backend deploys
