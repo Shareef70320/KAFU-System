@@ -371,37 +371,42 @@ router.post('/upload-xlsx', xlsxUpload.single('file'), async (req, res) => {
 
 // Get all competencies with pagination and filters
 router.get('/', async (req, res) => {
+  // Extract query parameters once so we can reuse in catch blocks
+  const {
+    page: rawPage = 1,
+    limit: rawLimit = 10,
+    search = '',
+    type = '',
+    family = '',
+    sortBy = 'createdAt',
+    sortOrder = 'desc'
+  } = req.query;
+
+  const page = parseInt(rawPage);
+  const limit = parseInt(rawLimit);
+  const skip = (page - 1) * limit;
+  const take = limit;
+
+  const buildWhereClause = () => ({
+    AND: [
+      {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { definition: { contains: search, mode: 'insensitive' } },
+          { family: { contains: search, mode: 'insensitive' } }
+        ]
+      },
+      type ? { type } : {},
+      family ? { family: { contains: family, mode: 'insensitive' } } : {}
+    ].filter(condition => Object.keys(condition).length > 0)
+  });
+
   try {
     // Ensure schema is up to date before querying
     await ensureCompetencySchema();
 
-    const { 
-      page = 1, 
-      limit = 10, 
-      search = '', 
-      type = '', 
-      family = '',
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const take = parseInt(limit);
-
     // Build where clause
-    const where = {
-      AND: [
-        {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { definition: { contains: search, mode: 'insensitive' } },
-            { family: { contains: search, mode: 'insensitive' } }
-          ]
-        },
-        type ? { type } : {},
-        family ? { family: { contains: family, mode: 'insensitive' } } : {}
-      ].filter(condition => Object.keys(condition).length > 0)
-    };
+    const where = buildWhereClause();
 
     // Get competencies with relations
     const competenciesRaw = await prisma.competency.findMany({
@@ -447,10 +452,10 @@ router.get('/', async (req, res) => {
     res.json({
       competencies,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page,
+        limit,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
@@ -463,19 +468,7 @@ router.get('/', async (req, res) => {
         await ensureCompetencySchema();
         // Retry the query once after migration
         const competenciesRaw = await prisma.competency.findMany({
-          where: {
-            AND: [
-              {
-                OR: [
-                  { name: { contains: search, mode: 'insensitive' } },
-                  { definition: { contains: search, mode: 'insensitive' } },
-                  { family: { contains: search, mode: 'insensitive' } }
-                ]
-              },
-              type ? { type } : {},
-              family ? { family: { contains: family, mode: 'insensitive' } } : {}
-            ].filter(condition => Object.keys(condition).length > 0)
-          },
+          where: buildWhereClause(),
           include: {
             levels: { orderBy: { level: 'asc' } },
             documents: { orderBy: { createdAt: 'desc' } },
@@ -495,29 +488,15 @@ router.get('/', async (req, res) => {
           elementsCount: c._count?.elements || 0
         }));
         
-        const total = await prisma.competency.count({ 
-          where: {
-            AND: [
-              {
-                OR: [
-                  { name: { contains: search, mode: 'insensitive' } },
-                  { definition: { contains: search, mode: 'insensitive' } },
-                  { family: { contains: search, mode: 'insensitive' } }
-                ]
-              },
-              type ? { type } : {},
-              family ? { family: { contains: family, mode: 'insensitive' } } : {}
-            ].filter(condition => Object.keys(condition).length > 0)
-          }
-        });
+        const total = await prisma.competency.count({ where: buildWhereClause() });
         
         return res.json({
           competencies,
           pagination: {
-            page: parseInt(page),
-            limit: parseInt(limit),
+            page,
+            limit,
             total,
-            pages: Math.ceil(total / parseInt(limit))
+            pages: Math.ceil(total / limit)
           }
         });
       } catch (retryError) {
