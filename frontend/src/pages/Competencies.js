@@ -43,6 +43,7 @@ const Competencies = () => {
   const [searchInput, setSearchInput] = useState(''); // Search input for client-side filtering
   const [selectedType, setSelectedType] = useState('');
   const [selectedFamily, setSelectedFamily] = useState('');
+  const [selectedDivision, setSelectedDivision] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [expandedCompetency, setExpandedCompetency] = useState(null);
@@ -164,8 +165,13 @@ const Competencies = () => {
       filtered = filtered.filter(c => c.family === selectedFamily);
     }
     
+    // If division is selected, only show types that have that division
+    if (selectedDivision) {
+      filtered = filtered.filter(c => c.related_division === selectedDivision || c.relatedDivision === selectedDivision);
+    }
+    
     return [...new Set(filtered.map(c => c.type).filter(Boolean))].sort();
-  }, [competencies, selectedFamily]);
+  }, [competencies, selectedFamily, selectedDivision]);
   
   const availableFamilies = useMemo(() => {
     if (!competencies.length) return [];
@@ -177,8 +183,31 @@ const Competencies = () => {
       filtered = filtered.filter(c => c.type === selectedType);
     }
     
+    // If division is selected, only show families that have that division
+    if (selectedDivision) {
+      filtered = filtered.filter(c => c.related_division === selectedDivision || c.relatedDivision === selectedDivision);
+    }
+    
     return [...new Set(filtered.map(c => c.family).filter(Boolean))].sort();
-  }, [competencies, selectedType]);
+  }, [competencies, selectedType, selectedDivision]);
+  
+  const availableDivisions = useMemo(() => {
+    if (!competencies.length) return [];
+    
+    let filtered = competencies;
+    
+    // If type is selected, only show divisions that belong to that type
+    if (selectedType) {
+      filtered = filtered.filter(c => c.type === selectedType);
+    }
+    
+    // If family is selected, only show divisions that belong to that family
+    if (selectedFamily) {
+      filtered = filtered.filter(c => c.family === selectedFamily);
+    }
+    
+    return [...new Set(filtered.map(c => c.related_division || c.relatedDivision).filter(Boolean))].sort();
+  }, [competencies, selectedType, selectedFamily]);
   
   // Populate filter options from stats data (for initial load)
   useEffect(() => {
@@ -212,6 +241,21 @@ const Competencies = () => {
       }
     }
   }, [selectedFamily, competencies, selectedType]);
+  
+  // Reset division when type or family changes (if current division is not available)
+  useEffect(() => {
+    if (selectedDivision) {
+      const divisionExists = competencies.some(c => {
+        const matchesType = !selectedType || c.type === selectedType;
+        const matchesFamily = !selectedFamily || c.family === selectedFamily;
+        const matchesDivision = (c.related_division === selectedDivision || c.relatedDivision === selectedDivision);
+        return matchesType && matchesFamily && matchesDivision;
+      });
+      if (!divisionExists) {
+        setSelectedDivision('');
+      }
+    }
+  }, [selectedType, selectedFamily, competencies, selectedDivision]);
 
   const handleFileUpload = async () => {
     if (!file) {
@@ -390,8 +434,18 @@ const Competencies = () => {
       filtered = filtered.filter(competency => competency.family === selectedFamily);
     }
     
+    // Division filter
+    if (selectedDivision) {
+      filtered = filtered.filter(competency => 
+        competency.related_division === selectedDivision || 
+        competency.relatedDivision === selectedDivision
+      );
+    }
+    
     return filtered;
-  }, [competencies, searchInput, selectedType, selectedFamily]);
+  }, [competencies, searchInput, selectedType, selectedFamily, selectedDivision]);
+  
+  const filteredCount = filteredCompetencies.length;
 
   const toggleCompetency = (competencyId) => {
     setExpandedCompetency(expandedCompetency === competencyId ? null : competencyId);
@@ -608,7 +662,7 @@ const Competencies = () => {
       {/* Filters */}
       <Card>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <Label htmlFor="search">Search Competencies</Label>
               <div className="relative mt-1">
@@ -653,9 +707,30 @@ const Competencies = () => {
                 ))}
               </select>
             </div>
+            <div>
+              <Label htmlFor="division">Related Division</Label>
+              <select
+                id="division"
+                value={selectedDivision}
+                onChange={(e) => setSelectedDivision(e.target.value)}
+                className="loyverse-input mt-1"
+              >
+                <option value="">All Divisions</option>
+                {availableDivisions.map(division => (
+                  <option key={division} value={division}>{division}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Filter summary */}
+      <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+        <span>
+          Showing <span className="font-semibold text-gray-900">{filteredCount}</span> {filteredCount === 1 ? 'competency' : 'competencies'}
+        </span>
+      </div>
 
       {/* Competencies List */}
       <div className="space-y-4">
