@@ -9,6 +9,19 @@ const prisma = new PrismaClient();
 const router = express.Router();
 let xlsx;
 
+const LEVEL_DISPLAY_NAMES = {
+  BASIC: 'Aware',
+  INTERMEDIATE: 'Knowledge',
+  ADVANCED: 'Skilled',
+  MASTERY: 'Mastery'
+};
+
+const getLevelDisplayLabel = (level) => {
+  if (!level) return 'Level';
+  const display = LEVEL_DISPLAY_NAMES[level] || level;
+  return `${display} Level`;
+};
+
 // Auto-migration helper: Ensure competency schema is up to date
 async function ensureCompetencySchema() {
   try {
@@ -415,6 +428,20 @@ router.get('/', async (req, res) => {
         levels: {
           orderBy: {
             level: 'asc'
+          },
+          include: {
+            elements: {
+              orderBy: {
+                order: 'asc'
+              },
+              include: {
+                performanceIndicators: {
+                  orderBy: {
+                    order: 'asc'
+                  }
+                }
+              }
+            }
           }
         },
         documents: {
@@ -470,7 +497,14 @@ router.get('/', async (req, res) => {
         const competenciesRaw = await prisma.competency.findMany({
           where: buildWhereClause(),
           include: {
-            levels: { orderBy: { level: 'asc' } },
+            levels: {
+              orderBy: { level: 'asc' },
+              include: {
+                elements: {
+                  orderBy: { order: 'asc' }
+                }
+              }
+            },
             documents: { orderBy: { createdAt: 'desc' } },
             _count: { select: { assessments: true, elements: true } }
           },
@@ -546,13 +580,58 @@ router.get('/levels', async (req, res) => {
 
 // ========== COMPETENCY ELEMENTS ROUTES (must come before /:id) ==========
 
-// Get all elements for a competency
+// Get all elements for a competency (legacy - returns all elements across all levels)
+// For backward compatibility, but new code should use level-specific endpoints
 router.get('/:id/elements', async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.query;
 
-    const where = { competencyId: id };
+    // Get all elements for this competency (across all levels)
+    const elements = await prisma.$queryRaw`
+      SELECT 
+        ce.*,
+        cl.level as competency_level,
+        cl.title as level_title
+      FROM competency_elements ce
+      LEFT JOIN competency_levels cl ON ce.competency_level_id = cl.id
+      WHERE ce.competency_id = ${id}
+        ${isActive !== undefined ? (isActive === 'true' ? `AND ce.is_active = true` : `AND ce.is_active = false`) : ''}
+      ORDER BY 
+        CASE cl.level
+          WHEN 'BASIC' THEN 1
+          WHEN 'INTERMEDIATE' THEN 2
+          WHEN 'ADVANCED' THEN 3
+          WHEN 'MASTERY' THEN 4
+        END,
+        ce."order" ASC,
+        ce.created_at ASC
+    `;
+
+    res.json(elements);
+  } catch (error) {
+    console.error('Error fetching competency elements:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Get elements for a specific competency level
+router.get('/:id/levels/:levelId/elements', async (req, res) => {
+  try {
+    const { id, levelId } = req.params;
+    const { isActive } = req.query;
+
+    // Verify level belongs to competency
+    const level = await prisma.competencyLevel.findUnique({
+      where: { id: levelId },
+      include: { competency: true }
+    });
+
+    if (!level || level.competencyId !== id) {
+      return res.status(404).json({ message: 'Level not found or does not belong to this competency' });
+    }
+
+    const where = { competencyLevelId: levelId };
     if (isActive !== undefined) {
       where.isActive = isActive === 'true';
     }
@@ -567,16 +646,16 @@ router.get('/:id/elements', async (req, res) => {
 
     res.json(elements);
   } catch (error) {
-    console.error('Error fetching competency elements:', error);
+    console.error('Error fetching level elements:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// Create a new competency element
+// Create a new competency element (now requires levelId)
 router.post('/:id/elements', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, order, isActive } = req.body;
+    const { name, description, order, isActive, levelId } = req.body;
 
     // Validate competency exists
     const competency = await prisma.competency.findUnique({
@@ -587,11 +666,25 @@ router.post('/:id/elements', async (req, res) => {
       return res.status(404).json({ message: 'Competency not found' });
     }
 
-    // Get max order if not provided
+    // levelId is now required
+    if (!levelId) {
+      return res.status(400).json({ message: 'levelId is required. Elements must be associated with a competency level.' });
+    }
+
+    // Validate level exists and belongs to competency
+    const level = await prisma.competencyLevel.findUnique({
+      where: { id: levelId }
+    });
+
+    if (!level || level.competencyId !== id) {
+      return res.status(404).json({ message: 'Level not found or does not belong to this competency' });
+    }
+
+    // Get max order if not provided (for this specific level)
     let elementOrder = order;
     if (elementOrder === undefined || elementOrder === null) {
       const maxOrder = await prisma.competencyElement.findFirst({
-        where: { competencyId: id },
+        where: { competencyLevelId: levelId },
         orderBy: { order: 'desc' },
         select: { order: true }
       });
@@ -600,7 +693,8 @@ router.post('/:id/elements', async (req, res) => {
 
     const element = await prisma.competencyElement.create({
       data: {
-        competencyId: id,
+        competencyId: id, // Keep for backward compatibility
+        competencyLevelId: levelId,
         name: name.trim(),
         description: description?.trim() || null,
         order: elementOrder,
@@ -618,14 +712,74 @@ router.post('/:id/elements', async (req, res) => {
   }
 });
 
-// Bulk create competency elements
+// Create element for a specific level (alternative endpoint)
+router.post('/:id/levels/:levelId/elements', async (req, res) => {
+  try {
+    const { id, levelId } = req.params;
+    const { name, description, order, isActive } = req.body;
+
+    // Validate competency exists
+    const competency = await prisma.competency.findUnique({
+      where: { id }
+    });
+
+    if (!competency) {
+      return res.status(404).json({ message: 'Competency not found' });
+    }
+
+    // Validate level exists and belongs to competency
+    const level = await prisma.competencyLevel.findUnique({
+      where: { id: levelId }
+    });
+
+    if (!level || level.competencyId !== id) {
+      return res.status(404).json({ message: 'Level not found or does not belong to this competency' });
+    }
+
+    // Get max order if not provided
+    let elementOrder = order;
+    if (elementOrder === undefined || elementOrder === null) {
+      const maxOrder = await prisma.competencyElement.findFirst({
+        where: { competencyLevelId: levelId },
+        orderBy: { order: 'desc' },
+        select: { order: true }
+      });
+      elementOrder = maxOrder ? maxOrder.order + 1 : 0;
+    }
+
+    const element = await prisma.competencyElement.create({
+      data: {
+        competencyId: id,
+        competencyLevelId: levelId,
+        name: name.trim(),
+        description: description?.trim() || null,
+        order: elementOrder,
+        isActive: isActive !== undefined ? isActive : true
+      }
+    });
+
+    res.status(201).json(element);
+  } catch (error) {
+    console.error('Error creating level element:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Element with this name already exists' });
+    }
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Bulk create competency elements (now requires levelId)
 router.post('/:id/elements/bulk', async (req, res) => {
   try {
     const { id } = req.params;
-    const { elements } = req.body; // Array of { name, description?, order?, isActive? }
+    const { elements, levelId } = req.body; // Array of { name, description?, order?, isActive? } and levelId
 
     if (!Array.isArray(elements) || elements.length === 0) {
       return res.status(400).json({ message: 'Elements array is required' });
+    }
+
+    if (!levelId) {
+      return res.status(400).json({ message: 'levelId is required. Elements must be associated with a competency level.' });
     }
 
     // Validate competency exists
@@ -637,9 +791,18 @@ router.post('/:id/elements/bulk', async (req, res) => {
       return res.status(404).json({ message: 'Competency not found' });
     }
 
-    // Get current max order
+    // Validate level exists and belongs to competency
+    const level = await prisma.competencyLevel.findUnique({
+      where: { id: levelId }
+    });
+
+    if (!level || level.competencyId !== id) {
+      return res.status(404).json({ message: 'Level not found or does not belong to this competency' });
+    }
+
+    // Get current max order for this level
     const maxOrder = await prisma.competencyElement.findFirst({
-      where: { competencyId: id },
+      where: { competencyLevelId: levelId },
       orderBy: { order: 'desc' },
       select: { order: true }
     });
@@ -649,6 +812,7 @@ router.post('/:id/elements/bulk', async (req, res) => {
     const createdElements = await prisma.competencyElement.createMany({
       data: elements.map((el, index) => ({
         competencyId: id,
+        competencyLevelId: levelId,
         name: el.name.trim(),
         description: el.description?.trim() || null,
         order: el.order !== undefined ? el.order : currentOrder + index,
@@ -658,7 +822,7 @@ router.post('/:id/elements/bulk', async (req, res) => {
 
     // Fetch created elements to return
     const allElements = await prisma.competencyElement.findMany({
-      where: { competencyId: id },
+      where: { competencyLevelId: levelId },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
     });
 
@@ -676,7 +840,7 @@ router.post('/:id/elements/bulk', async (req, res) => {
 router.put('/:id/elements/:elementId', async (req, res) => {
   try {
     const { id, elementId } = req.params;
-    const { name, description, order, isActive } = req.body;
+    const { name, description, order, isActive, levelId } = req.body;
 
     // Verify element belongs to competency
     const element = await prisma.competencyElement.findUnique({
@@ -696,6 +860,18 @@ router.put('/:id/elements/:elementId', async (req, res) => {
     if (description !== undefined) updateData.description = description?.trim() || null;
     if (order !== undefined) updateData.order = order;
     if (isActive !== undefined) updateData.isActive = isActive;
+    
+    // Allow moving element to a different level
+    if (levelId !== undefined) {
+      // Validate new level exists and belongs to competency
+      const level = await prisma.competencyLevel.findUnique({
+        where: { id: levelId }
+      });
+      if (!level || level.competencyId !== id) {
+        return res.status(404).json({ message: 'Level not found or does not belong to this competency' });
+      }
+      updateData.competencyLevelId = levelId;
+    }
 
     const updatedElement = await prisma.competencyElement.update({
       where: { id: elementId },
@@ -738,6 +914,237 @@ router.delete('/:id/elements/:elementId', async (req, res) => {
   }
 });
 
+// ========== COMPETENCY PERFORMANCE INDICATORS ROUTES ==========
+
+// Get all performance indicators for an element
+router.get('/:id/elements/:elementId/indicators', async (req, res) => {
+  try {
+    const { id, elementId } = req.params;
+
+    // Verify element belongs to competency
+    const element = await prisma.competencyElement.findUnique({
+      where: { id: elementId },
+      include: { performanceIndicators: true }
+    });
+
+    if (!element) {
+      return res.status(404).json({ message: 'Element not found' });
+    }
+
+    if (element.competencyId !== id) {
+      return res.status(400).json({ message: 'Element does not belong to this competency' });
+    }
+
+    const indicators = await prisma.competencyPerformanceIndicator.findMany({
+      where: { elementId },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
+    });
+
+    res.json(indicators);
+  } catch (error) {
+    console.error('Error fetching performance indicators:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Create a new performance indicator
+router.post('/:id/elements/:elementId/indicators', async (req, res) => {
+  try {
+    const { id, elementId } = req.params;
+    const { action, order, isActive } = req.body;
+
+    // Verify element belongs to competency
+    const element = await prisma.competencyElement.findUnique({
+      where: { id: elementId }
+    });
+
+    if (!element) {
+      return res.status(404).json({ message: 'Element not found' });
+    }
+
+    if (element.competencyId !== id) {
+      return res.status(400).json({ message: 'Element does not belong to this competency' });
+    }
+
+    if (!action || !action.trim()) {
+      return res.status(400).json({ message: 'Action is required' });
+    }
+
+    // Get max order if not provided
+    let indicatorOrder = order;
+    if (indicatorOrder === undefined || indicatorOrder === null) {
+      const maxOrder = await prisma.competencyPerformanceIndicator.findFirst({
+        where: { elementId },
+        orderBy: { order: 'desc' },
+        select: { order: true }
+      });
+      indicatorOrder = maxOrder ? maxOrder.order + 1 : 0;
+    }
+
+    const indicator = await prisma.competencyPerformanceIndicator.create({
+      data: {
+        elementId,
+        action: action.trim(),
+        order: indicatorOrder,
+        isActive: isActive !== undefined ? isActive : true
+      }
+    });
+
+    res.status(201).json(indicator);
+  } catch (error) {
+    console.error('Error creating performance indicator:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Bulk create performance indicators
+router.post('/:id/elements/:elementId/indicators/bulk', async (req, res) => {
+  try {
+    const { id, elementId } = req.params;
+    const { indicators } = req.body; // Array of { action, order?, isActive? }
+
+    if (!Array.isArray(indicators) || indicators.length === 0) {
+      return res.status(400).json({ message: 'Indicators array is required' });
+    }
+
+    // Verify element belongs to competency
+    const element = await prisma.competencyElement.findUnique({
+      where: { id: elementId }
+    });
+
+    if (!element) {
+      return res.status(404).json({ message: 'Element not found' });
+    }
+
+    if (element.competencyId !== id) {
+      return res.status(400).json({ message: 'Element does not belong to this competency' });
+    }
+
+    // Get current max order
+    const maxOrder = await prisma.competencyPerformanceIndicator.findFirst({
+      where: { elementId },
+      orderBy: { order: 'desc' },
+      select: { order: true }
+    });
+    let currentOrder = maxOrder ? maxOrder.order + 1 : 0;
+
+    // Create indicators
+    const createdIndicators = await prisma.competencyPerformanceIndicator.createMany({
+      data: indicators.map((ind, index) => ({
+        elementId,
+        action: ind.action.trim(),
+        order: ind.order !== undefined ? ind.order : currentOrder + index,
+        isActive: ind.isActive !== undefined ? ind.isActive : true
+      }))
+    });
+
+    // Fetch created indicators to return
+    const allIndicators = await prisma.competencyPerformanceIndicator.findMany({
+      where: { elementId },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
+    });
+
+    res.status(201).json({
+      message: `Created ${createdIndicators.count} indicators`,
+      indicators: allIndicators
+    });
+  } catch (error) {
+    console.error('Error bulk creating performance indicators:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Update performance indicator
+router.put('/:id/elements/:elementId/indicators/:indicatorId', async (req, res) => {
+  try {
+    const { id, elementId, indicatorId } = req.params;
+    const { action, order, isActive } = req.body;
+
+    // Verify element belongs to competency
+    const element = await prisma.competencyElement.findUnique({
+      where: { id: elementId }
+    });
+
+    if (!element) {
+      return res.status(404).json({ message: 'Element not found' });
+    }
+
+    if (element.competencyId !== id) {
+      return res.status(400).json({ message: 'Element does not belong to this competency' });
+    }
+
+    // Verify indicator exists and belongs to element
+    const indicator = await prisma.competencyPerformanceIndicator.findUnique({
+      where: { id: indicatorId }
+    });
+
+    if (!indicator) {
+      return res.status(404).json({ message: 'Performance indicator not found' });
+    }
+
+    if (indicator.elementId !== elementId) {
+      return res.status(400).json({ message: 'Indicator does not belong to this element' });
+    }
+
+    const updateData = {};
+    if (action !== undefined) updateData.action = action.trim();
+    if (order !== undefined) updateData.order = order;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const updatedIndicator = await prisma.competencyPerformanceIndicator.update({
+      where: { id: indicatorId },
+      data: updateData
+    });
+
+    res.json(updatedIndicator);
+  } catch (error) {
+    console.error('Error updating performance indicator:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Delete performance indicator
+router.delete('/:id/elements/:elementId/indicators/:indicatorId', async (req, res) => {
+  try {
+    const { id, elementId, indicatorId } = req.params;
+
+    // Verify element belongs to competency
+    const element = await prisma.competencyElement.findUnique({
+      where: { id: elementId }
+    });
+
+    if (!element) {
+      return res.status(404).json({ message: 'Element not found' });
+    }
+
+    if (element.competencyId !== id) {
+      return res.status(400).json({ message: 'Element does not belong to this competency' });
+    }
+
+    // Verify indicator exists and belongs to element
+    const indicator = await prisma.competencyPerformanceIndicator.findUnique({
+      where: { id: indicatorId }
+    });
+
+    if (!indicator) {
+      return res.status(404).json({ message: 'Performance indicator not found' });
+    }
+
+    if (indicator.elementId !== elementId) {
+      return res.status(400).json({ message: 'Indicator does not belong to this element' });
+    }
+
+    await prisma.competencyPerformanceIndicator.delete({
+      where: { id: indicatorId }
+    });
+
+    res.json({ message: 'Performance indicator deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting performance indicator:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get single competency with all details
 router.get('/:id', async (req, res) => {
   try {
@@ -752,6 +1159,20 @@ router.get('/:id', async (req, res) => {
         levels: {
           orderBy: {
             level: 'asc'
+          },
+          include: {
+            elements: {
+              orderBy: {
+                order: 'asc'
+              },
+              include: {
+                performanceIndicators: {
+                  orderBy: {
+                    order: 'asc'
+                  }
+                }
+              }
+            }
           }
         },
         documents: {
@@ -841,7 +1262,7 @@ router.post('/', async (req, res) => {
         levels: {
           create: levels?.map(level => ({
             level: level.level,
-            title: level.title,
+            title: level.title || getLevelDisplayLabel(level.level),
             description: level.description,
             indicators: level.indicators || []
           })) || []
@@ -941,7 +1362,7 @@ router.put('/:id', async (req, res) => {
           data: {
             competencyId: id,
             level: level.level,
-            title: level.title || `${level.level} Level`,
+            title: level.title || getLevelDisplayLabel(level.level),
             description: level.description || '',
             indicators: level.indicators || []
           }

@@ -95,11 +95,12 @@ function App() {
                 <Route path="development-paths" element={<AdminRoute><DevelopmentPaths /></AdminRoute>} />
                 <Route path="development-paths/:id" element={<AdminRoute><PathDetails /></AdminRoute>} />
                 <Route path="ld-interventions" element={<AdminRoute><LDInterventions /></AdminRoute>} />
-                <Route path="assessor-dashboard" element={<AssessorDashboard />} />
+                <Route path="assessor-dashboard" element={<UserRoute><AssessorDashboard /></UserRoute>} />
                 <Route path="assessments" element={<AdminRoute><NewAssessments /></AdminRoute>} />
                 <Route path="question-bank" element={<AdminRoute><QuestionBank /></AdminRoute>} />
                 <Route path="photo-upload" element={<AdminRoute><PhotoUpload /></AdminRoute>} />
                 <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
+                <Route path="settings/level-terminology" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="settings/assessment-cycle" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="test" element={<Test />} />
                 {/* User Login */}

@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { BadgeCheck, Search, Save } from 'lucide-react';
 import api from '../../lib/api';
+import { getLevelDisplayName } from '../../utils/competencyLevels';
 
 const LEVELS = ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'];
 
@@ -111,8 +112,8 @@ const ManagerAssessments = () => {
                     </td>
                     <td className="px-4 py-3 text-center">{r.percentageScore}%</td>
                     <td className="px-4 py-3 text-center">{r.correctAnswers}/{r.totalQuestions}</td>
-                    <td className="px-4 py-3 text-center">{r.systemLevel || '-'}</td>
-                    <td className="px-4 py-3 text-center">{r.userConfirmedLevel || '-'}</td>
+                    <td className="px-4 py-3 text-center">{r.systemLevel ? getLevelDisplayName(r.systemLevel) : '-'}</td>
+                    <td className="px-4 py-3 text-center">{r.userConfirmedLevel ? getLevelDisplayName(r.userConfirmedLevel) : '-'}</td>
                     <td className="px-4 py-3 text-center">
                       <Select
                         value={selectedLevels[r.sessionId] || r.managerSelectedLevel || ''}
@@ -124,7 +125,7 @@ const ManagerAssessments = () => {
                         </SelectTrigger>
                         <SelectContent>
                           {LEVELS.map(l => (
-                            <SelectItem key={l} value={l}>{l}</SelectItem>
+                            <SelectItem key={l} value={l}>{getLevelDisplayName(l)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

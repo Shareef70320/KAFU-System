@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { 
@@ -32,9 +33,12 @@ import { useUser } from '../contexts/UserContext';
 import api from '../lib/api';
 
 const AssessorDashboard = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currentSid } = useUser();
+  
+  // All state hooks must be declared before any conditional returns
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewForm, setReviewForm] = useState({
@@ -61,34 +65,51 @@ const AssessorDashboard = () => {
   });
   const [rejectingRequestId, setRejectingRequestId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  
+  // Check if user is an assessor
+  const { data: isAssessor, isLoading: checkingAssessor } = useQuery({
+    queryKey: ['is-assessor', currentSid],
+    queryFn: async () => {
+      if (!currentSid) return false;
+      try {
+        const response = await api.get(`/assessors/check/${currentSid}`);
+        return response.data?.isAssessor || false;
+      } catch (error) {
+        console.error('Error checking assessor status:', error);
+        return false;
+      }
+    },
+    enabled: !!currentSid
+  });
 
-  // Fetch assessor's review requests
+  // Fetch assessor's review requests (only if user is assessor)
   const { data: reviewRequestsData, isLoading: requestsLoading } = useQuery({
     queryKey: ['assessor-review-requests', currentSid],
     queryFn: async () => {
       const response = await api.get(`/competency-reviews/requests?assessorId=${currentSid}`);
       return response.data;
     },
-    enabled: !!currentSid
+    enabled: !!currentSid && isAssessor === true
   });
 
-  // Fetch unassigned review requests
+  // Fetch unassigned review requests (only if user is assessor)
   const { data: unassignedRequestsData, isLoading: unassignedLoading } = useQuery({
     queryKey: ['unassigned-review-requests'],
     queryFn: async () => {
       const response = await api.get(`/competency-reviews/requests?status=REQUESTED`);
       return response.data;
-    }
+    },
+    enabled: isAssessor === true
   });
 
-  // Fetch assessor's completed reviews
+  // Fetch assessor's completed reviews (only if user is assessor)
   const { data: completedReviewsData, isLoading: completedLoading } = useQuery({
     queryKey: ['assessor-completed-reviews', currentSid],
     queryFn: async () => {
       const response = await api.get(`/competency-reviews/requests?assessorId=${currentSid}&status=COMPLETED`);
       return response.data;
     },
-    enabled: !!currentSid
+    enabled: !!currentSid && isAssessor === true
   });
 
   // Assign review mutation
@@ -242,6 +263,35 @@ const AssessorDashboard = () => {
       });
     }
   });
+
+  // Redirect if user is not an assessor
+  useEffect(() => {
+    if (!checkingAssessor && isAssessor === false) {
+      toast({
+        title: "Access Denied",
+        description: "You must be an assessor to access this page.",
+        variant: "destructive",
+      });
+      navigate('/user', { replace: true });
+    }
+  }, [isAssessor, checkingAssessor, navigate, toast]);
+
+  // Show loading while checking access
+  if (checkingAssessor) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not an assessor (redirect will happen)
+  if (!isAssessor) {
+    return null;
+  }
 
   const handleAssignReview = (requestId) => {
     assignReviewMutation.mutate(requestId);

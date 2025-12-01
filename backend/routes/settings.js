@@ -154,5 +154,109 @@ router.delete('/:key', async (req, res) => {
   }
 });
 
+// Get or initialize level terminology settings
+router.get('/level-terminology', async (req, res) => {
+  try {
+    let setting = await prisma.appSetting.findUnique({
+      where: { key: 'level_terminology' }
+    });
+    
+    // Initialize with defaults if not exists
+    if (!setting) {
+      const defaultTerminology = {
+        BASIC: { name: 'Aware', isActive: true },
+        INTERMEDIATE: { name: 'Knowledge', isActive: true },
+        ADVANCED: { name: 'Skilled', isActive: true },
+        MASTERY: { name: 'Mastery', isActive: true }
+      };
+      
+      setting = await prisma.appSetting.create({
+        data: {
+          key: 'level_terminology',
+          value: JSON.stringify(defaultTerminology),
+          description: 'Competency level display terminology',
+          category: 'system'
+        }
+      });
+    }
+    
+    const parsed = JSON.parse(setting.value);
+    // Convert old format (string) to new format (object) if needed
+    const converted = {};
+    Object.keys(parsed).forEach(key => {
+      if (typeof parsed[key] === 'string') {
+        converted[key] = { name: parsed[key], isActive: true };
+      } else {
+        converted[key] = parsed[key];
+      }
+    });
+    
+    res.json({
+      ...setting,
+      parsedValue: converted
+    });
+  } catch (error) {
+    console.error('Error fetching level terminology:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Update level terminology settings
+router.put('/level-terminology', async (req, res) => {
+  try {
+    const { BASIC, INTERMEDIATE, ADVANCED, MASTERY, isActive, updatedBy } = req.body;
+    
+    // Handle both old format (strings) and new format (objects with name and isActive)
+    let terminology = {};
+    
+    if (typeof BASIC === 'string') {
+      // Old format - convert to new format
+      terminology = {
+        BASIC: { name: BASIC.trim(), isActive: isActive?.BASIC !== false },
+        INTERMEDIATE: { name: INTERMEDIATE.trim(), isActive: isActive?.INTERMEDIATE !== false },
+        ADVANCED: { name: ADVANCED.trim(), isActive: isActive?.ADVANCED !== false },
+        MASTERY: { name: MASTERY.trim(), isActive: isActive?.MASTERY !== false }
+      };
+    } else {
+      // New format or missing - use defaults
+      terminology = {
+        BASIC: { name: (BASIC?.name || 'Aware').trim(), isActive: BASIC?.isActive !== false && (isActive?.BASIC !== false) },
+        INTERMEDIATE: { name: (INTERMEDIATE?.name || 'Knowledge').trim(), isActive: INTERMEDIATE?.isActive !== false && (isActive?.INTERMEDIATE !== false) },
+        ADVANCED: { name: (ADVANCED?.name || 'Skilled').trim(), isActive: ADVANCED?.isActive !== false && (isActive?.ADVANCED !== false) },
+        MASTERY: { name: (MASTERY?.name || 'Mastery').trim(), isActive: MASTERY?.isActive !== false && (isActive?.MASTERY !== false) }
+      };
+    }
+    
+    // Validate all level names are provided
+    if (!terminology.BASIC.name || !terminology.INTERMEDIATE.name || !terminology.ADVANCED.name || !terminology.MASTERY.name) {
+      return res.status(400).json({ message: 'All level labels (BASIC, INTERMEDIATE, ADVANCED, MASTERY) are required' });
+    }
+    
+    const setting = await prisma.appSetting.upsert({
+      where: { key: 'level_terminology' },
+      update: {
+        value: JSON.stringify(terminology),
+        updatedBy: updatedBy || undefined,
+        updatedAt: new Date()
+      },
+      create: {
+        key: 'level_terminology',
+        value: JSON.stringify(terminology),
+        description: 'Competency level display terminology',
+        category: 'system',
+        updatedBy: updatedBy || undefined
+      }
+    });
+    
+    res.json({
+      ...setting,
+      parsedValue: JSON.parse(setting.value)
+    });
+  } catch (error) {
+    console.error('Error updating level terminology:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
 

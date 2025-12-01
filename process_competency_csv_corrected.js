@@ -4,6 +4,19 @@ const csv = require('csv-parser');
 
 const prisma = new PrismaClient();
 
+const LEVEL_DISPLAY_NAMES = {
+  BASIC: 'Aware',
+  INTERMEDIATE: 'Knowledge',
+  ADVANCED: 'Skilled',
+  MASTERY: 'Mastery'
+};
+
+const getLevelDisplayLabel = (level) => {
+  if (!level) return 'Level';
+  const display = LEVEL_DISPLAY_NAMES[level] || level;
+  return `${display} Level`;
+};
+
 // Type mapping
 const typeMapping = {
   'NON TECHNICAL': 'NON_TECHNICAL',
@@ -98,7 +111,7 @@ async function processCompetencyCSV() {
               data: {
                 competencyId: competency.id,
                 level: levelTypes[i],
-                title: `${levelTypes[i]} Level`,
+                title: getLevelDisplayLabel(levelTypes[i]),
                 description: levelDescription || `No description available for ${levelTypes[i]} level`,
                 indicators: []
               }

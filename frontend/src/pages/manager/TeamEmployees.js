@@ -40,6 +40,7 @@ import {
 import EmployeePhoto from '../../components/EmployeePhoto';
 import api from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
+import { getLevelDisplayName } from '../../utils/competencyLevels';
 
 const TeamEmployees = () => {
   const { currentSid } = useUser();
@@ -1328,11 +1329,17 @@ const TeamEmployees = () => {
                                     <div className="text-sm text-gray-700 mt-1">Latest Score: {latest.percentageScore}% ({latest.correctAnswers}/{latest.totalQuestions})</div>
                                     <div className="text-xs text-gray-500 mt-1">Completed: {latest.completedAt ? new Date(latest.completedAt).toLocaleString() : '—'}</div>
                                     {(latest.systemLevel || latest.userConfirmedLevel || latest.managerSelectedLevel) && (
-                                      <div className="text-xs text-gray-700 mt-2">
-                                        <span className="mr-2">System: {latest.systemLevel || '—'}</span>
-                                        <span className="mr-2">User: {latest.userConfirmedLevel || '—'}</span>
-                                        <span>Manager: {latest.managerSelectedLevel || '—'}</span>
-                                      </div>
+                                    <div className="text-xs text-gray-700 mt-2">
+                                      <span className="mr-2">
+                                        System: {latest.systemLevel ? getLevelDisplayName(latest.systemLevel) : '—'}
+                                      </span>
+                                      <span className="mr-2">
+                                        User: {latest.userConfirmedLevel ? getLevelDisplayName(latest.userConfirmedLevel) : '—'}
+                                      </span>
+                                      <span>
+                                        Manager: {latest.managerSelectedLevel ? getLevelDisplayName(latest.managerSelectedLevel) : '—'}
+                                      </span>
+                                    </div>
                                     )}
                                   </>
                                 )}
@@ -1349,10 +1356,10 @@ const TeamEmployees = () => {
                                   }`}
                                 >
                                   <option value="">Set Manager Level</option>
-                                  <option value="BASIC">BASIC</option>
-                                  <option value="INTERMEDIATE">INTERMEDIATE</option>
-                                  <option value="ADVANCED">ADVANCED</option>
-                                  <option value="MASTERY">MASTERY</option>
+                                  <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                                  <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                                  <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
+                                  <option value="MASTERY">{getLevelDisplayName('MASTERY')}</option>
                                 </select>
                                 <Button 
                                   size="sm" 
@@ -1750,7 +1757,7 @@ const TeamEmployees = () => {
                     </div>
                     {(assessmentDetail.systemLevel || assessmentDetail.userConfirmedLevel) && (
                       <div className="mt-2 text-sm text-gray-700">
-                        System Level: {assessmentDetail.systemLevel || '—'} | User Level: {assessmentDetail.userConfirmedLevel || '—'}
+                        System Level: {assessmentDetail.systemLevel ? getLevelDisplayName(assessmentDetail.systemLevel) : '—'} | User Level: {assessmentDetail.userConfirmedLevel ? getLevelDisplayName(assessmentDetail.userConfirmedLevel) : '—'}
                       </div>
                     )}
                   </div>

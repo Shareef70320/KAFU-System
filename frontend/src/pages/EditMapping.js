@@ -21,6 +21,7 @@ import {
   Save
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const EditMapping = () => {
   const { toast } = useToast();
@@ -478,10 +479,10 @@ const EditMapping = () => {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="BASIC">Basic</SelectItem>
-                                  <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
-                                  <SelectItem value="ADVANCED">Advanced</SelectItem>
-                                  <SelectItem value="MASTERY">Mastery</SelectItem>
+                                  <SelectItem value="BASIC">{getLevelDisplayName('BASIC')}</SelectItem>
+                                  <SelectItem value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</SelectItem>
+                                  <SelectItem value="ADVANCED">{getLevelDisplayName('ADVANCED')}</SelectItem>
+                                  <SelectItem value="MASTERY">{getLevelDisplayName('MASTERY')}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>

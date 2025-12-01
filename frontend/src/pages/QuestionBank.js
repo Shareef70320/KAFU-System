@@ -28,6 +28,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 import CreateQuestionModal from '../components/CreateQuestionModal';
 import EditQuestionModal from '../components/EditQuestionModal';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const QuestionBank = () => {
   const navigate = useNavigate();
@@ -515,7 +516,7 @@ const QuestionBank = () => {
               <option value="">All Levels</option>
               {levels.map(level => (
                 <option key={level.id} value={level.id}>
-                  {level.level}
+                  {getLevelDisplayName(level.level)}
                 </option>
               ))}
             </select>

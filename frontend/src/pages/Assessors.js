@@ -23,6 +23,7 @@ import {
 import EmployeePhoto from '../components/EmployeePhoto';
 import api from '../lib/api';
 import { useToast } from '../components/ui/use-toast';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const Assessors = () => {
   const [mappings, setMappings] = useState([]);
@@ -385,9 +386,9 @@ const Assessors = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <option value="">All Levels</option>
-                <option value="BASIC">Basic</option>
-                <option value="INTERMEDIATE">Intermediate</option>
-                <option value="ADVANCED">Advanced</option>
+                <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
               </select>
             </div>
           </div>
@@ -750,10 +751,14 @@ const Assessors = () => {
                                     onClick={(e) => e.stopPropagation()}
                                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                   >
-                                    <option value="BASIC">Basic</option>
-                                    <option value="INTERMEDIATE">Intermediate</option>
-                                    <option value="ADVANCED">Advanced</option>
-                                    <option value="MASTERY">Mastery</option>
+                <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
+                <option value="MASTERY">{getLevelDisplayName('MASTERY')}</option>
+                                    <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                                    <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                                    <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
+                                    <option value="MASTERY">{getLevelDisplayName('MASTERY')}</option>
                                   </select>
                                 </div>
                               )}
@@ -796,7 +801,7 @@ const Assessors = () => {
                               comp.competencyLevel === 'ADVANCED' ? 'bg-green-100 text-green-800' :
                               'bg-purple-100 text-purple-800'
                             }`}>
-                              {comp.competencyLevel}
+                              {getLevelDisplayName(comp.competencyLevel)}
                             </span>
                             <button
                               onClick={() => {
@@ -845,7 +850,7 @@ const Assessors = () => {
                                 comp.competencyLevel === 'ADVANCED' ? 'bg-green-100 text-green-800' :
                                 'bg-purple-100 text-purple-800'
                               }`}>
-                                {comp.competencyLevel}
+                                {getLevelDisplayName(comp.competencyLevel)}
                               </span>
                             </div>
                           );
@@ -955,10 +960,10 @@ const Assessors = () => {
                   <label className="block text-lg font-medium text-gray-900 mb-4">Update Competency Level</label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                      { value: 'BASIC', label: 'Basic', description: 'Fundamental understanding', color: 'blue' },
-                      { value: 'INTERMEDIATE', label: 'Intermediate', description: 'Practical application', color: 'yellow' },
-                      { value: 'ADVANCED', label: 'Advanced', description: 'Expert level mastery', color: 'green' },
-                      { value: 'MASTERY', label: 'Mastery', description: 'Leadership and guidance', color: 'purple' }
+                      { value: 'BASIC', label: getLevelDisplayName('BASIC'), description: 'Understands fundamentals', color: 'blue' },
+                      { value: 'INTERMEDIATE', label: getLevelDisplayName('INTERMEDIATE'), description: 'Applies knowledge independently', color: 'yellow' },
+                      { value: 'ADVANCED', label: getLevelDisplayName('ADVANCED'), description: 'Consistently proficient', color: 'green' },
+                      { value: 'MASTERY', label: getLevelDisplayName('MASTERY'), description: 'Leads and coaches others', color: 'purple' }
                     ].map((level) => (
                       <button
                         key={level.value}

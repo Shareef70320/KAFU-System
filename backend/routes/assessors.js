@@ -44,6 +44,44 @@ router.get('/competency/:competencyId', async (req, res) => {
   }
 });
 
+// Check if a user is an assessor
+router.get('/check/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Check if is_active column exists, if not, just check for any assessor_competencies entry
+    let assessorCount;
+    try {
+      assessorCount = await prisma.$queryRaw`
+        SELECT COUNT(*)::int as count
+        FROM assessor_competencies
+        WHERE assessor_sid = ${userId}
+          AND (is_active = true OR is_active IS NULL)
+      `;
+    } catch (err) {
+      // If is_active column doesn't exist, check without it
+      assessorCount = await prisma.$queryRaw`
+        SELECT COUNT(*)::int as count
+        FROM assessor_competencies
+        WHERE assessor_sid = ${userId}
+      `;
+    }
+    
+    const isAssessor = (assessorCount[0]?.count || 0) > 0;
+    
+    res.json({
+      success: true,
+      isAssessor: isAssessor
+    });
+  } catch (error) {
+    console.error('Error checking assessor status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check assessor status'
+    });
+  }
+});
+
 // Get all assessor-competency mappings
 router.get('/', async (req, res) => {
   try {

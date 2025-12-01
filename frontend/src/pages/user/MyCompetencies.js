@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -12,14 +13,20 @@ import {
   Target,
   BarChart3,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Play,
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
 import api from '../../lib/api';
+import { getLevelDisplayName } from '../../utils/competencyLevels';
 
 const MyCompetencies = () => {
   const { currentSid } = useUser();
+  const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
+  const [expandedCompetency, setExpandedCompetency] = useState(null);
 
   console.log('MyCompetencies - currentSid:', currentSid);
 
@@ -86,15 +93,42 @@ const MyCompetencies = () => {
     enabled: !!jobId
   });
 
-  // Filter competencies to only those mapped to the user's job
+  // Filter competencies to only those mapped to the user's job and enrich with JCP data
   const competencies = useMemo(() => {
     const all = competenciesData?.competencies || [];
     if (!jobId) return [];
     const mappings = mappingsData?.mappings || [];
     if (!mappings.length) return [];
     const allowedIds = new Set(mappings.map(m => m.competencyId));
-    return all.filter(c => allowedIds.has(c.id));
+    const filtered = all.filter(c => allowedIds.has(c.id));
+    
+    // Enrich with required level from JCP mappings
+    return filtered.map(comp => {
+      const mapping = mappings.find(m => m.competencyId === comp.id);
+      return {
+        ...comp,
+        requiredLevel: mapping?.requiredLevel || null
+      };
+    });
   }, [competenciesData, mappingsData, jobId]);
+
+  // Fetch full competency details for expanded view
+  const { data: fullCompetencyDetails } = useQuery({
+    queryKey: ['competency-details', expandedCompetency],
+    queryFn: async () => {
+      if (!expandedCompetency) return null;
+      const response = await api.get(`/competencies/${expandedCompetency}`);
+      return response.data;
+    },
+    enabled: !!expandedCompetency
+  });
+
+  const handleStartAssessment = (competency) => {
+    // Navigate to assessments page with competency pre-selected
+    navigate('/user/assessments', { 
+      state: { selectedCompetencyId: competency.id } 
+    });
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -140,10 +174,6 @@ const MyCompetencies = () => {
 
   return (
     <div className="space-y-6">
-      {/* Debug banner */}
-      <div className="text-xs text-gray-500 bg-yellow-50 border border-yellow-200 rounded p-2">
-        SID: {String(currentSid)} | job_code: {String(employeeData?.job_code || 'N/A')} | competencies: {competencies.length}
-      </div>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -242,16 +272,52 @@ const MyCompetencies = () => {
                   Contact your HR department to set up your competency profile.
                 </p>
               </div>
-            ) : competencies.map((competency) => (
-              <div key={competency.id} className="border border-gray-200 rounded-lg p-4">
+            ) : competencies.map((competency) => {
+              const isExpanded = expandedCompetency === competency.id;
+              const fullDetails = isExpanded ? fullCompetencyDetails : null;
+              
+              return (
+              <div key={competency.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">{competency.name}</h3>
-                    <div className="flex items-center space-x-4 mt-2">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-lg font-semibold text-gray-900">{competency.name}</h3>
+                      {competency.code && (
+                        <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {competency.code}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Type and Family */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                        {competency.type}
+                      </span>
+                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                        {competency.family}
+                      </span>
+                      {competency.related_division && (
+                        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                          {competency.related_division}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick Info */}
+                    <div className="flex items-center space-x-4 mt-2 flex-wrap gap-2">
+                      {competency.requiredLevel && (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-500">Required:</span>
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.requiredLevel)}`}>
+                            {getLevelDisplayName(competency.requiredLevel)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-500">Questions Available:</span>
+                        <span className="text-sm text-gray-500">Questions:</span>
                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                          {competency.questionCount}
+                          {competency.questionCount || 0}
                         </span>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -263,49 +329,154 @@ const MyCompetencies = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-sm text-gray-500">
+
+                {/* Description */}
+                <div className="text-sm text-gray-600 mb-3">
                   <p>{competency.description || 'No description available'}</p>
                 </div>
 
-                {/* Competency Status - Show all three levels if available */}
-                {(competency.userConfirmedLevel || competency.managerSelectedLevel) && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Competency Status</h4>
-                    <div className="space-y-2">
-                      {competency.userConfirmedLevel && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Your Level:</span>
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getLevelColor(competency.userConfirmedLevel)}`}>
-                            {competency.userConfirmedLevel}
-                          </span>
-                        </div>
-                      )}
-                      {competency.managerSelectedLevel && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Manager Level:</span>
-                          <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getLevelColor(competency.managerSelectedLevel)}`}>
-                            {competency.managerSelectedLevel}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                {/* Expand/Collapse Button */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExpandedCompetency(isExpanded ? null : competency.id)}
+                    className="text-gray-600 hover:text-gray-900"
+                  >
+                    <Info className="h-4 w-4 mr-1" />
+                    {isExpanded ? 'Show Less' : 'Show More Details'}
+                    <ChevronRight className={`h-4 w-4 ml-1 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                  </Button>
 
-                {/* Action Button - Only show if competency has questions and assessments */}
-                {competency.hasQuestions && competency.hasAssessment && (
-                  <div className="mt-4 flex justify-end">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => window.location.href = '/user/assessments'}
-                    >
-                      Take Assessment
-                    </Button>
+                  {/* Start Assessment Button */}
+                  <Button 
+                    onClick={() => handleStartAssessment(competency)}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    size="sm"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Assessment
+                  </Button>
+                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && fullDetails && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
+                    {/* Competency Definition */}
+                    {fullDetails.definition && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-900 mb-2">Definition</h5>
+                        <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
+                          {fullDetails.definition}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Competency Levels */}
+                    {fullDetails.levels && fullDetails.levels.length > 0 && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-900 mb-3">Level Definitions</h5>
+                        <div className="space-y-4">
+                          {fullDetails.levels.map((level, levelIndex) => (
+                            <div key={levelIndex} className={`p-4 rounded-lg border ${
+                              level.level === competency.requiredLevel 
+                                ? 'border-blue-300 bg-blue-50' 
+                                : 'border-gray-200 bg-white'
+                            }`}>
+                              {/* Level Header */}
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-semibold px-3 py-1 rounded-full ${getLevelColor(level.level)}`}>
+                                    {getLevelDisplayName(level.level)}
+                                  </span>
+                                  {level.level === competency.requiredLevel && (
+                                    <span className="text-xs text-blue-600 font-medium bg-blue-100 px-2 py-1 rounded">Required</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Level Title */}
+                              <h6 className="text-base font-semibold text-gray-900 mb-2">{level.title}</h6>
+
+                              {/* Level Description */}
+                              {level.description && (
+                                <div className="mb-3">
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                    {level.description}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Indicators */}
+                              {level.indicators && Array.isArray(level.indicators) && level.indicators.length > 0 && (
+                                <div className="mb-3">
+                                  <div className="text-xs font-semibold text-gray-700 mb-2">Indicators:</div>
+                                  <ul className="list-disc list-inside space-y-1">
+                                    {level.indicators.map((indicator, idx) => (
+                                      <li key={idx} className="text-xs text-gray-600">{indicator}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {/* Elements */}
+                              {level.elements && Array.isArray(level.elements) && level.elements.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                  <div className="text-xs font-semibold text-gray-700 mb-2">Elements:</div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {level.elements.map((element) => (
+                                      <div key={element.id} className="bg-gray-50 rounded-md p-2 border border-gray-200">
+                                        <div className="text-xs font-medium text-gray-900">{element.name}</div>
+                                        {element.description && (
+                                          <div className="text-xs text-gray-600 mt-1">{element.description}</div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Assessment Status */}
+                    {(competency.userConfirmedLevel || competency.managerSelectedLevel || competency.systemLevel) && (
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                        <h4 className="text-sm font-medium text-gray-900 mb-2">Assessment Status</h4>
+                        <div className="space-y-2">
+                          {competency.systemLevel && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">System Assessment:</span>
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getLevelColor(competency.systemLevel)}`}>
+                                {getLevelDisplayName(competency.systemLevel)}
+                              </span>
+                            </div>
+                          )}
+                          {competency.userConfirmedLevel && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Your Self Assessment:</span>
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getLevelColor(competency.userConfirmedLevel)}`}>
+                                {getLevelDisplayName(competency.userConfirmedLevel)}
+                              </span>
+                            </div>
+                          )}
+                          {competency.managerSelectedLevel && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Manager Assessment:</span>
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getLevelColor(competency.managerSelectedLevel)}`}>
+                                {getLevelDisplayName(competency.managerSelectedLevel)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            ))}
+            )})}
           </div>
         </CardContent>
       </Card>

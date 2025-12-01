@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Card, 
   CardContent, 
@@ -27,15 +27,20 @@ import { useToast } from '../../components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUser } from '../../contexts/UserContext';
 import api from '../../lib/api';
+import { getLevelDisplayName } from '../../utils/competencyLevels';
 
 const UserAssessments = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currentSid } = useUser();
   const currentUserId = currentSid;
   
   console.log('UserAssessments component - currentSid:', currentSid, 'currentUserId:', currentUserId);
+  
+  // Get pre-selected competency from navigation state
+  const preselectedCompetencyId = location.state?.selectedCompetencyId;
   
   // State for assessment flow
   const [currentStep, setCurrentStep] = useState('select'); // select, taking, confirmLevel, results
@@ -297,16 +302,40 @@ const UserAssessments = () => {
       managerAssessment: true
     };
     
-    if (components.systemAssessment) {
-      // Start System Assessment (quiz)
+    // Check if competency has questions
+    const hasQuestions = competency.hasQuestions && competency.questionCount > 0;
+    
+    if (components.systemAssessment && hasQuestions) {
+      // Start System Assessment (quiz) if questions are available
       setCurrentComponent('systemAssessment');
       startAssessmentMutation.mutate(competency.id);
-    } else {
+    } else if (components.employeeSelfAssessment) {
       // Skip to Employee Self Assessment (level confirmation)
+      // This works even if there are no questions
       setCurrentComponent('employeeSelfAssessment');
       setCurrentStep('confirmLevel');
+    } else {
+      toast({
+        title: "Cannot Start Assessment",
+        description: "No assessment components are available for this competency.",
+        variant: "destructive",
+      });
     }
   };
+
+  // Handle pre-selected competency from navigation (must be after handleStartAssessment is defined)
+  useEffect(() => {
+    if (preselectedCompetencyId && competenciesData?.competencies && cycleStatus !== undefined && !selectedCompetency) {
+      const competency = competenciesData.competencies.find(c => c.id === preselectedCompetencyId);
+      if (competency) {
+        // Small delay to ensure everything is ready
+        setTimeout(() => {
+          handleStartAssessment(competency);
+        }, 100);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectedCompetencyId, competenciesData, cycleStatus, selectedCompetency]);
 
   const handleAnswerChange = (questionId, answer) => {
     setAnswers(prev => ({
@@ -452,16 +481,36 @@ const UserAssessments = () => {
     const attemptsUsed = attemptsData?.attemptsUsed || 0;
     const maxAttempts = attemptsData?.maxAttempts || 0;
     const hasManagerLevel = Boolean(competency.managerSelectedLevel);
+    const hasUserLevel = Boolean(competency.userConfirmedLevel);
+    const hasSystemLevel = Boolean(competency.systemLevel);
+    const hasQuestions = competency.hasQuestions && competency.questionCount > 0;
     
     // Check if cycle is activated
     const cycleActivated = cycleStatus?.canCreate !== false;
     const cycleDisabled = !cycleActivated;
     const cycleMessage = cycleStatus?.reason || cycleStatus?.statusMessage || 'Assessment period is currently closed.';
     
-    const attemptsInfo = hasManagerLevel
-      ? ' (Finalized)'
-      : (attemptsLoading ? '' : (attemptsLeft > 0 ? ` (${attemptsLeft} left)` : ' (No attempts left)'));
-    const disabled = hasManagerLevel || (!attemptsLoading && attemptsLeft === 0) || cycleDisabled;
+    // Check if Employee Self Assessment is active
+    const components = cycleStatus?.components || {
+      systemAssessment: true,
+      employeeSelfAssessment: true,
+      assessorAssessment: true,
+      managerAssessment: true
+    };
+    const canDoSelfAssessment = components.employeeSelfAssessment && cycleActivated;
+    
+    // Allow assessment if:
+    // 1. Cycle is active AND
+    // 2. (Has questions for System Assessment OR can do Self Assessment) AND
+    // 3. Not finalized by manager AND
+    // 4. Has attempts left (if System Assessment is required)
+    const canStartAssessment = cycleActivated && 
+      (hasQuestions || canDoSelfAssessment) && 
+      !hasManagerLevel && 
+      (hasQuestions ? (!attemptsLoading && attemptsLeft > 0) : true);
+    
+    const disabled = !canStartAssessment || startAssessmentMutation.isPending;
+    
     return (
       <Card key={competency.id} className="hover:shadow-lg transition-shadow">
         <CardHeader>
@@ -475,14 +524,66 @@ const UserAssessments = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Play className="h-4 w-4" />
-              <span>{(typeof numQ === 'number' && numQ > 0) ? numQ : '…'} Questions</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Clock className="h-4 w-4" />
-              <span>{(typeof tlm === 'number' && tlm > 0) ? tlm : '…'} Minutes</span>
-            </div>
+            {/* Assessment Status - Show all assessment types */}
+            {(hasSystemLevel || hasUserLevel || hasManagerLevel) && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="text-xs font-medium text-blue-900 mb-2">Assessment Status</div>
+                <div className="space-y-1">
+                  {hasSystemLevel && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-blue-700">System Assessment:</span>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${getLevelColor(competency.systemLevel)}`}>
+                        {getLevelDisplayName(competency.systemLevel)}
+                      </span>
+                    </div>
+                  )}
+                  {hasUserLevel && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-blue-700">Your Self Assessment:</span>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${getLevelColor(competency.userConfirmedLevel)}`}>
+                        {getLevelDisplayName(competency.userConfirmedLevel)}
+                      </span>
+                    </div>
+                  )}
+                  {hasManagerLevel && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-blue-700">Manager Assessment:</span>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${getLevelColor(competency.managerSelectedLevel)}`}>
+                        {getLevelDisplayName(competency.managerSelectedLevel)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* System Assessment Info - Only show if questions are available */}
+            {hasQuestions && (
+              <>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Play className="h-4 w-4" />
+                  <span>{numQ || competency.questionCount || '…'} Questions</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Clock className="h-4 w-4" />
+                  <span>{(typeof tlm === 'number' && tlm > 0) ? tlm : '…'} Minutes</span>
+                </div>
+              </>
+            )}
+            
+            {/* Self Assessment Only Notice */}
+            {!hasQuestions && canDoSelfAssessment && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-green-800">
+                    <div className="font-medium mb-1">Self Assessment Available</div>
+                    <div className="text-green-700">You can assess your competency level directly</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-2">
               {cycleDisabled && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
@@ -498,7 +599,7 @@ const UserAssessments = () => {
               <Button 
                 onClick={() => handleStartAssessment(competency)}
                 className="w-full"
-                disabled={startAssessmentMutation.isPending || disabled}
+                disabled={disabled}
                 variant={disabled ? "secondary" : "default"}
               >
                 {startAssessmentMutation.isPending ? (
@@ -526,7 +627,7 @@ const UserAssessments = () => {
                 ) : (
                   <>
                     <Play className="mr-2 h-4 w-4" />
-                    Start Assessment{attemptsInfo}
+                    Start Assessment
                   </>
                 )}
               </Button>
@@ -708,7 +809,7 @@ const UserAssessments = () => {
                               <div>
                                 <span className="text-sm text-gray-600">System Assessment: </span>
                                 <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.systemLevel)}`}>
-                                  {dashboardData.systemLevel}
+                                  {getLevelDisplayName(dashboardData.systemLevel)}
                                 </span>
                               </div>
                             )}
@@ -716,7 +817,7 @@ const UserAssessments = () => {
                               <div>
                                 <span className="text-sm text-gray-600">Your Self Assessment: </span>
                                 <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.userConfirmedLevel)}`}>
-                                  {dashboardData.userConfirmedLevel}
+                                  {getLevelDisplayName(dashboardData.userConfirmedLevel)}
                                 </span>
                               </div>
                             )}
@@ -724,7 +825,7 @@ const UserAssessments = () => {
                               <div>
                                 <span className="text-sm text-gray-600">Manager Assessment: </span>
                                 <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.managerSelectedLevel)}`}>
-                                  {dashboardData.managerSelectedLevel}
+                                  {getLevelDisplayName(dashboardData.managerSelectedLevel)}
                                 </span>
                               </div>
                             )}
@@ -767,17 +868,17 @@ const UserAssessments = () => {
                                 <div className="flex flex-wrap gap-2 mt-2">
                                   {assessment.systemLevel && (
                                     <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.systemLevel)}`}>
-                                      System: {assessment.systemLevel}
+                                      System: {getLevelDisplayName(assessment.systemLevel)}
                                     </span>
                                   )}
                                   {assessment.userConfirmedLevel && (
                                     <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.userConfirmedLevel)}`}>
-                                      Self: {assessment.userConfirmedLevel}
+                                      Self: {getLevelDisplayName(assessment.userConfirmedLevel)}
                                     </span>
                                   )}
                                   {assessment.managerSelectedLevel && (
                                     <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.managerSelectedLevel)}`}>
-                                      Manager: {assessment.managerSelectedLevel}
+                                      Manager: {getLevelDisplayName(assessment.managerSelectedLevel)}
                                     </span>
                                   )}
                                 </div>
@@ -1122,7 +1223,7 @@ const UserAssessments = () => {
                         >
                           <div className="flex items-start justify-between mb-2">
                             <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${getLevelColor(level.level)}`}>
-                              {level.level}
+                              {getLevelDisplayName(level.level)}
                             </span>
                             {level.title && (
                               <span className="text-sm font-medium text-gray-900">{level.title}</span>
@@ -1222,7 +1323,7 @@ const UserAssessments = () => {
                               }
                               
                               setUserConfirmedLevel(level);
-                              toast({ title: 'Level Confirmed', description: `You selected ${level}` });
+                              toast({ title: 'Level Confirmed', description: `You selected ${getLevelDisplayName(level)}` });
                               
                               // Check for next active component
                               const nextComponent = getNextActiveComponent(currentComponent);
@@ -1261,7 +1362,7 @@ const UserAssessments = () => {
                           }}
                           className={`px-4 py-4 rounded-lg border-2 text-sm font-semibold transition-all duration-200 ${getLevelColor(level)} hover:opacity-90 hover:scale-105 active:scale-95 border-transparent hover:border-current flex flex-col items-center justify-center min-h-[80px]`}
                         >
-                          <span>{level}</span>
+                          <span>{getLevelDisplayName(level)}</span>
                           {levelDetails?.title && (
                             <span className="text-xs font-normal mt-1 opacity-80">{levelDetails.title}</span>
                           )}
@@ -1315,7 +1416,7 @@ const UserAssessments = () => {
                 <div className="text-center">
                   <div className="text-lg font-medium text-gray-900 mb-2">Competency Level (Assessment Result)</div>
                   <span className={`inline-flex px-4 py-2 rounded-full text-sm font-medium ${getLevelColor(assessmentResult.competencyLevel)}`}>
-                    {assessmentResult.competencyLevel}
+                    {getLevelDisplayName(assessmentResult.competencyLevel)}
                   </span>
                 </div>
               )}
@@ -1325,7 +1426,7 @@ const UserAssessments = () => {
                     <div className="text-sm font-medium text-gray-900 mb-2">Your Confirmed Level</div>
                     <div className="flex justify-center">
                       <span className={`inline-flex px-6 py-3 rounded-lg text-lg font-semibold ${getLevelColor(userConfirmedLevel)} border-2 border-current shadow-lg`}>
-                        {userConfirmedLevel}
+                        {getLevelDisplayName(userConfirmedLevel)}
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 mt-3">
@@ -1350,7 +1451,7 @@ const UserAssessments = () => {
                                 userConfirmedLevel: level
                               });
                               setUserConfirmedLevel(level);
-                              toast({ title: 'Level Confirmed', description: `You selected ${level}` });
+                              toast({ title: 'Level Confirmed', description: `You selected ${getLevelDisplayName(level)}` });
                               // Refresh competencies data to show updated level
                               queryClient.invalidateQueries(['user-assessments-competencies']);
                             } catch (e) {
@@ -1361,7 +1462,7 @@ const UserAssessments = () => {
                           }}
                           className={`px-3 py-2 rounded border text-sm font-medium transition-all duration-200 ${getLevelColor(level)} hover:opacity-90 hover:scale-105 active:scale-95`}
                         >
-                          {level}
+                          {getLevelDisplayName(level)}
                         </button>
                       ))}
                     </div>
@@ -1491,30 +1592,30 @@ const UserAssessments = () => {
                       <div className="text-center">
                         <div className="text-lg font-medium text-gray-900 mb-3">Assessment Levels</div>
                         <div className="space-y-2">
-                          {dashboardData.systemLevel && (
-                            <div>
-                              <span className="text-sm text-gray-600">System Assessment: </span>
-                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.systemLevel)}`}>
-                                {dashboardData.systemLevel}
-                              </span>
-                            </div>
-                          )}
-                          {dashboardData.userConfirmedLevel && (
-                            <div>
-                              <span className="text-sm text-gray-600">Your Self Assessment: </span>
-                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.userConfirmedLevel)}`}>
-                                {dashboardData.userConfirmedLevel}
-                              </span>
-                            </div>
-                          )}
-                          {dashboardData.managerSelectedLevel && (
-                            <div>
-                              <span className="text-sm text-gray-600">Manager Assessment: </span>
-                              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.managerSelectedLevel)}`}>
-                                {dashboardData.managerSelectedLevel}
-                              </span>
-                            </div>
-                          )}
+                            {dashboardData.systemLevel && (
+                              <div>
+                                <span className="text-sm text-gray-600">System Assessment: </span>
+                                <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.systemLevel)}`}>
+                                  {getLevelDisplayName(dashboardData.systemLevel)}
+                                </span>
+                              </div>
+                            )}
+                            {dashboardData.userConfirmedLevel && (
+                              <div>
+                                <span className="text-sm text-gray-600">Your Self Assessment: </span>
+                                <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.userConfirmedLevel)}`}>
+                                  {getLevelDisplayName(dashboardData.userConfirmedLevel)}
+                                </span>
+                              </div>
+                            )}
+                            {dashboardData.managerSelectedLevel && (
+                              <div>
+                                <span className="text-sm text-gray-600">Manager Assessment: </span>
+                                <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getLevelColor(dashboardData.managerSelectedLevel)}`}>
+                                  {getLevelDisplayName(dashboardData.managerSelectedLevel)}
+                                </span>
+                              </div>
+                            )}
                         </div>
                       </div>
                     )}
@@ -1554,17 +1655,17 @@ const UserAssessments = () => {
                               <div className="flex flex-wrap gap-2 mt-2">
                                 {assessment.systemLevel && (
                                   <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.systemLevel)}`}>
-                                    System: {assessment.systemLevel}
+                                    System: {getLevelDisplayName(assessment.systemLevel)}
                                   </span>
                                 )}
                                 {assessment.userConfirmedLevel && (
                                   <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.userConfirmedLevel)}`}>
-                                    Self: {assessment.userConfirmedLevel}
+                                    Self: {getLevelDisplayName(assessment.userConfirmedLevel)}
                                   </span>
                                 )}
                                 {assessment.managerSelectedLevel && (
                                   <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getLevelColor(assessment.managerSelectedLevel)}`}>
-                                    Manager: {assessment.managerSelectedLevel}
+                                    Manager: {getLevelDisplayName(assessment.managerSelectedLevel)}
                                   </span>
                                 )}
                               </div>

@@ -166,6 +166,95 @@ docker-compose logs frontend --tail=10
 
 ---
 
+## 🧩 **Competency Elements & Performance Indicators Not Persisting**
+
+### **Problem:**
+- After using **Bulk Add (All Levels)** in **Edit Competency**, the page shows elements and performance indicators for each level.
+- A success message appears, e.g.:
+  - `Added 31 elements and 81 performance indicators across all levels.`
+- But after clicking **Save Changes** on the competency and refreshing, the elements and indicators disappear.
+
+### **Root Cause:**
+- The `PUT /competencies/:id` endpoint was designed to manage **levels only** (for legacy use):
+  - When `levels` is sent in the body, the backend:
+    - Deletes all existing `competency_levels` for that competency:
+      ```sql
+      DELETE FROM competency_levels WHERE competency_id = :id
+      ```
+    - Recreates the levels from the `levels` array in the request.
+  - Because `competency_elements` has a foreign key to `competency_levels` with `ON DELETE CASCADE`, **all elements and their performance indicators were deleted** every time the competency was saved with `levels` in the payload.
+- The frontend `EditCompetency` page was sending `levels` in the `handleSubmit` payload, even though:
+  - Levels, elements, and indicators are now managed via dedicated endpoints.
+
+### **Symptoms:**
+- Bulk Add for whole competency appears to work:
+  - Elements and indicators show per level in **Edit Competency**.
+  - Success toast: `Added X elements and Y performance indicators across all levels.`
+- After clicking **Save Changes**:
+  - Success toast: `Competency updated successfully!`
+  - On page refresh, **all newly added elements and indicators are gone**.
+
+### **Fix (Frontend):**
+- In `frontend/src/pages/EditCompetency.js`, update `handleSubmit` so it does **not** send `levels` in the payload.
+- Before (problematic):
+  ```js
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const updateData = {
+        ...formData,
+        levels: levels.map(level => ({
+          id: level.id,
+          level: level.level,
+          title: getLevelDisplayLabel(level.level) || level.title,
+          description: level.description,
+          indicators: level.indicators || []
+        }))
+      };
+
+      await updateCompetencyMutation.mutateAsync(updateData);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  ```
+- After (correct – only update core fields, not levels/elements/indicators):
+  ```js
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      // Only update main competency fields
+      await updateCompetencyMutation.mutateAsync(formData);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  ```
+
+### **Important Design Rule:**
+- **Do NOT send `levels` in the body of `PUT /competencies/:id`** once:
+  - `competency_levels`
+  - `competency_elements`
+  - `competency_performance_indicators`
+  are managed via their own endpoints.
+- Otherwise:
+  - `competencyLevel.deleteMany()` will wipe out levels.
+  - Cascade deletes will remove all elements and indicators.
+
+### **How to Confirm Fix:**
+1. Go to **Edit Competency** (e.g., `Customer Experience Management`).
+2. Use **Bulk Add (All Levels)** to add elements and indicators.
+3. Click **Add All Levels** and ensure the success toast appears.
+4. Click **Save Changes**.
+5. Refresh the page:
+   - Elements and performance indicators should still be visible under each level.
+
+---
+
 ## 🎯 **Current Working State**
 
 - **Frontend:** Built with current code, showing 1,254 employees

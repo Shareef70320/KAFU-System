@@ -20,6 +20,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const AddMapping = () => {
   const { toast } = useToast();
@@ -686,10 +687,10 @@ const AddMapping = () => {
                               className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                               <option value="">Select Level</option>
-                              <option value="BASIC">Basic</option>
-                              <option value="INTERMEDIATE">Intermediate</option>
-                              <option value="ADVANCED">Advanced</option>
-                              <option value="MASTERY">Mastery</option>
+                              <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                              <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                              <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
+                              <option value="MASTERY">{getLevelDisplayName('MASTERY')}</option>
                             </select>
                             <Button
                               size="sm"

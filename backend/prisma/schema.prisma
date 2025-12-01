@@ -148,7 +148,7 @@ model Competency {
   jobCompetencies   JobCompetency[]
   questions         Question[]
   assessments_new   Assessment[]
-  elements          CompetencyElement[]
+  elements          CompetencyElement[] // Legacy - elements should now be linked to levels
   
   @@map("competencies")
   @@unique([name, type, family])
@@ -186,6 +186,7 @@ model CompetencyLevel {
   assessments       CompetencyAssessment[]
   questions         Question[]
   assessments_new   Assessment[]
+  elements          CompetencyElement[]
   
   @@unique([competencyId, level])
   @@map("competency_levels")
@@ -193,7 +194,8 @@ model CompetencyLevel {
 
 model CompetencyElement {
   id                String    @id @default(cuid()) @map("id")
-  competencyId      String    @map("competency_id")
+  competencyId      String?   @map("competency_id") // Optional for backward compatibility
+  competencyLevelId String    @map("competency_level_id") // Required - links to specific level
   name              String    @map("name") // Element name/title
   description       String?   @map("description") // Optional description
   order             Int       @default(0) @map("order") // Order/sequence for display
@@ -202,9 +204,26 @@ model CompetencyElement {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   
   // Relations
-  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  competency        Competency? @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  competencyLevel   CompetencyLevel @relation(fields: [competencyLevelId], references: [id], onDelete: Cascade)
+  performanceIndicators CompetencyPerformanceIndicator[] // Performance indicators for this element
   
   @@map("competency_elements")
+}
+
+model CompetencyPerformanceIndicator {
+  id                String    @id @default(cuid()) @map("id")
+  elementId         String    @map("element_id") // Links to CompetencyElement
+  action            String    @map("action") // Action or task description
+  order             Int       @default(0) @map("order") // Order/sequence for display
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  element           CompetencyElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  
+  @@map("competency_performance_indicators")
 }
 
 model CompetencyDocument {

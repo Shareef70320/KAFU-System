@@ -11,6 +11,7 @@ import {
   Search, Filter, X
 } from 'lucide-react';
 import api from '../lib/api';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const LDInterventions = () => {
   const qc = useQueryClient();
@@ -681,9 +682,9 @@ const LDInterventions = () => {
                     onChange={e => setTypeForm({ ...typeForm, complexity_level: e.target.value })} 
                     className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                   >
-                    <option value="BASIC">Basic</option>
-                    <option value="INTERMEDIATE">Intermediate</option>
-                    <option value="ADVANCED">Advanced</option>
+                    <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                    <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                    <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
                     <option value="EXPERT">Expert</option>
                   </select>
                 </div>
@@ -756,9 +757,9 @@ const LDInterventions = () => {
                 <div>
                   <Label htmlFor="edit-type-complexity">Complexity Level</Label>
                   <select id="edit-type-complexity" name="complexity_level" defaultValue={editingType.complexity_level || 'MEDIUM'} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-                    <option value="BASIC">Basic</option>
-                    <option value="INTERMEDIATE">Intermediate</option>
-                    <option value="ADVANCED">Advanced</option>
+                    <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                    <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                    <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
                     <option value="EXPERT">Expert</option>
                   </select>
                 </div>

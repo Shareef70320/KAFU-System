@@ -24,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
 import EmployeePhoto from '../../components/EmployeePhoto';
+import { getLevelDisplayName } from '../../utils/competencyLevels';
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -564,19 +565,19 @@ const UserDashboard = () => {
                   <div className="text-2xl font-bold text-blue-600">
                     {jcpData.competencies.filter(c => c.required_level === 'BASIC').length}
                   </div>
-                  <div className="text-sm text-gray-500">Basic Level</div>
+                  <div className="text-sm text-gray-500">Aware Level</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-600">
                     {jcpData.competencies.filter(c => c.required_level === 'INTERMEDIATE').length}
                   </div>
-                  <div className="text-sm text-gray-500">Intermediate Level</div>
+                  <div className="text-sm text-gray-500">Knowledge Level</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">
                     {jcpData.competencies.filter(c => c.required_level === 'ADVANCED').length}
                   </div>
-                  <div className="text-sm text-gray-500">Advanced Level</div>
+                  <div className="text-sm text-gray-500">Skilled Level</div>
                 </div>
               </div>
             </div>

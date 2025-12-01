@@ -99,6 +99,35 @@ router.get('/competencies', async (req, res) => {
   try {
     const { userId } = req.query;
 
+    // Check if Employee Self Assessment is active in the current cycle
+    let employeeSelfAssessmentActive = false;
+    if (userId) {
+      try {
+        const { getActiveCycle, canCreateOrActivateAssessment } = require('../utils/assessmentCycle');
+        const activeCycle = await getActiveCycle();
+        const cycleCheck = await canCreateOrActivateAssessment(userId);
+        
+        // Employee Self Assessment is active if:
+        // 1. There's an active cycle
+        // 2. The cycle allows assessments (or user has exception)
+        // 3. The employeeSelfAssessment component is enabled
+        if (activeCycle && activeCycle.components && cycleCheck.allowed) {
+          employeeSelfAssessmentActive = activeCycle.components.employeeSelfAssessment === true;
+          console.log('[user-assessments/competencies] Employee Self Assessment active:', employeeSelfAssessmentActive, 'Cycle active:', cycleCheck.allowed);
+        } else {
+          console.log('[user-assessments/competencies] Cycle check:', {
+            hasActiveCycle: !!activeCycle,
+            hasComponents: !!(activeCycle?.components),
+            cycleAllowed: cycleCheck.allowed,
+            reason: cycleCheck.reason
+          });
+        }
+      } catch (err) {
+        console.warn('[user-assessments/competencies] Could not check cycle status:', err.message);
+        console.error(err);
+      }
+    }
+
     // Add simple rate limiting to prevent infinite loops
     const requestKey = `competencies_${userId}_${Date.now()}`;
     if (global.recentRequests && global.recentRequests[requestKey]) {
@@ -134,22 +163,46 @@ router.get('/competencies', async (req, res) => {
         console.warn('[user-assessments/competencies] debug queries failed:', dbgErr?.message || dbgErr);
       }
       // Filter competencies by the user's job_code via job_competency mappings
-      competencies = await prisma.$queryRaw`
-        SELECT DISTINCT 
-          c.id,
-          c.name,
-          c.description,
-          COALESCE(COUNT(DISTINCT q.id), 0) as question_count
-        FROM employees e
-        JOIN jobs j ON TRIM(UPPER(j.code)) = TRIM(UPPER(e.job_code))
-        JOIN job_competencies jc ON jc."jobId" = j.id
-        JOIN competencies c ON c.id = jc."competencyId"
-        LEFT JOIN questions q ON c.id = q."competencyId"
-        WHERE TRIM(UPPER(e.sid)) = TRIM(UPPER(${userId}))
-        GROUP BY c.id, c.name, c.description
-        HAVING COALESCE(COUNT(DISTINCT q.id), 0) > 0
-        ORDER BY c.name
-      `;
+      // If Employee Self Assessment is active, include all competencies (even without questions)
+      if (employeeSelfAssessmentActive) {
+        console.log('[user-assessments/competencies] Fetching ALL competencies for user (self-assessment active)');
+        competencies = await prisma.$queryRaw`
+          SELECT DISTINCT 
+            c.id,
+            c.name,
+            c.description,
+            COALESCE(COUNT(DISTINCT q.id), 0) as question_count
+          FROM employees e
+          JOIN jobs j ON TRIM(UPPER(j.code)) = TRIM(UPPER(e.job_code))
+          JOIN job_competencies jc ON jc."jobId" = j.id
+          JOIN competencies c ON c.id = jc."competencyId"
+          LEFT JOIN questions q ON c.id = q."competencyId"
+          WHERE TRIM(UPPER(e.sid)) = TRIM(UPPER(${userId}))
+          GROUP BY c.id, c.name, c.description
+          ORDER BY c.name
+        `;
+        console.log(`[user-assessments/competencies] Found ${competencies.length} total competencies (including those without questions)`);
+      } else {
+        console.log('[user-assessments/competencies] Fetching only competencies WITH questions');
+        // Original behavior: only competencies with questions
+        competencies = await prisma.$queryRaw`
+          SELECT DISTINCT 
+            c.id,
+            c.name,
+            c.description,
+            COALESCE(COUNT(DISTINCT q.id), 0) as question_count
+          FROM employees e
+          JOIN jobs j ON TRIM(UPPER(j.code)) = TRIM(UPPER(e.job_code))
+          JOIN job_competencies jc ON jc."jobId" = j.id
+          JOIN competencies c ON c.id = jc."competencyId"
+          LEFT JOIN questions q ON c.id = q."competencyId"
+          WHERE TRIM(UPPER(e.sid)) = TRIM(UPPER(${userId}))
+          GROUP BY c.id, c.name, c.description
+          HAVING COALESCE(COUNT(DISTINCT q.id), 0) > 0
+          ORDER BY c.name
+        `;
+        console.log(`[user-assessments/competencies] Found ${competencies.length} competencies with questions`);
+      }
       // Reduced logging - only log if there's an issue
       if (!competencies || competencies.length === 0) {
         console.log('[user-assessments/competencies] No competencies found for user:', userId);
@@ -176,20 +229,22 @@ router.get('/competencies', async (req, res) => {
       `;
     }
 
-    // Enrich with active assessment settings and filter out competencies without questions or assessments
-        const enriched = await Promise.all(
+    // Enrich with active assessment settings
+    // If Employee Self Assessment is active, include all competencies (even without questions/assessments)
+    const enriched = await Promise.all(
       competencies.map(async (comp) => {
         const assessment = await selectAssessmentForCompetency(comp.id, null);
         const hasQuestions = Number(comp.question_count) > 0;
         const hasAssessment = !!assessment;
-            // Pull latest saved levels for this user+competency
-            const levelsRow = await prisma.$queryRaw`
-              SELECT
-                MAX(user_confirmed_level) FILTER (WHERE user_confirmed_level IS NOT NULL) AS user_level,
-                MAX(manager_selected_level) FILTER (WHERE manager_selected_level IS NOT NULL) AS manager_level
-              FROM assessment_sessions
-              WHERE user_id = ${userId} AND competency_id = ${comp.id}
-            `;
+        // Pull latest saved levels for this user+competency
+        const levelsRow = await prisma.$queryRaw`
+          SELECT
+            MAX(user_confirmed_level) FILTER (WHERE user_confirmed_level IS NOT NULL) AS user_level,
+            MAX(manager_selected_level) FILTER (WHERE manager_selected_level IS NOT NULL) AS manager_level,
+            MAX(system_level) FILTER (WHERE system_level IS NOT NULL) AS system_level
+          FROM assessment_sessions
+          WHERE user_id = ${userId} AND competency_id = ${comp.id}
+        `;
         
         return {
           id: comp.id,
@@ -200,16 +255,23 @@ router.get('/competencies', async (req, res) => {
           timeLimitMinutes: assessment ? Number(assessment.timeLimit || 30) : 0,
           hasQuestions,
           hasAssessment,
-              userConfirmedLevel: levelsRow?.[0]?.user_level || null,
-              managerSelectedLevel: levelsRow?.[0]?.manager_level || null,
+          userConfirmedLevel: levelsRow?.[0]?.user_level || null,
+          managerSelectedLevel: levelsRow?.[0]?.manager_level || null,
+          systemLevel: levelsRow?.[0]?.system_level || null,
         };
       })
     );
 
-    // Filter out competencies that don't have questions OR assessments
-    const competenciesWithQuestionsAndAssessments = enriched.filter(comp => comp.hasQuestions && comp.hasAssessment);
+    // Filter: If Employee Self Assessment is active, include all competencies
+    // Otherwise, only include those with questions AND assessments
+    const filteredCompetencies = employeeSelfAssessmentActive
+      ? enriched // Include all when self-assessment is active
+      : enriched.filter(comp => comp.hasQuestions && comp.hasAssessment);
 
-    res.json({ success: true, competencies: competenciesWithQuestionsAndAssessments });
+    console.log(`[user-assessments/competencies] Returning ${filteredCompetencies.length} competencies (self-assessment active: ${employeeSelfAssessmentActive})`);
+    console.log(`[user-assessments/competencies] Breakdown: ${filteredCompetencies.filter(c => c.hasQuestions).length} with questions, ${filteredCompetencies.filter(c => !c.hasQuestions).length} without questions`);
+
+    res.json({ success: true, competencies: filteredCompetencies });
   } catch (error) {
     console.error('Error fetching competencies for assessment:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch competencies' });

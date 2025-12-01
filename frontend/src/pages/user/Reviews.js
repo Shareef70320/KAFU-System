@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../components/ui/use-toast';
 import api from '../../lib/api';
+import { getLevelDisplayName } from '../../utils/competencyLevels';
 import { useUser } from '../../contexts/UserContext';
 
 const Reviews = () => {
@@ -732,17 +733,17 @@ const Reviews = () => {
                                 <h4 className="font-semibold text-gray-900">{competency.competencyName}</h4>
                                 {competency.latestManagerLevel && (
                                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.latestManagerLevel)}`}>
-                                    Manager: {competency.latestManagerLevel}
+                                    Manager: {getLevelDisplayName(competency.latestManagerLevel)}
                                   </span>
                                 )}
                                 {competency.latestUserLevel && !competency.latestManagerLevel && (
                                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.latestUserLevel)}`}>
-                                    Self: {competency.latestUserLevel}
+                                    Self: {getLevelDisplayName(competency.latestUserLevel)}
                                   </span>
                                 )}
                                 {competency.latestSystemLevel && !competency.latestUserLevel && !competency.latestManagerLevel && (
                                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(competency.latestSystemLevel)}`}>
-                                    System: {competency.latestSystemLevel}
+                                    System: {getLevelDisplayName(competency.latestSystemLevel)}
                                   </span>
                                 )}
                                 {competency.latestScore !== null && (

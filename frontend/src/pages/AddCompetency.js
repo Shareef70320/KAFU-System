@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
+import { getLevelDisplayLabel, getLevelDisplayName } from '../utils/competencyLevels';
 import { 
   ArrowLeft, 
   Save, 
@@ -42,10 +43,10 @@ const AddCompetency = () => {
 
   // Initialize with all 4 required levels
   const [levels, setLevels] = useState([
-    { id: 'temp-basic', level: 'BASIC', title: 'BASIC Level', description: '', indicators: [] },
-    { id: 'temp-intermediate', level: 'INTERMEDIATE', title: 'INTERMEDIATE Level', description: '', indicators: [] },
-    { id: 'temp-advanced', level: 'ADVANCED', title: 'ADVANCED Level', description: '', indicators: [] },
-    { id: 'temp-mastery', level: 'MASTERY', title: 'MASTERY Level', description: '', indicators: [] }
+    { id: 'temp-basic', level: 'BASIC', title: getLevelDisplayLabel('BASIC'), description: '', indicators: [] },
+    { id: 'temp-intermediate', level: 'INTERMEDIATE', title: getLevelDisplayLabel('INTERMEDIATE'), description: '', indicators: [] },
+    { id: 'temp-advanced', level: 'ADVANCED', title: getLevelDisplayLabel('ADVANCED'), description: '', indicators: [] },
+    { id: 'temp-mastery', level: 'MASTERY', title: getLevelDisplayLabel('MASTERY'), description: '', indicators: [] }
   ]);
   const [elements, setElements] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -299,7 +300,7 @@ const AddCompetency = () => {
         code: formData.code && formData.code.trim() ? formData.code.trim() : undefined,
         levels: levels.map(level => ({
           level: level.level,
-          title: `${level.level} Level`,
+          title: getLevelDisplayLabel(level.level) || level.title,
           description: level.description,
           indicators: level.indicators || []
         }))
@@ -577,19 +578,19 @@ const AddCompetency = () => {
                           <Label htmlFor={`level-${index}`}>Level</Label>
                           <Input
                             id={`level-${index}`}
-                            value={level.level}
+                            value={getLevelDisplayName(level.level)}
                             disabled
                             className="font-mono bg-gray-50 cursor-not-allowed"
                           />
                         </div>
                         <div className="flex items-center">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                             level.level === 'BASIC' ? 'bg-gray-100 text-gray-800' :
                             level.level === 'INTERMEDIATE' ? 'bg-blue-100 text-blue-800' :
                             level.level === 'ADVANCED' ? 'bg-green-100 text-green-800' :
                             'bg-purple-100 text-purple-800'
                           }`}>
-                            {level.level}
+                            {getLevelDisplayName(level.level)}
                           </span>
                         </div>
                       </div>
@@ -601,7 +602,7 @@ const AddCompetency = () => {
                         id={`description-${index}`}
                         value={level.description}
                         onChange={(e) => handleLevelChange(index, 'description', e.target.value)}
-                        placeholder={`Enter description for ${level.level} level`}
+                        placeholder={`Enter description for ${getLevelDisplayName(level.level)} level`}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         rows={3}
                       />

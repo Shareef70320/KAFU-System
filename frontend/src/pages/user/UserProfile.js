@@ -21,6 +21,7 @@ import {
 import api from '../../lib/api';
 import { useUser } from '../../contexts/UserContext';
 import EmployeePhoto from '../../components/EmployeePhoto';
+import { getLevelDisplayName } from '../../utils/competencyLevels';
 
 const UserProfile = () => {
   const navigate = useNavigate();
@@ -307,11 +308,6 @@ const UserProfile = () => {
                         }`}>
                           Required: {item.requiredLevel}
                         </span>
-                        {item.isRequired && (
-                          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                            Mandatory
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -341,7 +337,7 @@ const UserProfile = () => {
                                   level.level === 'ADVANCED' ? 'bg-blue-100 text-blue-800' :
                                   'bg-green-100 text-green-800'
                                 }`}>
-                                  {level.level}
+                                  {getLevelDisplayName(level.level)}
                                 </span>
                                 {level.level === item.requiredLevel && (
                                   <span className="text-xs text-blue-600 font-medium">Required</span>

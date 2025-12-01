@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import api from '../lib/api';
 import { useUser } from '../contexts/UserContext';
+import { setLevelTerminology as updateLevelTerminologyCache } from '../utils/competencyLevels';
 
 const Settings = () => {
   const { toast } = useToast();
@@ -34,10 +35,15 @@ const Settings = () => {
 
   // Determine active sub-menu from URL
   const getActiveSubMenu = () => {
-    if (location.pathname.includes('/assessment-cycle')) {
+    const path = location.pathname;
+    if (path.includes('/level-terminology')) {
+      return 'level-terminology';
+    }
+    if (path.includes('/assessment-cycle')) {
       return 'assessment-cycle';
     }
-    return 'assessment-cycle'; // Default
+    // Default to assessment-cycle if just /settings
+    return 'assessment-cycle';
   };
 
   // Sub-menu state
@@ -45,7 +51,8 @@ const Settings = () => {
 
   // Update when route changes
   useEffect(() => {
-    setActiveSubMenu(getActiveSubMenu());
+    const newActiveSubMenu = getActiveSubMenu();
+    setActiveSubMenu(newActiveSubMenu);
   }, [location.pathname]);
 
   // Tab state (for Assessment Cycle tabs)
@@ -100,6 +107,45 @@ const Settings = () => {
     divisions: [],
     locations: [],
     units: []
+  });
+
+  // Competency Levels state
+  const [levelTerminology, setLevelTerminology] = useState({
+    BASIC: { name: 'Aware', isActive: true },
+    INTERMEDIATE: { name: 'Knowledge', isActive: true },
+    ADVANCED: { name: 'Skilled', isActive: true },
+    MASTERY: { name: 'Mastery', isActive: true }
+  });
+  const [editingLevel, setEditingLevel] = useState(null); // Track which level is being edited
+  const [savingTerminology, setSavingTerminology] = useState(false);
+
+  // Fetch competency levels
+  useQuery({
+    queryKey: ['level-terminology'],
+    queryFn: async () => {
+      const response = await api.get('/settings/level-terminology');
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (data?.parsedValue) {
+        // Convert old format (string) to new format (object with name and isActive)
+        const converted = {};
+        Object.keys(data.parsedValue).forEach(key => {
+          if (typeof data.parsedValue[key] === 'string') {
+            converted[key] = { name: data.parsedValue[key], isActive: true };
+          } else {
+            converted[key] = data.parsedValue[key];
+          }
+        });
+        setLevelTerminology(converted);
+        // Update cache in utility (convert back to simple format for cache)
+        const cacheFormat = {};
+        Object.keys(converted).forEach(key => {
+          cacheFormat[key] = converted[key].name;
+        });
+        updateLevelTerminologyCache(cacheFormat);
+      }
+    }
   });
   
   // Group search state
@@ -703,6 +749,462 @@ const Settings = () => {
           </h1>
           <p className="text-gray-600 mt-2">Configure application settings and preferences</p>
         </div>
+
+        {/* Competency Levels Content */}
+        {activeSubMenu === 'level-terminology' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Target className="h-5 w-5 mr-2 text-blue-600" />
+                Competency Levels
+              </CardTitle>
+              <CardDescription>
+                Configure the display names for competency levels. Changes will apply across the entire system.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start space-x-2">
+                    <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium mb-1">How it works:</p>
+                      <p>Update the display names for each competency level. These names will be used throughout the system in assessments, profiles, reports, and all other areas where levels are shown.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Aware Level Card */}
+                  <Card className={`border-2 transition-colors ${levelTerminology.BASIC?.isActive !== false ? 'border-gray-200 hover:border-blue-300' : 'border-gray-300 opacity-60'}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg flex items-center">
+                            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mr-3">
+                              <span className="text-xs font-bold text-gray-600">1</span>
+                            </div>
+                            {editingLevel === 'BASIC' ? (
+                              <Input
+                                value={levelTerminology.BASIC?.name || ''}
+                                onChange={(e) => setLevelTerminology(prev => ({ 
+                                  ...prev, 
+                                  BASIC: { ...prev.BASIC, name: e.target.value } 
+                                }))}
+                                className="text-lg font-semibold border-blue-300 focus:border-blue-500"
+                                onBlur={() => setEditingLevel(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') setEditingLevel(null);
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <span>{levelTerminology.BASIC?.name || 'Aware'} Level</span>
+                            )}
+                          </CardTitle>
+                          <p className="text-xs text-gray-500 mt-1">System Code: BASIC</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">Active</span>
+                            <button
+                              type="button"
+                              aria-pressed={levelTerminology.BASIC?.isActive !== false}
+                              onClick={() => setLevelTerminology(prev => ({
+                                ...prev,
+                                BASIC: { ...prev.BASIC, isActive: !(prev.BASIC?.isActive !== false) }
+                              }))}
+                              className={`relative w-10 h-5 rounded-full transition-colors ${
+                                levelTerminology.BASIC?.isActive !== false ? 'bg-green-500' : 'bg-gray-300'
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                                  levelTerminology.BASIC?.isActive !== false ? 'translate-x-5' : ''
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingLevel(editingLevel === 'BASIC' ? null : 'BASIC')}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          This level represents the foundational awareness of a competency. Employees at this level have basic understanding and can recognize key concepts, but may need guidance to apply them effectively.
+                        </p>
+                      </div>
+                      <div>
+                        <Label htmlFor="basic-level" className="text-sm font-medium">Display Name</Label>
+                        <Input
+                          id="basic-level"
+                          value={levelTerminology.BASIC?.name || ''}
+                          onChange={(e) => setLevelTerminology(prev => ({ 
+                            ...prev, 
+                            BASIC: { ...prev.BASIC, name: e.target.value } 
+                          }))}
+                          className="mt-1"
+                          placeholder="e.g., Aware"
+                          disabled={editingLevel !== 'BASIC'}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Knowledge Level Card */}
+                  <Card className={`border-2 transition-colors ${levelTerminology.INTERMEDIATE?.isActive !== false ? 'border-gray-200 hover:border-yellow-300' : 'border-gray-300 opacity-60'}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg flex items-center">
+                            <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center mr-3">
+                              <span className="text-xs font-bold text-yellow-700">2</span>
+                            </div>
+                            {editingLevel === 'INTERMEDIATE' ? (
+                              <Input
+                                value={levelTerminology.INTERMEDIATE?.name || ''}
+                                onChange={(e) => setLevelTerminology(prev => ({ 
+                                  ...prev, 
+                                  INTERMEDIATE: { ...prev.INTERMEDIATE, name: e.target.value } 
+                                }))}
+                                className="text-lg font-semibold border-blue-300 focus:border-blue-500"
+                                onBlur={() => setEditingLevel(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') setEditingLevel(null);
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <span>{levelTerminology.INTERMEDIATE?.name || 'Knowledge'} Level</span>
+                            )}
+                          </CardTitle>
+                          <p className="text-xs text-gray-500 mt-1">System Code: INTERMEDIATE</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">Active</span>
+                            <button
+                              type="button"
+                              aria-pressed={levelTerminology.INTERMEDIATE?.isActive !== false}
+                              onClick={() => setLevelTerminology(prev => ({
+                                ...prev,
+                                INTERMEDIATE: { ...prev.INTERMEDIATE, isActive: !(prev.INTERMEDIATE?.isActive !== false) }
+                              }))}
+                              className={`relative w-10 h-5 rounded-full transition-colors ${
+                                levelTerminology.INTERMEDIATE?.isActive !== false ? 'bg-green-500' : 'bg-gray-300'
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                                  levelTerminology.INTERMEDIATE?.isActive !== false ? 'translate-x-5' : ''
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingLevel(editingLevel === 'INTERMEDIATE' ? null : 'INTERMEDIATE')}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          This level indicates a solid understanding of the competency. Employees can apply knowledge in familiar situations and work independently on standard tasks with occasional support.
+                        </p>
+                      </div>
+                      <div>
+                        <Label htmlFor="intermediate-level" className="text-sm font-medium">Display Name</Label>
+                        <Input
+                          id="intermediate-level"
+                          value={levelTerminology.INTERMEDIATE?.name || ''}
+                          onChange={(e) => setLevelTerminology(prev => ({ 
+                            ...prev, 
+                            INTERMEDIATE: { ...prev.INTERMEDIATE, name: e.target.value } 
+                          }))}
+                          className="mt-1"
+                          placeholder="e.g., Knowledge"
+                          disabled={editingLevel !== 'INTERMEDIATE'}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Skilled Level Card */}
+                  <Card className={`border-2 transition-colors ${levelTerminology.ADVANCED?.isActive !== false ? 'border-gray-200 hover:border-orange-300' : 'border-gray-300 opacity-60'}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg flex items-center">
+                            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mr-3">
+                              <span className="text-xs font-bold text-orange-700">3</span>
+                            </div>
+                            {editingLevel === 'ADVANCED' ? (
+                              <Input
+                                value={levelTerminology.ADVANCED?.name || ''}
+                                onChange={(e) => setLevelTerminology(prev => ({ 
+                                  ...prev, 
+                                  ADVANCED: { ...prev.ADVANCED, name: e.target.value } 
+                                }))}
+                                className="text-lg font-semibold border-blue-300 focus:border-blue-500"
+                                onBlur={() => setEditingLevel(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') setEditingLevel(null);
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <span>{levelTerminology.ADVANCED?.name || 'Skilled'} Level</span>
+                            )}
+                          </CardTitle>
+                          <p className="text-xs text-gray-500 mt-1">System Code: ADVANCED</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">Active</span>
+                            <button
+                              type="button"
+                              aria-pressed={levelTerminology.ADVANCED?.isActive !== false}
+                              onClick={() => setLevelTerminology(prev => ({
+                                ...prev,
+                                ADVANCED: { ...prev.ADVANCED, isActive: !(prev.ADVANCED?.isActive !== false) }
+                              }))}
+                              className={`relative w-10 h-5 rounded-full transition-colors ${
+                                levelTerminology.ADVANCED?.isActive !== false ? 'bg-green-500' : 'bg-gray-300'
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                                  levelTerminology.ADVANCED?.isActive !== false ? 'translate-x-5' : ''
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingLevel(editingLevel === 'ADVANCED' ? null : 'ADVANCED')}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          This level demonstrates advanced competency. Employees can handle complex situations, adapt approaches, and may mentor others. They work independently and solve problems effectively.
+                        </p>
+                      </div>
+                      <div>
+                        <Label htmlFor="advanced-level" className="text-sm font-medium">Display Name</Label>
+                        <Input
+                          id="advanced-level"
+                          value={levelTerminology.ADVANCED?.name || ''}
+                          onChange={(e) => setLevelTerminology(prev => ({ 
+                            ...prev, 
+                            ADVANCED: { ...prev.ADVANCED, name: e.target.value } 
+                          }))}
+                          className="mt-1"
+                          placeholder="e.g., Skilled"
+                          disabled={editingLevel !== 'ADVANCED'}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Mastery Level Card */}
+                  <Card className={`border-2 transition-colors ${levelTerminology.MASTERY?.isActive !== false ? 'border-gray-200 hover:border-green-300' : 'border-gray-300 opacity-60'}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg flex items-center">
+                            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                              <span className="text-xs font-bold text-green-700">4</span>
+                            </div>
+                            {editingLevel === 'MASTERY' ? (
+                              <Input
+                                value={levelTerminology.MASTERY?.name || ''}
+                                onChange={(e) => setLevelTerminology(prev => ({ 
+                                  ...prev, 
+                                  MASTERY: { ...prev.MASTERY, name: e.target.value } 
+                                }))}
+                                className="text-lg font-semibold border-blue-300 focus:border-blue-500"
+                                onBlur={() => setEditingLevel(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') setEditingLevel(null);
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <span>{levelTerminology.MASTERY?.name || 'Mastery'} Level</span>
+                            )}
+                          </CardTitle>
+                          <p className="text-xs text-gray-500 mt-1">System Code: MASTERY</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">Active</span>
+                            <button
+                              type="button"
+                              aria-pressed={levelTerminology.MASTERY?.isActive !== false}
+                              onClick={() => setLevelTerminology(prev => ({
+                                ...prev,
+                                MASTERY: { ...prev.MASTERY, isActive: !(prev.MASTERY?.isActive !== false) }
+                              }))}
+                              className={`relative w-10 h-5 rounded-full transition-colors ${
+                                levelTerminology.MASTERY?.isActive !== false ? 'bg-green-500' : 'bg-gray-300'
+                              }`}
+                            >
+                              <span
+                                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                                  levelTerminology.MASTERY?.isActive !== false ? 'translate-x-5' : ''
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingLevel(editingLevel === 'MASTERY' ? null : 'MASTERY')}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          This is the highest level of competency. Employees demonstrate expert-level mastery, can innovate, lead others, and handle the most complex challenges. They contribute to organizational excellence and strategic initiatives.
+                        </p>
+                      </div>
+                      <div>
+                        <Label htmlFor="mastery-level" className="text-sm font-medium">Display Name</Label>
+                        <Input
+                          id="mastery-level"
+                          value={levelTerminology.MASTERY?.name || ''}
+                          onChange={(e) => setLevelTerminology(prev => ({ 
+                            ...prev, 
+                            MASTERY: { ...prev.MASTERY, name: e.target.value } 
+                          }))}
+                          className="mt-1"
+                          placeholder="e.g., Mastery"
+                          disabled={editingLevel !== 'MASTERY'}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const response = await api.get('/settings/level-terminology');
+                        const data = response.data.parsedValue;
+                        // Convert to new format if needed
+                        const converted = {};
+                        Object.keys(data).forEach(key => {
+                          if (typeof data[key] === 'string') {
+                            converted[key] = { name: data[key], isActive: true };
+                          } else {
+                            converted[key] = data[key];
+                          }
+                        });
+                        setLevelTerminology(converted);
+                        setEditingLevel(null);
+                        toast({
+                          title: 'Reset',
+                          description: 'Terminology reset to saved values'
+                        });
+                      } catch (error) {
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to load current settings',
+                          variant: 'destructive'
+                        });
+                      }
+                    }}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      setSavingTerminology(true);
+                      try {
+                        // Convert to format expected by backend
+                        const saveData = {
+                          BASIC: levelTerminology.BASIC?.name || 'Aware',
+                          INTERMEDIATE: levelTerminology.INTERMEDIATE?.name || 'Knowledge',
+                          ADVANCED: levelTerminology.ADVANCED?.name || 'Skilled',
+                          MASTERY: levelTerminology.MASTERY?.name || 'Mastery',
+                          isActive: {
+                            BASIC: levelTerminology.BASIC?.isActive !== false,
+                            INTERMEDIATE: levelTerminology.INTERMEDIATE?.isActive !== false,
+                            ADVANCED: levelTerminology.ADVANCED?.isActive !== false,
+                            MASTERY: levelTerminology.MASTERY?.isActive !== false
+                          },
+                          updatedBy: currentSid
+                        };
+                        
+                        await api.put('/settings/level-terminology', saveData);
+                        
+                        // Update cache (just names for now)
+                        const cacheFormat = {
+                          BASIC: saveData.BASIC,
+                          INTERMEDIATE: saveData.INTERMEDIATE,
+                          ADVANCED: saveData.ADVANCED,
+                          MASTERY: saveData.MASTERY
+                        };
+                        updateLevelTerminologyCache(cacheFormat);
+                        
+                        // Invalidate queries that might use level terminology
+                        queryClient.invalidateQueries(['level-terminology']);
+                        setEditingLevel(null);
+                        
+                        toast({
+                          title: 'Success',
+                          description: 'Competency levels updated successfully. Changes will apply across the system.',
+                          variant: 'default'
+                        });
+                      } catch (error) {
+                        toast({
+                          title: 'Error',
+                          description: error.response?.data?.message || 'Failed to save competency levels',
+                          variant: 'destructive'
+                        });
+                      } finally {
+                        setSavingTerminology(false);
+                      }
+                    }}
+                    disabled={savingTerminology}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {savingTerminology ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Assessment Cycle Content */}
         {activeSubMenu === 'assessment-cycle' && (

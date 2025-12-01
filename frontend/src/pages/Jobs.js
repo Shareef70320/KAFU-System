@@ -8,6 +8,7 @@ import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import EmployeePhoto from '../components/EmployeePhoto';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 import { 
   Briefcase, 
   Plus, 
@@ -33,7 +34,8 @@ import {
   UserCheck,
   Layers,
   BookOpen,
-  Clock
+  Clock,
+  Info
 } from 'lucide-react';
 
 const Jobs = () => {
@@ -59,6 +61,9 @@ const Jobs = () => {
   const [assignSearchTerm, setAssignSearchTerm] = useState('');
   const [showJcpModal, setShowJcpModal] = useState(false);
   const [jcpForJob, setJcpForJob] = useState({ job: null, mappings: [] });
+  const [showCompetencyDetailsModal, setShowCompetencyDetailsModal] = useState(false);
+  const [selectedCompetencyDetails, setSelectedCompetencyDetails] = useState(null);
+  const [loadingCompetencyDetails, setLoadingCompetencyDetails] = useState(false);
 
   // Fetch jobs from API - single call without search parameters
   const { data: jobsData, isLoading, isError, error } = useQuery({
@@ -258,6 +263,26 @@ const Jobs = () => {
       setShowJcpModal(true);
     } catch (e) {
       toast({ title: 'Error', description: 'Failed to load competency profile', variant: 'destructive' });
+    }
+  };
+
+  const handleViewCompetencyDetails = async (competencyId, requiredLevel) => {
+    try {
+      setLoadingCompetencyDetails(true);
+      const response = await api.get(`/competencies/${competencyId}`);
+      setSelectedCompetencyDetails({
+        ...response.data,
+        requiredLevel: requiredLevel
+      });
+      setShowCompetencyDetailsModal(true);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load competency details',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoadingCompetencyDetails(false);
     }
   };
 
@@ -1355,7 +1380,9 @@ const Jobs = () => {
                       <div className="text-center py-8 text-gray-600">No competencies mapped.</div>
                     ) : (
                       <div className="space-y-3">
-                        {jcpForJob.mappings.map((m) => (
+                        {jcpForJob.mappings.map((m) => {
+                          const requiredLevel = m.requiredLevel || m.required_level;
+                          return (
                           <div key={m.id || `${m.jobId}-${m.competencyId}`} className="border rounded-md p-3">
                             <div className="flex justify-between items-center">
                               <div>
@@ -1364,15 +1391,26 @@ const Jobs = () => {
                                   <div className="text-xs text-gray-500">{m.competency_family}</div>
                                 )}
                               </div>
-                              <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
-                                Required: {m.requiredLevel || m.required_level || 'N/A'}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
+                                  Required: {requiredLevel ? getLevelDisplayName(requiredLevel) : 'N/A'}
+                                </span>
+                                {m.competencyId && (
+                                  <button
+                                    onClick={() => handleViewCompetencyDetails(m.competencyId, requiredLevel)}
+                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                    title="View competency details"
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             {m.description && (
                               <div className="mt-2 text-sm text-gray-600 line-clamp-2">{m.description}</div>
                             )}
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
                   </div>
@@ -1470,6 +1508,175 @@ const Jobs = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Competency Details Modal */}
+        {showCompetencyDetailsModal && selectedCompetencyDetails && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {selectedCompetencyDetails.name}
+                  </h3>
+                  {selectedCompetencyDetails.code && (
+                    <p className="text-sm text-gray-500 mt-1">Code: {selectedCompetencyDetails.code}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setShowCompetencyDetailsModal(false);
+                    setSelectedCompetencyDetails(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div className="space-y-6">
+                  {/* Competency Info */}
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCompetencyDetails.type && (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {selectedCompetencyDetails.type}
+                      </span>
+                    )}
+                    {selectedCompetencyDetails.family && (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        {selectedCompetencyDetails.family}
+                      </span>
+                    )}
+                    {selectedCompetencyDetails.related_division && (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                        {selectedCompetencyDetails.related_division}
+                      </span>
+                    )}
+                    {selectedCompetencyDetails.requiredLevel && (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                        Required: {getLevelDisplayName(selectedCompetencyDetails.requiredLevel)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Competency Definition */}
+                  {selectedCompetencyDetails.definition && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-2">Definition</h4>
+                      <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
+                        {selectedCompetencyDetails.definition}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Competency Description */}
+                  {selectedCompetencyDetails.description && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-2">Description</h4>
+                      <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">
+                        {selectedCompetencyDetails.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Required Level Details */}
+                  {selectedCompetencyDetails.levels && selectedCompetencyDetails.levels.length > 0 && selectedCompetencyDetails.requiredLevel && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">Required Level Details</h4>
+                      {(() => {
+                        const requiredLevelData = selectedCompetencyDetails.levels.find(
+                          level => level.level === selectedCompetencyDetails.requiredLevel
+                        );
+                        
+                        if (!requiredLevelData) {
+                          return (
+                            <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                              <p className="text-sm text-gray-600">
+                              Level details not available for {getLevelDisplayName(selectedCompetencyDetails.requiredLevel)}.
+                            </p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            className={`p-4 rounded-lg border-2 ${
+                              requiredLevelData.level === 'BASIC' ? 'bg-blue-50 border-blue-200' :
+                              requiredLevelData.level === 'INTERMEDIATE' ? 'bg-yellow-50 border-yellow-200' :
+                              requiredLevelData.level === 'ADVANCED' ? 'bg-orange-50 border-orange-200' :
+                              'bg-purple-50 border-purple-200'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
+                                requiredLevelData.level === 'BASIC' ? 'bg-blue-100 text-blue-800' :
+                                requiredLevelData.level === 'INTERMEDIATE' ? 'bg-yellow-100 text-yellow-800' :
+                                requiredLevelData.level === 'ADVANCED' ? 'bg-orange-100 text-orange-800' :
+                                'bg-purple-100 text-purple-800'
+                              }`}>
+                                {getLevelDisplayName(requiredLevelData.level)}
+                              </span>
+                              <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                                Required Level
+                              </span>
+                            </div>
+                            {requiredLevelData.title && (
+                              <h5 className="text-sm font-medium text-gray-900 mb-2">{requiredLevelData.title}</h5>
+                            )}
+                            {requiredLevelData.description && (
+                              <p className="text-sm text-gray-700 mb-3">{requiredLevelData.description}</p>
+                            )}
+                            {requiredLevelData.indicators && requiredLevelData.indicators.length > 0 && (
+                              <div className="mt-3">
+                                <h6 className="text-xs font-medium text-gray-700 mb-2">Indicators:</h6>
+                                <ul className="list-disc list-inside space-y-1">
+                                  {requiredLevelData.indicators.map((indicator, idx) => (
+                                    <li key={idx} className="text-xs text-gray-600">{indicator}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {requiredLevelData.elements && requiredLevelData.elements.length > 0 && (
+                              <div className="mt-3">
+                                <h6 className="text-xs font-medium text-gray-700 mb-2">Elements:</h6>
+                                <div className="space-y-3">
+                                  {requiredLevelData.elements.map((element, idx) => (
+                                    <div key={idx} className="bg-gray-50 p-2 rounded border border-gray-200">
+                                      <div className="text-xs font-medium text-gray-800 mb-1">
+                                        {element.name}
+                                      </div>
+                                      {element.description && (
+                                        <p className="text-xs text-gray-600 mb-2">{element.description}</p>
+                                      )}
+                                      {element.performanceIndicators && element.performanceIndicators.length > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-gray-200">
+                                          <div className="text-xs font-medium text-gray-700 mb-1">Performance Indicators:</div>
+                                          <ul className="list-disc list-inside space-y-0.5">
+                                            {element.performanceIndicators.map((indicator, indIdx) => (
+                                              <li key={indIdx} className="text-xs text-gray-600">
+                                                {indicator.action}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {(!requiredLevelData.elements || requiredLevelData.elements.length === 0) && (
+                              <p className="text-xs text-gray-500 mt-3">No elements defined for this level.</p>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

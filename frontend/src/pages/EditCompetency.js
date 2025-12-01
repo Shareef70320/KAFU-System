@@ -9,6 +9,7 @@ import { Select } from '../components/ui/select';
 // Use native selects for Type/Family, keep Select for level dropdown
 import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
+import { getLevelDisplayLabel, getLevelDisplayName } from '../utils/competencyLevels';
 import { 
   ArrowLeft, 
   Save, 
@@ -20,7 +21,9 @@ import {
   Target,
   Edit,
   X,
-  Check
+  Check,
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 
 const EditCompetency = () => {
@@ -42,12 +45,25 @@ const EditCompetency = () => {
   });
 
   const [levels, setLevels] = useState([]);
-  const [elements, setElements] = useState([]);
+  const [elementsByLevel, setElementsByLevel] = useState({}); // { levelId: [elements] }
   const [isLoading, setIsLoading] = useState(false);
   const [allFamilies, setAllFamilies] = useState([]);
   const [showAddElementModal, setShowAddElementModal] = useState(false);
+  const [selectedLevelForElement, setSelectedLevelForElement] = useState(null);
   const [editingElement, setEditingElement] = useState(null);
   const [elementForm, setElementForm] = useState({ name: '', description: '' });
+  const [expandedElements, setExpandedElements] = useState({}); // { elementId: true/false }
+  const [showAddIndicatorModal, setShowAddIndicatorModal] = useState(false);
+  const [selectedElementForIndicator, setSelectedElementForIndicator] = useState(null);
+  const [editingIndicator, setEditingIndicator] = useState(null);
+  const [indicatorForm, setIndicatorForm] = useState({ action: '' });
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false);
+  const [selectedLevelForBulkAdd, setSelectedLevelForBulkAdd] = useState(null);
+  const [bulkAddText, setBulkAddText] = useState('');
+  const [isProcessingBulkAdd, setIsProcessingBulkAdd] = useState(false);
+  const [showBulkAddAllModal, setShowBulkAddAllModal] = useState(false);
+  const [bulkAddAllText, setBulkAddAllText] = useState('');
+  const [isProcessingBulkAddAll, setIsProcessingBulkAddAll] = useState(false);
   const [allTypes, setAllTypes] = useState([
     'TECHNICAL',
     'NON_TECHNICAL'
@@ -112,13 +128,21 @@ const EditCompetency = () => {
         return existing || {
           id: `temp-${levelType.toLowerCase()}`,
           level: levelType,
-          title: `${levelType} Level`,
+          title: getLevelDisplayLabel(levelType),
           description: '',
           indicators: []
         };
       });
       setLevels(mergedLevels);
-      setElements(competency.elements || []);
+      
+      // Group elements by level (elements are nested under levels)
+      const grouped = {};
+      mergedLevels.forEach(level => {
+        // Elements are nested under levels.levels[].elements
+        const levelData = competency.levels?.find(l => l.id === level.id);
+        grouped[level.id] = levelData?.elements || [];
+      });
+      setElementsByLevel(grouped);
     }
   }, [competency]);
 
@@ -262,6 +286,79 @@ const EditCompetency = () => {
     }
   });
 
+  // Performance Indicator mutations
+  const createIndicatorMutation = useMutation({
+    mutationFn: async ({ elementId, data }) => {
+      const response = await api.post(`/competencies/${id}/elements/${elementId}/indicators`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['competency', id]);
+      toast({
+        title: 'Success',
+        description: 'Performance indicator added successfully!',
+        variant: 'default'
+      });
+      setShowAddIndicatorModal(false);
+      setIndicatorForm({ action: '' });
+      setSelectedElementForIndicator(null);
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to add performance indicator',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const updateIndicatorMutation = useMutation({
+    mutationFn: async ({ elementId, indicatorId, data }) => {
+      const response = await api.put(`/competencies/${id}/elements/${elementId}/indicators/${indicatorId}`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['competency', id]);
+      toast({
+        title: 'Success',
+        description: 'Performance indicator updated successfully!',
+        variant: 'default'
+      });
+      setEditingIndicator(null);
+      setIndicatorForm({ action: '' });
+      setShowAddIndicatorModal(false);
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to update performance indicator',
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const deleteIndicatorMutation = useMutation({
+    mutationFn: async ({ elementId, indicatorId }) => {
+      const response = await api.delete(`/competencies/${id}/elements/${elementId}/indicators/${indicatorId}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['competency', id]);
+      toast({
+        title: 'Success',
+        description: 'Performance indicator deleted successfully!',
+        variant: 'default'
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to delete performance indicator',
+        variant: 'destructive'
+      });
+    }
+  });
+
   const handleAddElement = () => {
     if (!elementForm.name.trim()) {
       toast({
@@ -271,15 +368,25 @@ const EditCompetency = () => {
       });
       return;
     }
+    if (!selectedLevelForElement) {
+      toast({
+        title: 'Error',
+        description: 'Please select a competency level for this element',
+        variant: 'destructive'
+      });
+      return;
+    }
     createElementMutation.mutate({
       name: elementForm.name.trim(),
-      description: elementForm.description.trim() || null
+      description: elementForm.description.trim() || null,
+      levelId: selectedLevelForElement
     });
   };
 
   const handleEditElement = (element) => {
     setEditingElement(element);
     setElementForm({ name: element.name, description: element.description || '' });
+    setSelectedLevelForElement(element.competencyLevelId);
     setShowAddElementModal(true);
   };
 
@@ -292,11 +399,20 @@ const EditCompetency = () => {
       });
       return;
     }
+    if (!selectedLevelForElement) {
+      toast({
+        title: 'Error',
+        description: 'Please select a competency level for this element',
+        variant: 'destructive'
+      });
+      return;
+    }
     updateElementMutation.mutate({
       elementId: editingElement.id,
       data: {
         name: elementForm.name.trim(),
-        description: elementForm.description.trim() || null
+        description: elementForm.description.trim() || null,
+        levelId: selectedLevelForElement
       }
     });
   };
@@ -307,41 +423,367 @@ const EditCompetency = () => {
     }
   };
 
-  const handleBulkAddElements = () => {
-    const elementsText = window.prompt('Enter element names, one per line:');
-    if (!elementsText) return;
-    
-    const elementNames = elementsText.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-    
-    if (elementNames.length === 0) {
+  const handleAddIndicator = (element) => {
+    setSelectedElementForIndicator(element);
+    setEditingIndicator(null);
+    setIndicatorForm({ action: '' });
+    setShowAddIndicatorModal(true);
+  };
+
+  const handleEditIndicator = (element, indicator) => {
+    setSelectedElementForIndicator(element);
+    setEditingIndicator(indicator);
+    setIndicatorForm({ action: indicator.action });
+    setShowAddIndicatorModal(true);
+  };
+
+  const handleSaveIndicator = () => {
+    if (!indicatorForm.action.trim()) {
       toast({
         title: 'Error',
-        description: 'No valid element names provided',
+        description: 'Action is required',
+        variant: 'destructive'
+      });
+      return;
+    }
+    if (editingIndicator) {
+      updateIndicatorMutation.mutate({
+        elementId: selectedElementForIndicator.id,
+        indicatorId: editingIndicator.id,
+        data: {
+          action: indicatorForm.action.trim()
+        }
+      });
+    } else {
+      createIndicatorMutation.mutate({
+        elementId: selectedElementForIndicator.id,
+        data: {
+          action: indicatorForm.action.trim()
+        }
+      });
+    }
+  };
+
+  const handleDeleteIndicator = (element, indicator) => {
+    if (window.confirm('Are you sure you want to delete this performance indicator?')) {
+      deleteIndicatorMutation.mutate({
+        elementId: element.id,
+        indicatorId: indicator.id
+      });
+    }
+  };
+
+  const toggleElementExpansion = (elementId) => {
+    setExpandedElements(prev => ({
+      ...prev,
+      [elementId]: !prev[elementId]
+    }));
+  };
+
+  const parseBulkAddText = (text) => {
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const elements = [];
+    let currentElement = null;
+
+    for (const line of lines) {
+      // Check if line starts with a number (element)
+      const elementMatch = line.match(/^\d+\.\s*(.+)$/);
+      if (elementMatch) {
+        // Save previous element if exists
+        if (currentElement) {
+          elements.push(currentElement);
+        }
+        // Start new element
+        currentElement = {
+          name: elementMatch[1].trim(),
+          indicators: []
+        };
+      } else if (currentElement) {
+        // Check if line starts with bullet (indicator)
+        const indicatorMatch = line.match(/^[-•*]\s*(.+)$/);
+        if (indicatorMatch) {
+          currentElement.indicators.push(indicatorMatch[1].trim());
+        }
+      }
+    }
+
+    // Don't forget the last element
+    if (currentElement) {
+      elements.push(currentElement);
+    }
+
+    return elements;
+  };
+
+  const handleBulkAddElements = (levelId) => {
+    if (!levelId) {
+      toast({
+        title: 'Error',
+        description: 'Please select a level first',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setSelectedLevelForBulkAdd(levelId);
+    setBulkAddText('');
+    setShowBulkAddModal(true);
+  };
+
+  const handleProcessBulkAdd = async () => {
+    if (!bulkAddText.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter elements and indicators',
         variant: 'destructive'
       });
       return;
     }
 
-    const elementsData = elementNames.map(name => ({ name }));
-    
-    api.post(`/competencies/${id}/elements/bulk`, { elements: elementsData })
-      .then(() => {
-        queryClient.invalidateQueries(['competency', id]);
-        toast({
-          title: 'Success',
-          description: `Added ${elementNames.length} elements successfully!`,
-          variant: 'default'
-        });
-      })
-      .catch((error) => {
+    setIsProcessingBulkAdd(true);
+
+    try {
+      const parsedData = parseBulkAddText(bulkAddText);
+      
+      if (parsedData.length === 0) {
         toast({
           title: 'Error',
-          description: error.response?.data?.message || 'Failed to add elements',
+          description: 'No valid elements found. Format: 1. Element Name\n   - Indicator 1',
           variant: 'destructive'
         });
+        setIsProcessingBulkAdd(false);
+        return;
+      }
+
+      // Create elements first
+      const elementsData = parsedData.map(el => ({ name: el.name }));
+      const elementsResponse = await api.post(`/competencies/${id}/elements/bulk`, { 
+        elements: elementsData, 
+        levelId: selectedLevelForBulkAdd 
       });
+
+      // Get created elements (they should be in order)
+      const createdElements = elementsResponse.data.elements || [];
+      
+      // Create indicators for each element
+      let totalIndicators = 0;
+      for (let i = 0; i < parsedData.length && i < createdElements.length; i++) {
+        const element = createdElements[i];
+        const parsedElement = parsedData[i];
+        
+        if (parsedElement.indicators && parsedElement.indicators.length > 0) {
+          // Create indicators for this element
+          for (const indicatorAction of parsedElement.indicators) {
+            try {
+              await api.post(`/competencies/${id}/elements/${element.id}/indicators`, {
+                action: indicatorAction
+              });
+              totalIndicators++;
+            } catch (error) {
+              console.error(`Failed to create indicator for element ${element.name}:`, error);
+            }
+          }
+        }
+      }
+
+      // Refresh data
+      queryClient.invalidateQueries(['competency', id]);
+      
+      toast({
+        title: 'Success',
+        description: `Added ${parsedData.length} elements and ${totalIndicators} performance indicators successfully!`,
+        variant: 'default'
+      });
+
+      setShowBulkAddModal(false);
+      setBulkAddText('');
+      setSelectedLevelForBulkAdd(null);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to add elements and indicators',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessingBulkAdd(false);
+    }
+  };
+
+  // Parse bulk add for whole competency: Level, Element (numbered), Indicators (bullets or sentences ending with '.')
+  const parseBulkAddAllText = (text) => {
+    const lines = text.split('\n').map(line => line.trimEnd()).filter(line => line.length > 0);
+    const result = {
+      BASIC: [],
+      INTERMEDIATE: [],
+      ADVANCED: [],
+      MASTERY: []
+    };
+
+    // Level header can be like:
+    // "Aware:", "Knowledge Level – Performance Indicators", "🔹 Basic Level – Performance Indicators (Awareness)"
+    // We only treat a line as a level header if it STARTS with the level word (optionally after bullets/emojis)
+    const levelHeaderRegex = /^(?:[-•*]\s*)?(?:🔹\s*)?(basic|intermediate|advanced|mastery|aware|knowledge|skilled)\b/i;
+    let currentLevelCode = null;
+    let currentElement = null;
+
+    const mapToLevelCode = (headerWord) => {
+      const h = headerWord.toLowerCase();
+      if (h.startsWith('basic') || h.startsWith('aware')) return 'BASIC';
+      if (h.startsWith('intermediate') || h.startsWith('knowledge')) return 'INTERMEDIATE';
+      if (h.startsWith('advanced') || h.startsWith('skilled')) return 'ADVANCED';
+      if (h.startsWith('mastery')) return 'MASTERY';
+      return null;
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      // Level header: look for level word at the start of the line
+      const levelMatch = line.match(levelHeaderRegex);
+      if (levelMatch) {
+        // Push last element if exists
+        if (currentLevelCode && currentElement) {
+          result[currentLevelCode].push(currentElement);
+          currentElement = null;
+        }
+        currentLevelCode = mapToLevelCode(levelMatch[1]) || null;
+        continue;
+      }
+
+      if (!currentLevelCode) {
+        // Ignore lines before any level header
+        continue;
+      }
+
+      // Element line: starts with number.
+      const elementMatch = line.match(/^\d+\.\s*(.+)$/);
+      if (elementMatch) {
+        // Save previous element
+        if (currentElement) {
+          result[currentLevelCode].push(currentElement);
+        }
+        currentElement = {
+          name: elementMatch[1].trim(),
+          indicators: []
+        };
+        continue;
+      }
+
+      // Indicator line under current element
+      if (currentElement) {
+        // Accept either bullet-prefixed or plain lines (optionally ending with '.')
+        const bulletMatch = line.match(/^[-•*]\s*(.+)$/);
+        if (bulletMatch) {
+          const text = bulletMatch[1].trim();
+          if (text) currentElement.indicators.push(text);
+        } else {
+          // Treat the entire line as a single indicator
+          let text = line.trim();
+          if (!text) continue;
+          // Ensure it ends with a full stop for consistency
+          if (!text.endsWith('.')) {
+            text = text + '.';
+          }
+          currentElement.indicators.push(text);
+        }
+      }
+    }
+
+    // Push last element
+    if (currentLevelCode && currentElement) {
+      result[currentLevelCode].push(currentElement);
+    }
+
+    return result;
+  };
+
+  const handleBulkAddAll = () => {
+    setBulkAddAllText('');
+    setShowBulkAddAllModal(true);
+  };
+
+  const handleProcessBulkAddAll = async () => {
+    if (!bulkAddAllText.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter levels, elements, and indicators',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsProcessingBulkAddAll(true);
+
+    try {
+      const parsed = parseBulkAddAllText(bulkAddAllText);
+
+      // Build map from level code to actual level id in this competency
+      // IMPORTANT: use backend levels (competency.levels) to avoid using temporary client-only IDs
+      const levelIdByCode = {};
+      if (competency && Array.isArray(competency.levels)) {
+        competency.levels.forEach((lvl) => {
+          if (lvl.level && !levelIdByCode[lvl.level]) {
+            levelIdByCode[lvl.level] = lvl.id;
+          }
+        });
+      }
+
+      let totalElements = 0;
+      let totalIndicators = 0;
+
+      // For each level code, create elements and indicators SEQUENTIALLY
+      for (const code of ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY']) {
+        const items = parsed[code] || [];
+        if (!items.length) continue;
+
+        const levelId = levelIdByCode[code];
+        if (!levelId) continue;
+
+        for (const item of items) {
+          // Create element and get its real ID
+          const elementResp = await api.post(`/competencies/${id}/elements`, {
+            name: item.name,
+            levelId
+          });
+          const element = elementResp.data;
+          totalElements++;
+
+          // Create indicators for this element
+          if (item.indicators && item.indicators.length > 0) {
+            for (const action of item.indicators) {
+              try {
+                await api.post(`/competencies/${id}/elements/${element.id}/indicators`, {
+                  action
+                });
+                totalIndicators++;
+              } catch (err) {
+                console.error(`Failed to create indicator for ${element.name}:`, err);
+              }
+            }
+          }
+        }
+      }
+
+      // Refresh competency
+      queryClient.invalidateQueries(['competency', id]);
+
+      toast({
+        title: 'Success',
+        description: `Added ${totalElements} elements and ${totalIndicators} performance indicators across all levels.`,
+        variant: 'default'
+      });
+
+      setShowBulkAddAllModal(false);
+      setBulkAddAllText('');
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to bulk add elements and indicators',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessingBulkAddAll(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -349,18 +791,10 @@ const EditCompetency = () => {
     setIsLoading(true);
 
     try {
-      const updateData = {
-        ...formData,
-        levels: levels.map(level => ({
-          id: level.id,
-          level: level.level,
-          title: `${level.level} Level`,
-          description: level.description,
-          indicators: level.indicators || []
-        }))
-      };
-
-      await updateCompetencyMutation.mutateAsync(updateData);
+      // For now, we only update the core competency fields (code, name, type, family, definition, etc.)
+      // Levels and their elements/indicators are managed via dedicated endpoints and should not be
+      // recreated on every save, otherwise elements & indicators get deleted by cascade.
+      await updateCompetencyMutation.mutateAsync(formData);
     } catch (error) {
       console.error('Update error:', error);
     } finally {
@@ -603,138 +1037,242 @@ const EditCompetency = () => {
           </CardContent>
         </Card>
 
-          {/* Competency Elements */}
+          {/* Competency Levels with Elements */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Building2 className="h-5 w-5 mr-2 text-orange-600" />
-                  Competency Elements
-                </div>
-                <div className="flex gap-2">
-                  <Button 
-                    type="button" 
-                    onClick={handleBulkAddElements} 
-                    variant="outline" 
-                    size="sm"
-                    title="Bulk add elements from list"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Bulk Add
-                  </Button>
-                  <Button 
-                    type="button" 
-                    onClick={() => {
-                      setEditingElement(null);
-                      setElementForm({ name: '', description: '' });
-                      setShowAddElementModal(true);
-                    }} 
-                    variant="outline" 
-                    size="sm"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Element
-                  </Button>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {elements.length === 0 ? (
-                <p className="text-gray-500 text-sm">No elements added yet. Click "Add Element" to get started.</p>
-              ) : (
-                <div className="space-y-3">
-                  {elements.map((element) => (
-                    <div 
-                      key={element.id} 
-                      className="flex items-start justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium text-gray-900">{element.name}</h4>
-                          {!element.isActive && (
-                            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">Inactive</span>
-                          )}
-                        </div>
-                        {element.description && (
-                          <p className="text-sm text-gray-600">{element.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditElement(element)}
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteElement(element.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Competency Levels */}
-          <Card>
-            <CardHeader>
+            <CardHeader className="flex items-center justify-between">
               <CardTitle className="flex items-center">
                 <Target className="h-5 w-5 mr-2 text-green-600" />
-                Competency Levels
+                Competency Levels & Elements
               </CardTitle>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBulkAddAll}
+                  title="Bulk add elements and indicators for all levels"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Bulk Add (All Levels)
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {levels.map((level, index) => (
-                  <div key={level.id || index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div>
-                          <Label htmlFor={`level-${index}`}>Level</Label>
+              <div className="space-y-6">
+                {levels.map((level, index) => {
+                  const levelElements = elementsByLevel[level.id] || [];
+                  return (
+                    <div key={level.id || index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div>
+                            <Label htmlFor={`level-${index}`}>Level</Label>
                           <Input
                             id={`level-${index}`}
-                            value={level.level}
+                            value={getLevelDisplayName(level.level)}
                             disabled
                             className="font-mono bg-gray-50 cursor-not-allowed"
                           />
-                        </div>
-                        <div className="flex items-center">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            level.level === 'BASIC' ? 'bg-gray-100 text-gray-800' :
-                            level.level === 'INTERMEDIATE' ? 'bg-blue-100 text-blue-800' :
-                            level.level === 'ADVANCED' ? 'bg-green-100 text-green-800' :
-                            'bg-purple-100 text-purple-800'
-                          }`}>
-                            {level.level}
-                          </span>
+                          </div>
+                          <div className="flex items-center">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              level.level === 'BASIC' ? 'bg-gray-100 text-gray-800' :
+                              level.level === 'INTERMEDIATE' ? 'bg-blue-100 text-blue-800' :
+                              level.level === 'ADVANCED' ? 'bg-green-100 text-green-800' :
+                              'bg-purple-100 text-purple-800'
+                            }`}>
+                            {getLevelDisplayName(level.level)}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor={`description-${index}`}>Description</Label>
+                      
+                      <div className="mb-4">
+                        <Label htmlFor={`description-${index}`}>Description</Label>
                       <textarea
                         id={`description-${index}`}
                         value={level.description}
                         onChange={(e) => handleLevelChange(index, 'description', e.target.value)}
-                        placeholder={`Enter description for ${level.level} level`}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        rows={3}
-                      />
+                        placeholder={`Enter description for ${getLevelDisplayName(level.level)} level`}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Elements for this level */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center">
+                            <Building2 className="h-4 w-4 mr-2 text-orange-600" />
+                            <span className="text-sm font-medium text-gray-700">
+                              Elements ({levelElements.length})
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              type="button" 
+                              onClick={() => handleBulkAddElements(level.id)} 
+                              variant="outline" 
+                              size="sm"
+                              title="Bulk add elements for this level"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Bulk Add
+                            </Button>
+                            <Button 
+                              type="button" 
+                              onClick={() => {
+                                setEditingElement(null);
+                                setElementForm({ name: '', description: '' });
+                                setSelectedLevelForElement(level.id);
+                                setShowAddElementModal(true);
+                              }} 
+                              variant="outline" 
+                              size="sm"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Element
+                            </Button>
+                          </div>
+                        </div>
+                        {levelElements.length === 0 ? (
+                          <p className="text-gray-500 text-sm italic">No elements added for this level yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {levelElements.map((element) => {
+                              const isExpanded = expandedElements[element.id];
+                              const indicators = element.performanceIndicators || [];
+                              return (
+                                <div 
+                                  key={element.id} 
+                                  className="border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between p-2">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleElementExpansion(element.id)}
+                                          className="text-gray-400 hover:text-gray-600"
+                                        >
+                                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                        </button>
+                                        <h5 className="text-sm font-medium text-gray-900">{element.name}</h5>
+                                        {!element.isActive && (
+                                          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">Inactive</span>
+                                        )}
+                                        {indicators.length > 0 && (
+                                          <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                            {indicators.length} indicator{indicators.length !== 1 ? 's' : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {element.description && (
+                                        <p className="text-xs text-gray-600 ml-6">{element.description}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleAddIndicator(element)}
+                                        className="h-7 px-2 text-xs text-purple-600 hover:text-purple-700"
+                                        title="Add Performance Indicator"
+                                      >
+                                        <Target className="h-3 w-3 mr-1" />
+                                        Add Indicator
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleEditElement(element)}
+                                        className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700"
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeleteElement(element.id)}
+                                        className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Performance Indicators Section */}
+                                  {isExpanded && (
+                                    <div className="px-2 pb-2 border-t border-gray-100 mt-2 pt-2">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center">
+                                          <Target className="h-3 w-3 mr-1 text-purple-600" />
+                                          <span className="text-xs font-medium text-gray-700">
+                                            Performance Indicators ({indicators.length})
+                                          </span>
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleAddIndicator(element)}
+                                          className="h-6 px-2 text-xs text-purple-600 hover:text-purple-700"
+                                        >
+                                          <Plus className="h-3 w-3 mr-1" />
+                                          Add Indicator
+                                        </Button>
+                                      </div>
+                                      {indicators.length === 0 ? (
+                                        <p className="text-gray-400 text-xs italic ml-4">No performance indicators added yet.</p>
+                                      ) : (
+                                        <div className="space-y-1 ml-4">
+                                          {indicators.map((indicator) => (
+                                            <div 
+                                              key={indicator.id}
+                                              className="flex items-start justify-between p-1.5 bg-purple-50 rounded border border-purple-100"
+                                            >
+                                              <div className="flex items-start gap-2 flex-1">
+                                                <Check className="h-3 w-3 mt-0.5 text-purple-600 flex-shrink-0" />
+                                                <span className="text-xs text-gray-700">{indicator.action}</span>
+                                              </div>
+                                              <div className="flex items-center gap-1">
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => handleEditIndicator(element, indicator)}
+                                                  className="h-5 w-5 p-0 text-blue-600 hover:text-blue-700"
+                                                >
+                                                  <Edit className="h-2.5 w-2.5" />
+                                                </Button>
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => handleDeleteIndicator(element, indicator)}
+                                                  className="h-5 w-5 p-0 text-red-600 hover:text-red-700"
+                                                >
+                                                  <Trash2 className="h-2.5 w-2.5" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -755,12 +1293,30 @@ const EditCompetency = () => {
                       setShowAddElementModal(false);
                       setEditingElement(null);
                       setElementForm({ name: '', description: '' });
+                      setSelectedLevelForElement(null);
                     }}
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="element-level">Competency Level *</Label>
+                    <select
+                      id="element-level"
+                      value={selectedLevelForElement || ''}
+                      onChange={(e) => setSelectedLevelForElement(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select a level</option>
+                      {levels.map((level) => (
+                        <option key={level.id} value={level.id}>
+                          {getLevelDisplayName(level.level)} - {level.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <Label htmlFor="element-name">Element Name *</Label>
                     <Input
@@ -790,6 +1346,7 @@ const EditCompetency = () => {
                         setShowAddElementModal(false);
                         setEditingElement(null);
                         setElementForm({ name: '', description: '' });
+                        setSelectedLevelForElement(null);
                       }}
                     >
                       Cancel
@@ -845,6 +1402,198 @@ const EditCompetency = () => {
             </Button>
           </div>
         </form>
+
+        {/* Bulk Add Elements Modal (single level) */}
+        {showBulkAddModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <h3 className="text-lg font-semibold mb-4">Bulk Add Elements with Performance Indicators</h3>
+              <div className="flex-1 overflow-y-auto mb-4">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="bulk-add-text">Elements and Indicators</Label>
+                    <textarea
+                      id="bulk-add-text"
+                      value={bulkAddText}
+                      onChange={(e) => setBulkAddText(e.target.value)}
+                      placeholder={`Format:
+1. Element Name
+   - Performance Indicator 1
+   - Performance Indicator 2
+2. Another Element
+   - Indicator 1
+   - Indicator 2`}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                      rows={15}
+                    />
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                    <p className="text-xs text-blue-800 font-medium mb-1">Format Instructions:</p>
+                    <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                      <li>Elements must start with a number followed by a dot (e.g., "1. Element Name")</li>
+                      <li>Indicators must start with a bullet (-, •, or *) and be indented under their element</li>
+                      <li>Each element can have multiple indicators</li>
+                      <li>Example: <code className="bg-blue-100 px-1 rounded">1. Element Name\n   - Indicator 1</code></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 border-t pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowBulkAddModal(false);
+                    setBulkAddText('');
+                    setSelectedLevelForBulkAdd(null);
+                  }}
+                  disabled={isProcessingBulkAdd}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleProcessBulkAdd}
+                  disabled={isProcessingBulkAdd || !bulkAddText.trim()}
+                >
+                  {isProcessingBulkAdd ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Elements & Indicators
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Add for Whole Competency Modal */}
+        {showBulkAddAllModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+              <h3 className="text-lg font-semibold mb-4">Bulk Add for Whole Competency</h3>
+              <div className="flex-1 overflow-y-auto mb-4">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="bulk-add-all-text">Levels, Elements, and Indicators</Label>
+                    <textarea
+                      id="bulk-add-all-text"
+                      value={bulkAddAllText}
+                      onChange={(e) => setBulkAddAllText(e.target.value)}
+                      placeholder={`Format example:\n\nAware:\n1. Element Name\n   - Performance Indicator 1\n   - Performance Indicator 2\n\nKnowledge:\n1. Another Element\n   - Indicator 1\n\nSkilled:\n1. Skilled Element\n   - Indicator 1\n\nMastery:\n1. Mastery Element\n   - Indicator 1`}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                      rows={18}
+                    />
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                    <p className="text-xs text-blue-800 font-medium mb-1">Format Instructions:</p>
+                    <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                      <li>Start each section with the level name: Aware, Knowledge, Skilled, Mastery (or BASIC, INTERMEDIATE, ADVANCED, MASTERY)</li>
+                      <li>Elements must start with a number and dot under the level (e.g., <code>1. Element Name</code>)</li>
+                      <li>Indicators must start with a bullet (-, •, or *) and be under their element</li>
+                      <li>Each level can have multiple elements; each element can have multiple indicators</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 border-top pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowBulkAddAllModal(false);
+                    setBulkAddAllText('');
+                  }}
+                  disabled={isProcessingBulkAddAll}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleProcessBulkAddAll}
+                  disabled={isProcessingBulkAddAll || !bulkAddAllText.trim()}
+                >
+                  {isProcessingBulkAddAll ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add All Levels
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add/Edit Performance Indicator Modal */}
+        {showAddIndicatorModal && selectedElementForIndicator && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold mb-4">
+                {editingIndicator ? 'Edit' : 'Add'} Performance Indicator
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="indicator-action">Action/Task *</Label>
+                  <textarea
+                    id="indicator-action"
+                    value={indicatorForm.action}
+                    onChange={(e) => setIndicatorForm(prev => ({ ...prev, action: e.target.value }))}
+                    placeholder="Enter the action or task that can be checked and measured"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    rows={3}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    For element: <strong>{selectedElementForIndicator.name}</strong>
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddIndicatorModal(false);
+                      setEditingIndicator(null);
+                      setIndicatorForm({ action: '' });
+                      setSelectedElementForIndicator(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveIndicator}
+                    disabled={createIndicatorMutation.isLoading || updateIndicatorMutation.isLoading}
+                  >
+                    {editingIndicator ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        Update
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

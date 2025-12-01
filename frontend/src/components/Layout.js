@@ -63,6 +63,22 @@ const Layout = () => {
     enabled: !!currentSid && currentRole === 'USER'
   });
 
+  // Check if current user is an assessor
+  const { data: isAssessor } = useQuery({
+    queryKey: ['is-assessor', currentSid],
+    queryFn: async () => {
+      if (!currentSid) return false;
+      try {
+        const response = await api.get(`/assessors/check/${currentSid}`);
+        return response.data?.isAssessor || false;
+      } catch (error) {
+        console.error('Error checking assessor status:', error);
+        return false;
+      }
+    },
+    enabled: !!currentSid
+  });
+
   // Admin navigation
   const adminNavigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -75,7 +91,6 @@ const Layout = () => {
     { name: 'Job Criticality', href: '/job-criticality', icon: Target },
     { name: 'Job Evaluation', href: '/job-evaluation', icon: BarChart3 },
     { name: 'Assessors', href: '/assessors', icon: UserCheck },
-    { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
     { name: 'Assessments', href: '/assessments', icon: Target },
     { name: 'Question Bank', href: '/question-bank', icon: BookOpen },
     { name: 'Photo Upload', href: '/photo-upload', icon: Upload },
@@ -86,9 +101,15 @@ const Layout = () => {
       href: '/settings', 
       icon: Settings,
       subMenu: [
+        { name: 'Competency Levels', href: '/settings/level-terminology', icon: Target },
         { name: 'Assessment Cycle', href: '/settings/assessment-cycle', icon: Calendar }
       ]
     },
+  ];
+  
+  // Assessor navigation for admins (if admin is also an assessor)
+  const adminAssessorNavigation = [
+    { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
   ];
 
   // Base user navigation (for all users)
@@ -100,6 +121,10 @@ const Layout = () => {
     { name: 'My IDP', href: '/user/my-idp', icon: Target },
     { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
     { name: 'My Development Paths', href: '/user/my-development-paths', icon: Layers },
+  ];
+  
+  // Assessor-specific navigation (only for users who are assessors)
+  const assessorNavigation = [
     { name: 'Assessor Dashboard', href: '/assessor-dashboard', icon: BarChart3 },
   ];
 
@@ -114,10 +139,24 @@ const Layout = () => {
   const getNavigation = () => {
     switch (currentRole) {
       case 'ADMIN': 
-        return adminNavigation;
+        // Add assessor dashboard if admin is also an assessor
+        let adminNav = [...adminNavigation];
+        if (isAssessor) {
+          adminNav = [...adminNav, ...adminAssessorNavigation];
+        }
+        return adminNav;
       case 'USER': 
-        // Show manager pages only if user is actually a manager
-        return isManager ? [...baseUserNavigation, ...managerNavigation] : baseUserNavigation;
+        // Build navigation based on user roles
+        let nav = [...baseUserNavigation];
+        // Add manager pages if user is a manager
+        if (isManager) {
+          nav = [...nav, ...managerNavigation];
+        }
+        // Add assessor pages if user is an assessor
+        if (isAssessor) {
+          nav = [...nav, ...assessorNavigation];
+        }
+        return nav;
       default: 
         // Default to USER nav to prevent accidental admin exposure
         return baseUserNavigation;

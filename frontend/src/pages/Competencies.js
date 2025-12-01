@@ -35,6 +35,7 @@ import { useToast } from '../components/ui/use-toast';
 import api from '../lib/api';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import EmployeePhoto from '../components/EmployeePhoto';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const Competencies = () => {
   const navigate = useNavigate();
@@ -56,8 +57,10 @@ const Competencies = () => {
   const [assessorsLoading, setAssessorsLoading] = useState(false);
   const [showElementsModal, setShowElementsModal] = useState(false);
   const [selectedCompetencyForElements, setSelectedCompetencyForElements] = useState(null);
-  const [elements, setElements] = useState([]);
+  const [levelElements, setLevelElements] = useState([]);
   const [elementsLoading, setElementsLoading] = useState(false);
+  const [activeLevelId, setActiveLevelId] = useState(null);
+  const [expandedElementsModal, setExpandedElementsModal] = useState({}); // { elementId: true/false }
   const searchInputRef = useRef(null);
 
   // These will be populated from actual data
@@ -407,6 +410,16 @@ const Competencies = () => {
     }
   };
 
+const getTotalElementsCount = (competency) => {
+  if (competency?.elementsCount !== undefined && competency?.elementsCount !== null) {
+    return competency.elementsCount;
+  }
+  if (Array.isArray(competency?.levels)) {
+    return competency.levels.reduce((sum, level) => sum + (level.elements?.length || 0), 0);
+  }
+  return 0;
+};
+
   // Client-side filtering for instant search
   const filteredCompetencies = useMemo(() => {
     if (!competencies) return [];
@@ -446,6 +459,9 @@ const Competencies = () => {
   }, [competencies, searchInput, selectedType, selectedFamily, selectedDivision]);
   
   const filteredCount = filteredCompetencies.length;
+  const activeLevelForModalHeader = activeLevelId
+    ? levelElements?.find(level => level.id === activeLevelId)
+    : null;
 
   const toggleCompetency = (competencyId) => {
     setExpandedCompetency(expandedCompetency === competencyId ? null : competencyId);
@@ -482,28 +498,45 @@ const Competencies = () => {
     fetchAssessors(competency.id);
   };
 
-  const fetchElements = async (competencyId) => {
+  const loadCompetencyLevelElements = async (competencyId) => {
     setElementsLoading(true);
     try {
-      const response = await api.get(`/competencies/${competencyId}/elements`);
-      setElements(response.data || []);
+      const response = await api.get(`/competencies/${competencyId}`);
+      const levels = (response.data?.levels || []).map(level => ({
+        ...level,
+        elements: Array.isArray(level.elements) ? level.elements : []
+      }));
+      setLevelElements(levels);
     } catch (error) {
-      console.error('Error fetching elements:', error);
+      console.error('Error fetching level elements:', error);
       toast({
         title: "Error",
-        description: "Failed to load elements for this competency.",
+        description: "Failed to load competency elements.",
         variant: "destructive",
       });
-      setElements([]);
+      setLevelElements([]);
     } finally {
       setElementsLoading(false);
     }
   };
 
-  const openElementsModal = (competency) => {
+  const openElementsModal = async (competency, levelId = null) => {
     setSelectedCompetencyForElements(competency);
+    setActiveLevelId(levelId);
+    setExpandedElementsModal({});
     setShowElementsModal(true);
-    fetchElements(competency.id);
+
+    const hasLevels = Array.isArray(competency.levels) && competency.levels.length > 0;
+    if (hasLevels) {
+      setLevelElements(
+        competency.levels.map(level => ({
+          ...level,
+          elements: Array.isArray(level.elements) ? level.elements : []
+        }))
+      );
+    } else {
+      await loadCompetencyLevelElements(competency.id);
+    }
   };
 
   // Check if competency has assessors (we'll need to track this)
@@ -575,7 +608,7 @@ const Competencies = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Competency Framework</h1>
+          <h1 className="text-2xl font-bold text-red-600">Competency Framework</h1>
           <p className="text-gray-600">Manage your organization's competency dictionary and skill development</p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
@@ -734,8 +767,10 @@ const Competencies = () => {
 
       {/* Competencies List */}
       <div className="space-y-4">
-        {filteredCompetencies.map((competency) => (
-          <Card key={competency.id} className="hover:shadow-lg transition-shadow duration-200">
+        {filteredCompetencies.map((competency) => {
+          const totalElements = getTotalElementsCount(competency);
+          return (
+            <Card key={competency.id} className="hover:shadow-lg transition-shadow duration-200">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
@@ -783,7 +818,7 @@ const Competencies = () => {
                         title="View Elements"
                       >
                         <List className="h-3 w-3 mr-1" />
-                        {competency.elementsCount || 0} Elements
+                        {totalElements} Elements
                       </span>
                       <span className="flex items-center">
                         <Users className="h-3 w-3 mr-1" />
@@ -834,32 +869,53 @@ const Competencies = () => {
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-3">Competency Levels</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {competency.levels.map((level) => (
-                        <div key={level.id} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center justify-center mb-2">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(level.level)}`}>
-                              {level.level}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mb-3">{level.description}</p>
-                          {level.indicators.length > 0 && (
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 mb-1">Indicators:</p>
-                              <ul className="text-xs text-gray-600 space-y-1">
-                                {level.indicators.slice(0, 2).map((indicator, index) => (
-                                  <li key={index} className="flex items-start">
-                                    <span className="mr-1">•</span>
-                                    <span>{indicator}</span>
-                                  </li>
-                                ))}
-                                {level.indicators.length > 2 && (
-                                  <li className="text-gray-400">+{level.indicators.length - 2} more...</li>
-                                )}
-                              </ul>
+                      {competency.levels.map((level) => {
+                        const levelElements = level.elements || [];
+                        
+                        return (
+                          <div key={level.id} className="border border-gray-200 rounded-lg p-4 flex flex-col h-full">
+                            <div className="flex items-center justify-center mb-2">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(level.level)}`}>
+                                {getLevelDisplayName(level.level)}
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            <p className="text-sm text-gray-600 mb-3">{level.description}</p>
+                            {level.indicators.length > 0 && (
+                              <div>
+                                <p className="text-xs font-medium text-gray-500 mb-1">Indicators:</p>
+                                <ul className="text-xs text-gray-600 space-y-1">
+                                  {level.indicators.slice(0, 2).map((indicator, index) => (
+                                    <li key={index} className="flex items-start">
+                                      <span className="mr-1">•</span>
+                                      <span>{indicator}</span>
+                                    </li>
+                                  ))}
+                                  {level.indicators.length > 2 && (
+                                    <li className="text-gray-400">+{level.indicators.length - 2} more...</li>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+
+                            <div className="mt-auto pt-3 border-t border-gray-100">
+                              <button
+                                type="button"
+                                onClick={() => openElementsModal(competency, level.id)}
+                                className="flex items-center justify-between w-full text-xs font-medium text-gray-700 hover:text-green-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={levelElements.length === 0}
+                              >
+                                <span className="flex items-center gap-1">
+                                  <List className="h-3 w-3" />
+                                  View Elements
+                                </span>
+                                <span className="text-[11px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                  {levelElements.length}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -896,7 +952,7 @@ const Competencies = () => {
               </CardContent>
             )}
           </Card>
-        ))}
+        )})}
       </div>
 
       {/* Upload Modal */}
@@ -1074,11 +1130,18 @@ const Competencies = () => {
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900">Elements for {selectedCompetencyForElements.name}</h3>
-                  <p className="text-sm text-gray-600">{selectedCompetencyForElements.type} • {selectedCompetencyForElements.family}</p>
+                  <p className="text-sm text-gray-600">
+                    {activeLevelForModalHeader
+                      ? `${getLevelDisplayName(activeLevelForModalHeader.level)} Level • ${selectedCompetencyForElements.type} • ${selectedCompetencyForElements.family}`
+                      : `${selectedCompetencyForElements.type} • ${selectedCompetencyForElements.family}`}
+                  </p>
                 </div>
               </div>
               <button
-                onClick={() => setShowElementsModal(false)}
+                onClick={() => {
+                  setShowElementsModal(false);
+                  setActiveLevelId(null);
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X className="h-6 w-6" />
@@ -1093,55 +1156,146 @@ const Competencies = () => {
                     <p className="text-gray-600">Loading elements...</p>
                   </div>
                 </div>
-              ) : elements.length === 0 ? (
-                <div className="text-center py-12">
-                  <List className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 text-lg font-medium mb-2">No Elements Found</p>
-                  <p className="text-gray-500 text-sm">This competency doesn't have any elements yet.</p>
-                  <Button
-                    onClick={() => {
-                      setShowElementsModal(false);
-                      navigate(`/competencies/edit/${selectedCompetencyForElements.id}`);
-                    }}
-                    className="mt-4 loyverse-button"
-                  >
-                    Add Elements
-                  </Button>
-                </div>
-              ) : (
-                <div>
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-sm text-gray-600">
-                      {elements.length} {elements.length === 1 ? 'Element' : 'Elements'} found
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {elements.map((element) => (
-                      <div 
-                        key={element.id} 
-                        className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow"
+              ) : (() => {
+                const normalizedLevels = Array.isArray(levelElements) ? levelElements : [];
+                const activeLevel = activeLevelId ? normalizedLevels.find(level => level.id === activeLevelId) : null;
+                const displayLevels = activeLevel ? normalizedLevels.filter(level => level.id === activeLevelId) : normalizedLevels;
+                const totalLevelElements = displayLevels.reduce((sum, level) => sum + (level.elements?.length || 0), 0);
+
+                if (displayLevels.length === 0 || totalLevelElements === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <List className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 text-lg font-medium mb-2">No Elements Found</p>
+                      <p className="text-gray-500 text-sm">This competency doesn't have any elements yet.</p>
+                      <Button
+                        onClick={() => {
+                          setShowElementsModal(false);
+                          setActiveLevelId(null);
+                          navigate(`/competencies/edit/${selectedCompetencyForElements.id}`);
+                        }}
+                        className="mt-4 loyverse-button"
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h4 className="font-medium text-gray-900">{element.name}</h4>
-                              {!element.isActive && (
-                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">Inactive</span>
-                              )}
+                        Add Elements
+                      </Button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-5">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <p className="text-sm text-gray-600">
+                        {activeLevel
+                          ? `Showing ${totalLevelElements} element${totalLevelElements !== 1 ? 's' : ''} in ${getLevelDisplayName(activeLevel.level)} level.`
+                          : `Showing ${totalLevelElements} element${totalLevelElements !== 1 ? 's' : ''} across ${displayLevels.length} level${displayLevels.length !== 1 ? 's' : ''}.`}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowElementsModal(false);
+                          setActiveLevelId(null);
+                          navigate(`/competencies/edit/${selectedCompetencyForElements.id}`);
+                        }}
+                      >
+                        Manage Elements
+                      </Button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {displayLevels.map((level) => (
+                        <div key={level.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-3">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getLevelColor(level.level)}`}>
+                                {getLevelDisplayName(level.level)}
+                              </span>
+                              <span className="text-sm font-medium text-gray-900">{level.title}</span>
                             </div>
-                            {element.description && (
-                              <p className="text-sm text-gray-600">{element.description}</p>
-                            )}
-                            <div className="mt-2 text-xs text-gray-500">
-                              Order: {element.order}
-                            </div>
+                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                              {level.elements?.length || 0} element{(level.elements?.length || 0) !== 1 ? 's' : ''}
+                            </span>
                           </div>
+
+                          {level.elements?.length ? (
+                            <ul className="space-y-2">
+                              {level.elements.map((element) => {
+                                const isExpanded = expandedElementsModal[element.id];
+                                const indicators = element.performanceIndicators || [];
+                                return (
+                                  <li key={element.id} className="border border-gray-100 rounded-md p-2 bg-gray-50">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setExpandedElementsModal(prev => ({
+                                              ...prev,
+                                              [element.id]: !prev[element.id]
+                                            }))
+                                          }
+                                          className="flex items-center gap-2 mb-1 text-left w-full"
+                                        >
+                                          <span className="text-gray-400">
+                                            {isExpanded ? (
+                                              <ChevronDown className="h-3 w-3" />
+                                            ) : (
+                                              <ChevronRight className="h-3 w-3" />
+                                            )}
+                                          </span>
+                                          <span className="font-medium text-gray-900 text-sm">
+                                            {element.name}
+                                          </span>
+                                        </button>
+                                      </div>
+                                      <span
+                                        className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                                          element.isActive
+                                            ? 'bg-green-100 text-green-700'
+                                            : 'bg-gray-100 text-gray-500'
+                                        }`}
+                                      >
+                                        {element.isActive ? 'Active' : 'Inactive'}
+                                      </span>
+                                    </div>
+
+                                    {isExpanded && (
+                                      <div className="mt-2 pt-2 border-t border-gray-200 ml-5">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[11px] font-medium text-gray-700">
+                                            Performance Indicators
+                                          </span>
+                                          <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                                            {indicators.length}
+                                          </span>
+                                        </div>
+                                        {indicators.length > 0 ? (
+                                          <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-700">
+                                            {indicators.map((pi) => (
+                                              <li key={pi.id || pi.action}>{pi.action || pi}</li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <p className="text-[11px] text-gray-400 italic">
+                                            No performance indicators defined for this element.
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-gray-500 italic">No elements defined for this level yet.</p>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>

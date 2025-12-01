@@ -14,6 +14,19 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
+const LEVEL_DISPLAY_NAMES = {
+  BASIC: 'Aware',
+  INTERMEDIATE: 'Knowledge',
+  ADVANCED: 'Skilled',
+  MASTERY: 'Mastery',
+};
+
+const getLevelDisplayLabel = (level) => {
+  if (!level) return 'Level';
+  const display = LEVEL_DISPLAY_NAMES[level] || level;
+  return `${display} Level`;
+};
+
 // Map Excel types to Prisma enum values
 function mapTypeToEnum(type) {
   if (!type) return 'TECHNICAL';
@@ -353,7 +366,7 @@ async function importCompetencyDictionary() {
               data: {
                 competencyId: competency.id,
                 level: levelData.level,
-                title: `${levelData.level} Level`,
+                title: getLevelDisplayLabel(levelData.level),
                 description: exactDescription,
                 indicators: [], // Empty indicators - use exact description only
                 isActive: true
@@ -364,7 +377,7 @@ async function importCompetencyDictionary() {
             await prisma.competencyLevel.update({
               where: { id: existingLevel.id },
               data: {
-                title: `${levelData.level} Level`,
+                title: getLevelDisplayLabel(levelData.level),
                 description: exactDescription,
                 indicators: [], // Empty indicators - use exact description only
                 isActive: true

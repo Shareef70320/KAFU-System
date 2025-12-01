@@ -23,6 +23,7 @@ import {
 import { useToast } from '../components/ui/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const Assessments = () => {
   const navigate = useNavigate();
@@ -322,7 +323,7 @@ const Assessments = () => {
               <option value="">All Levels</option>
               {levels.map(level => (
                 <option key={level.id} value={level.id}>
-                  {level.level} - {level.title}
+                  {getLevelDisplayName(level.level)} - {level.title}
                 </option>
               ))}
             </select>

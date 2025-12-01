@@ -15,6 +15,7 @@ import {
 import { useToast } from './ui/use-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const EditQuestionModal = ({ 
   isOpen, 
@@ -492,7 +493,7 @@ const EditQuestionModal = ({
                     <option value="">Select Level</option>
                     {levels.map(level => (
                       <option key={level.id} value={level.id}>
-                        {level.level}
+                        {getLevelDisplayName(level.level)}
                       </option>
                     ))}
                   </select>

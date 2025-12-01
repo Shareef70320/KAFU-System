@@ -34,6 +34,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import api from '../lib/api';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const JobCompetencyMapping = () => {
   const navigate = useNavigate();
@@ -849,10 +850,10 @@ const JobCompetencyMapping = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Levels</SelectItem>
-                        <SelectItem value="BASIC">Basic</SelectItem>
-                        <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
-                        <SelectItem value="ADVANCED">Advanced</SelectItem>
-                        <SelectItem value="MASTERY">Mastery</SelectItem>
+                        <SelectItem value="BASIC">{getLevelDisplayName('BASIC')}</SelectItem>
+                        <SelectItem value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</SelectItem>
+                        <SelectItem value="ADVANCED">{getLevelDisplayName('ADVANCED')}</SelectItem>
+                        <SelectItem value="MASTERY">{getLevelDisplayName('MASTERY')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -955,7 +956,7 @@ const JobCompetencyMapping = () => {
                                   <Info className="h-3 w-3 text-gray-400 group-hover:text-blue-500" />
                                 </div>
                                 <Badge className={`text-xs ${getLevelColor(comp.requiredLevel)}`}>
-                                  {comp.requiredLevel}
+                                  {getLevelDisplayName(comp.requiredLevel)}
                                 </Badge>
                               </div>
                               <div className="flex items-center space-x-2">
@@ -1064,7 +1065,7 @@ const JobCompetencyMapping = () => {
                           <span className="font-medium text-blue-900">Required Level</span>
                         </div>
                         <Badge className={`${getLevelColor(selectedCompetency.requiredLevel)}`}>
-                          {selectedCompetency.requiredLevel}
+                          {getLevelDisplayName(selectedCompetency.requiredLevel)}
                         </Badge>
                       </div>
                       
@@ -1118,7 +1119,7 @@ const JobCompetencyMapping = () => {
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-3">
                                 <Badge className={`text-xs ${getLevelColor(level.level)}`}>
-                                  {level.level}
+                                  {getLevelDisplayName(level.level)}
                                 </Badge>
                                 <span className="font-medium text-gray-900">{level.title}</span>
                                 {level.level === selectedCompetency.requiredLevel && (
@@ -1321,10 +1322,10 @@ const JobCompetencyMapping = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="BASIC">Basic</SelectItem>
-                        <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
-                        <SelectItem value="ADVANCED">Advanced</SelectItem>
-                        <SelectItem value="MASTERY">Mastery</SelectItem>
+                        <SelectItem value="BASIC">{getLevelDisplayName('BASIC')}</SelectItem>
+                        <SelectItem value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</SelectItem>
+                        <SelectItem value="ADVANCED">{getLevelDisplayName('ADVANCED')}</SelectItem>
+                        <SelectItem value="MASTERY">{getLevelDisplayName('MASTERY')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1643,16 +1644,16 @@ const JobCompetencyMapping = () => {
                                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                       >
                                         <option value="">Select Level</option>
-                                        <option value="BASIC">Basic</option>
-                                        <option value="INTERMEDIATE">Intermediate</option>
-                                        <option value="ADVANCED">Advanced</option>
-                                        <option value="MASTERY">Mastery</option>
+                                        <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
+                                        <option value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</option>
+                                        <option value="ADVANCED">{getLevelDisplayName('ADVANCED')}</option>
+                                        <option value="MASTERY">{getLevelDisplayName('MASTERY')}</option>
                                       </select>
                                       <Button
                                         size="sm"
                                         variant="outline"
                                         onClick={() => {
-                                          const level = prompt('Enter level (BASIC, INTERMEDIATE, ADVANCED, MASTERY):');
+                                          const level = prompt(`Enter level (${getLevelDisplayName('BASIC')}, ${getLevelDisplayName('INTERMEDIATE')}, ${getLevelDisplayName('ADVANCED')}, ${getLevelDisplayName('MASTERY')}):\n\nOr use: BASIC, INTERMEDIATE, ADVANCED, MASTERY`);
                                           if (level && ['BASIC', 'INTERMEDIATE', 'ADVANCED', 'MASTERY'].includes(level.toUpperCase())) {
                                             handleAddCompetencyToEditProfile(competency, level.toUpperCase());
                                           }
@@ -1730,7 +1731,7 @@ const JobCompetencyMapping = () => {
                                         </div>
                                         <div className="flex items-center space-x-2">
                                           <Badge className={`text-xs ${getLevelColor(mapping.requiredLevel)}`}>
-                                            {mapping.requiredLevel}
+                                            {getLevelDisplayName(mapping.requiredLevel)}
                                           </Badge>
                                           <Select
                                             value={mapping.requiredLevel}
@@ -1740,10 +1741,10 @@ const JobCompetencyMapping = () => {
                                               <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                              <SelectItem value="BASIC">Basic</SelectItem>
-                                              <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
-                                              <SelectItem value="ADVANCED">Advanced</SelectItem>
-                                              <SelectItem value="MASTERY">Mastery</SelectItem>
+                                              <SelectItem value="BASIC">{getLevelDisplayName('BASIC')}</SelectItem>
+                                              <SelectItem value="INTERMEDIATE">{getLevelDisplayName('INTERMEDIATE')}</SelectItem>
+                                              <SelectItem value="ADVANCED">{getLevelDisplayName('ADVANCED')}</SelectItem>
+                                              <SelectItem value="MASTERY">{getLevelDisplayName('MASTERY')}</SelectItem>
                                             </SelectContent>
                                           </Select>
                                         </div>
