@@ -34,6 +34,7 @@ import { useToast } from '../components/ui/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
 import EmployeePhoto from '../components/EmployeePhoto';
+import { getLevelDisplayName } from '../utils/competencyLevels';
 
 const Employees = () => {
   const { toast } = useToast();
@@ -773,13 +774,8 @@ const Employees = () => {
                             item.requiredLevel === 'ADVANCED' ? 'bg-blue-100 text-blue-800' :
                             'bg-green-100 text-green-800'
                           }`}>
-                            {item.requiredLevel}
+                            {getLevelDisplayName(item.requiredLevel)}
                           </span>
-                          {item.isRequired && (
-                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                              Required
-                            </span>
-                          )}
                         </div>
                       </div>
                       <p className="text-sm text-gray-600 mt-2">{item.competency.definition}</p>

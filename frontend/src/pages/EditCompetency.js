@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -29,6 +29,7 @@ import {
 const EditCompetency = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -160,7 +161,15 @@ const EditCompetency = () => {
         description: 'Competency updated successfully!',
         variant: 'default'
       });
-      navigate('/competencies');
+      // If we came from Competency Framework with filters, navigate back with filters in state
+      const from = location.state?.from;
+      const filters = location.state?.filters;
+      if (from === 'competencies' && filters) {
+        navigate('/competencies', { state: { restoreFilters: filters } });
+      } else {
+        // Fallback: go back one step
+        navigate(-1);
+      }
     },
     onError: (error) => {
       toast({
@@ -818,7 +827,18 @@ const EditCompetency = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-gray-600">Competency not found</p>
-          <Button onClick={() => navigate('/competencies')} className="mt-4">
+          <Button
+            onClick={() => {
+              const from = location.state?.from;
+              const filters = location.state?.filters;
+              if (from === 'competencies' && filters) {
+                navigate('/competencies', { state: { restoreFilters: filters } });
+              } else {
+                navigate(-1);
+              }
+            }}
+            className="mt-4"
+          >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Competencies
           </Button>
@@ -834,7 +854,15 @@ const EditCompetency = () => {
         <div className="mb-6">
           <Button 
             variant="outline" 
-            onClick={() => navigate('/competencies')}
+            onClick={() => {
+              const from = location.state?.from;
+              const filters = location.state?.filters;
+              if (from === 'competencies' && filters) {
+                navigate('/competencies', { state: { restoreFilters: filters } });
+              } else {
+                navigate(-1);
+              }
+            }}
             className="mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />

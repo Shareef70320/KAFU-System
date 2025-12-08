@@ -35,7 +35,8 @@ import {
   PlusCircle,
   Calendar as CalendarIcon,
   FileText,
-  Lightbulb
+  Lightbulb,
+  Info
 } from 'lucide-react';
 import EmployeePhoto from '../../components/EmployeePhoto';
 import api from '../../lib/api';
@@ -53,6 +54,9 @@ const TeamEmployees = () => {
   const [jcpData, setJcpData] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showJCPModal, setShowJCPModal] = useState(false);
+  const [expandedJcpDetails, setExpandedJcpDetails] = useState({});
+  const [jcpCompetencyDetails, setJcpCompetencyDetails] = useState({});
+  const [jcpDetailsLoadingIndex, setJcpDetailsLoadingIndex] = useState(null);
   const [showAssessmentsModal, setShowAssessmentsModal] = useState(false);
   const [assessments, setAssessments] = useState([]);
   const [assessmentsLoading, setAssessmentsLoading] = useState(false);
@@ -232,6 +236,9 @@ const TeamEmployees = () => {
   // Handle JCP icon click
   const handleJCPClick = (employee) => {
     setSelectedEmployee(employee);
+    setExpandedJcpDetails({});
+    setJcpCompetencyDetails({});
+    setJcpDetailsLoadingIndex(null);
     setShowJCPModal(true);
   };
 
@@ -1014,32 +1021,175 @@ const TeamEmployees = () => {
               <div>
                 <h4 className="text-sm font-medium text-gray-500 mb-3">Required Competencies</h4>
                 <div className="space-y-3">
-                  {getEmployeeJCP(selectedEmployee).map((jcp, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h5 className="font-medium text-gray-900">{jcp.competency.name}</h5>
-                          <p className="text-sm text-gray-600 mt-1">{jcp.competency.definition}</p>
-                          <div className="flex items-center mt-2 space-x-4">
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                              {jcp.competency.type}
-                            </span>
-                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                              {jcp.competency.family}
-                            </span>
-                            <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                              Level: {jcp.requiredLevel}
-                            </span>
-                            {jcp.isRequired && (
-                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                                Required
+                  {getEmployeeJCP(selectedEmployee).map((jcp, index) => {
+                    const competency = jcp.competency;
+                    const requiredLevel = jcp.requiredLevel;
+
+                    const localRequiredLevel =
+                      competency?.levels?.find((lvl) => lvl.level === requiredLevel) || null;
+                    const localElements = localRequiredLevel?.elements || [];
+
+                    return (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h5 className="font-medium text-gray-900">{competency.name}</h5>
+                            <div className="flex items-center mt-2 space-x-2">
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                {competency.type}
                               </span>
-                            )}
+                              {competency.family && (
+                                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                  {competency.family}
+                                </span>
+                              )}
+                              {competency.code && (
+                                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full font-mono">
+                                  {competency.code}
+                                </span>
+                              )}
+                              <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                                Level: {getLevelDisplayName(requiredLevel)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-2">{competency.definition}</p>
                           </div>
+                          <button
+                            type="button"
+                            className="text-gray-400 hover:text-blue-600 ml-2"
+                            title="View level details, elements and indicators"
+                            onClick={async () => {
+                              try {
+                                const isExpanded = expandedJcpDetails[index];
+                                if (!isExpanded && competency?.id && !jcpCompetencyDetails[competency.id]) {
+                                  setJcpDetailsLoadingIndex(index);
+                                  const res = await api.get(`/competencies/${competency.id}`);
+                                  setJcpCompetencyDetails((prev) => ({
+                                    ...prev,
+                                    [competency.id]: res.data,
+                                  }));
+                                }
+                              } catch (err) {
+                                console.error('Error loading competency details for JCP:', err);
+                                toast({
+                                  title: 'Error',
+                                  description: 'Failed to load competency level details.',
+                                  variant: 'destructive',
+                                });
+                              } finally {
+                                setJcpDetailsLoadingIndex(null);
+                                setExpandedJcpDetails((prev) => ({
+                                  ...prev,
+                                  [index]: !prev[index],
+                                }));
+                              }
+                            }}
+                          >
+                            {jcpDetailsLoadingIndex === index ? (
+                              <span className="inline-flex items-center justify-center">
+                                <span className="h-3 w-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                              </span>
+                            ) : (
+                              <Info className="h-4 w-4" />
+                            )}
+                          </button>
                         </div>
+
+                        {/* Expanded required level details, elements & indicators */}
+                        {expandedJcpDetails[index] && (
+                          <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+                            {(() => {
+                              const fullComp =
+                                (competency?.id && jcpCompetencyDetails[competency.id]) ||
+                                competency;
+                              const fullRequiredLevel =
+                                fullComp?.levels?.find((lvl) => lvl.level === requiredLevel) ||
+                                localRequiredLevel ||
+                                null;
+                              const fullElements =
+                                fullRequiredLevel?.elements || localElements || [];
+
+                              if (!fullRequiredLevel) return null;
+
+                              return (
+                                <div className="bg-blue-50 border border-blue-100 rounded-md p-3">
+                                  <p className="text-xs font-semibold text-blue-800 mb-1">
+                                    {getLevelDisplayName(fullRequiredLevel.level)} Level Details
+                                  </p>
+                                  {fullRequiredLevel.description && (
+                                    <p className="text-xs text-blue-900 whitespace-pre-wrap">
+                                      {fullRequiredLevel.description}
+                                    </p>
+                                  )}
+                                  {Array.isArray(fullRequiredLevel.indicators) &&
+                                    fullRequiredLevel.indicators.length > 0 && (
+                                      <div className="mt-2">
+                                        <p className="text-[11px] font-semibold text-blue-800 mb-1">
+                                          Level Indicators
+                                        </p>
+                                        <ul className="list-disc list-inside space-y-0.5 text-[11px] text-blue-900">
+                                          {fullRequiredLevel.indicators.map((ind, idx) => (
+                                            <li key={idx}>{ind}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                </div>
+                              );
+                            })()}
+
+                            {(() => {
+                              const fullComp =
+                                (competency?.id && jcpCompetencyDetails[competency.id]) ||
+                                competency;
+                              const fullRequiredLevel =
+                                fullComp?.levels?.find((lvl) => lvl.level === requiredLevel) ||
+                                localRequiredLevel ||
+                                null;
+                              const fullElements =
+                                fullRequiredLevel?.elements || localElements || [];
+
+                              if (!fullRequiredLevel || fullElements.length === 0) {
+                                return (
+                                  <p className="text-[11px] text-gray-400 italic">
+                                    No elements defined for this level yet.
+                                  </p>
+                                );
+                              }
+
+                              return (
+                                <div className="bg-gray-50 border border-gray-100 rounded-md p-3">
+                                  <p className="text-xs font-semibold text-gray-800 mb-1">
+                                    Elements &amp; Performance Indicators
+                                  </p>
+                                  <ul className="space-y-1">
+                                    {fullElements.map((el) => (
+                                      <li
+                                        key={el.id}
+                                        className="border border-gray-100 rounded-md p-2 bg-white"
+                                      >
+                                        <p className="text-xs font-medium text-gray-900 mb-1">
+                                          {el.name}
+                                        </p>
+                                        {Array.isArray(el.performanceIndicators) &&
+                                          el.performanceIndicators.length > 0 && (
+                                            <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-700">
+                                              {el.performanceIndicators.map((pi) => (
+                                                <li key={pi.id || pi.action}>{pi.action || pi}</li>
+                                              ))}
+                                            </ul>
+                                          )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
