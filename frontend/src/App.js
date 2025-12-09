@@ -7,6 +7,7 @@ import Layout from './components/Layout';
 import RoleBasedRedirect from './components/RoleBasedRedirect';
 import AdminRoute from './components/AdminRoute';
 import UserRoute from './components/UserRoute';
+import ClinicRoute from './components/ClinicRoute';
 import Users from './pages/Users';
 import Groups from './pages/Groups';
 import Employees from './pages/Employees';
@@ -53,6 +54,10 @@ import ManagerAssessments from './pages/manager/ManagerAssessments';
 // Admin Routes
 import AssessorDashboard from './pages/AssessorDashboard';
 import Settings from './pages/Settings';
+import About from './pages/About';
+import KafuClinic from './pages/KafuClinic';
+import EditCompetencyClinic from './pages/EditCompetencyClinic';
+import EditRequestReview from './pages/EditRequestReview';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,7 +88,7 @@ function App() {
                 <Route path="competencies" element={<AdminRoute><Competencies /></AdminRoute>} />
                 <Route path="competencies/add" element={<AdminRoute><AddCompetency /></AdminRoute>} />
                 <Route path="competencies/edit/:id" element={<AdminRoute><EditCompetency /></AdminRoute>} />
-                <Route path="competencies/view/:id" element={<AdminRoute><ViewCompetency /></AdminRoute>} />
+                <Route path="competencies/view/:id" element={<ClinicRoute><ViewCompetency /></ClinicRoute>} />
                 <Route path="competency-families" element={<AdminRoute><CompetencyFamilies /></AdminRoute>} />
                 <Route path="jobs" element={<AdminRoute><Jobs /></AdminRoute>} />
                 <Route path="jobs/view/:id" element={<AdminRoute><ViewJob /></AdminRoute>} />
@@ -104,6 +109,10 @@ function App() {
                 <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="settings/level-terminology" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="settings/assessment-cycle" element={<AdminRoute><Settings /></AdminRoute>} />
+                <Route path="about" element={<About />} />
+                <Route path="kafu-clinic" element={<ClinicRoute><KafuClinic /></ClinicRoute>} />
+                <Route path="kafu-clinic/competency/edit/:id" element={<ClinicRoute><EditCompetencyClinic /></ClinicRoute>} />
+                <Route path="kafu-clinic/edit-requests" element={<AdminRoute><EditRequestReview /></AdminRoute>} />
                 <Route path="test" element={<Test />} />
                 {/* User Login */}
                 <Route path="user-login" element={<UserLogin />} />

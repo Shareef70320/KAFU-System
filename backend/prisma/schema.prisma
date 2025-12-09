@@ -13,67 +13,67 @@ datasource db {
 // User and Group models removed - using Employee model only
 
 model Employee {
-  id                       String    @id @default(cuid()) @map("id")
-  sid                      String?   @unique @map("sid") // SID from HR data
-  erp_id                   String?   @map("erp_id") // ERPID from HR data
-  first_name               String    @map("first_name")
-  last_name                String    @map("last_name")
-  full_name                String?   @map("full_name") // Full employee name from Excel
-  name_ar                  String?   @map("name_ar") // Arabic name
-  email                    String    @unique @map("email")
-  job_code                 String?   @map("job_code") // JobCode from HR data
-  jcp_code                 String?   @map("jcp_code") // JCPCode from Excel
-  job_title                String?   @map("job_title")
-  division                 String?   @map("division") // Division from HR data
-  division1                String?   @map("division1") // DIVISION1 from Excel
-  unit                     String?   @map("unit") // Unit from HR data
-  department               String?   @map("department")
-  section                  String?   @map("section") // Section from HR data
-  sub_section              String?   @map("sub_section") // Sub Section from HR data
-  position_remark          String?   @map("position_remark") // Position Remark from HR data
-  position                 String?   @map("position") // POSITION from Excel
-  job                      String?   @map("job") // JOB from Excel
-  chief_office             String?   @map("chief_office") // Chief Office from Excel
-  grade                    String?   @map("grade") // Grade from HR data
-  location                 String?   @map("location") // Location from HR data
-  photo_url                String?   @map("photo_url") // Path to employee photo
-  line_manager_sid         String?   @map("line_manager_sid") // SID of the line manager
-  competency_supervisor_sid String?   @map("competency_supervisor_sid") // Competency supervisor SID (initially same as line_manager_sid)
-  is_active                Boolean   @default(true) @map("is_active")
-  employment_status        String    @default("ACTIVE") @map("employment_status")
-  employment_type          String?   @map("employment_type")
-  
+  id                        String  @id @default(cuid()) @map("id")
+  sid                       String? @unique @map("sid") // SID from HR data
+  erp_id                    String? @map("erp_id") // ERPID from HR data
+  first_name                String  @map("first_name")
+  last_name                 String  @map("last_name")
+  full_name                 String? @map("full_name") // Full employee name from Excel
+  name_ar                   String? @map("name_ar") // Arabic name
+  email                     String  @unique @map("email")
+  job_code                  String? @map("job_code") // JobCode from HR data
+  jcp_code                  String? @map("jcp_code") // JCPCode from Excel
+  job_title                 String? @map("job_title")
+  division                  String? @map("division") // Division from HR data
+  division1                 String? @map("division1") // DIVISION1 from Excel
+  unit                      String? @map("unit") // Unit from HR data
+  department                String? @map("department")
+  section                   String? @map("section") // Section from HR data
+  sub_section               String? @map("sub_section") // Sub Section from HR data
+  position_remark           String? @map("position_remark") // Position Remark from HR data
+  position                  String? @map("position") // POSITION from Excel
+  job                       String? @map("job") // JOB from Excel
+  chief_office              String? @map("chief_office") // Chief Office from Excel
+  grade                     String? @map("grade") // Grade from HR data
+  location                  String? @map("location") // Location from HR data
+  photo_url                 String? @map("photo_url") // Path to employee photo
+  line_manager_sid          String? @map("line_manager_sid") // SID of the line manager
+  competency_supervisor_sid String? @map("competency_supervisor_sid") // Competency supervisor SID (initially same as line_manager_sid)
+  is_active                 Boolean @default(true) @map("is_active")
+  employment_status         String  @default("ACTIVE") @map("employment_status")
+  employment_type           String? @map("employment_type")
+
   // Personal Information
-  date_of_birth            DateTime? @map("date_of_birth") // DATE OF BIRTH from Excel
-  age                      Int?      @map("age") // Calculated age from date_of_birth
-  gender                   Gender?   @map("gender") // GENDER from Excel
-  nationality              String?   @map("nationality") // NATIONALITY from Excel
-  mobile_number            String?   @map("mobile_number") // MOBILE NUMBER from Excel
-  id_resident_card_no      String?   @map("id_resident_card_no") // ID/Resident Card No from Excel
-  
+  date_of_birth       DateTime? @map("date_of_birth") // DATE OF BIRTH from Excel
+  age                 Int?      @map("age") // Calculated age from date_of_birth
+  gender              Gender?   @map("gender") // GENDER from Excel
+  nationality         String?   @map("nationality") // NATIONALITY from Excel
+  mobile_number       String?   @map("mobile_number") // MOBILE NUMBER from Excel
+  id_resident_card_no String?   @map("id_resident_card_no") // ID/Resident Card No from Excel
+
   // Employment Information
-  joining_date             DateTime? @map("joining_date") // JOINING DATE from Excel
-  previous_experience      Float?    @map("previous_experience") // PREVIOUS EXPERIANCE (years)
-  oamc_experience          Float?    @map("oamc_experience") // OAMC EXPERIENCE (calculated from joining_date)
-  total_experience         Float?    @map("total_experience") // TOTAL EXPERIANCE (previous + oamc)
-  person_type              String?   @map("person_type") // PERSON TYPE from Excel
-  employee_category        String?   @map("employee_category") // EMPLOYEE CATEGORY from Excel
-  employee_local           String?   @map("employee_local") // EMPLOYEE_LOCAL from Excel
-  qualification            String?   @map("qualification") // Qualification from Excel
-  specialization           String?   @map("specialization") // Specialization from Excel
-  
-  created_at               DateTime  @default(now()) @map("created_at")
-  updated_at               DateTime  @updatedAt @map("updated_at")
-  
+  joining_date        DateTime? @map("joining_date") // JOINING DATE from Excel
+  previous_experience Float?    @map("previous_experience") // PREVIOUS EXPERIANCE (years)
+  oamc_experience     Float?    @map("oamc_experience") // OAMC EXPERIENCE (calculated from joining_date)
+  total_experience    Float?    @map("total_experience") // TOTAL EXPERIANCE (previous + oamc)
+  person_type         String?   @map("person_type") // PERSON TYPE from Excel
+  employee_category   String?   @map("employee_category") // EMPLOYEE CATEGORY from Excel
+  employee_local      String?   @map("employee_local") // EMPLOYEE_LOCAL from Excel
+  qualification       String?   @map("qualification") // Qualification from Excel
+  specialization      String?   @map("specialization") // Specialization from Excel
+
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
   // Relations
-  competencyAssessments    CompetencyAssessment[]
-  employeeAssessments       EmployeeAssessment[]
-  jobEvaluations           JobEvaluation[]
-  
+  competencyAssessments CompetencyAssessment[]
+  employeeAssessments   EmployeeAssessment[]
+  jobEvaluations        JobEvaluation[]
+
   // Self-referencing relationship for line manager
-  lineManager              Employee? @relation("LineManager", fields: [line_manager_sid], references: [sid])
-  directReports            Employee[] @relation("LineManager")
-  
+  lineManager   Employee?  @relation("LineManager", fields: [line_manager_sid], references: [sid])
+  directReports Employee[] @relation("LineManager")
+
   @@map("employees")
 }
 
@@ -126,148 +126,148 @@ enum PayFrequency {
 }
 
 model Competency {
-  id                String    @id @default(cuid())
-  code              String?   @unique // Unique competency code (user-defined or system-generated)
+  id                String         @id @default(cuid())
+  code              String?        @unique // Unique competency code (user-defined or system-generated)
   name              String
   type              CompetencyType
-  family            String    // e.g., Finance, HR, Technical Services
-  familyId          String?   @map("familyId") // Link to CompetencyFamily model
+  family            String // e.g., Finance, HR, Technical Services
+  familyId          String?        @map("familyId") // Link to CompetencyFamily model
   definition        String
   description       String?
-  related_division  String?   // Division from HR data
-  related_documents String[]  @default([]) // Array of related document references/URLs
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  related_division  String? // Division from HR data
+  related_documents String[]       @default([]) // Array of related document references/URLs
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
   // Relations
-  competencyFamily  CompetencyFamily? @relation(fields: [familyId], references: [id])
-  levels            CompetencyLevel[]
-  documents         CompetencyDocument[]
-  assessments       CompetencyAssessment[]
-  jobCompetencies   JobCompetency[]
-  questions         Question[]
-  assessments_new   Assessment[]
-  elements          CompetencyElement[] // Legacy - elements should now be linked to levels
-  
-  @@map("competencies")
+  competencyFamily CompetencyFamily?      @relation(fields: [familyId], references: [id])
+  levels           CompetencyLevel[]
+  documents        CompetencyDocument[]
+  assessments      CompetencyAssessment[]
+  jobCompetencies  JobCompetency[]
+  questions        Question[]
+  assessments_new  Assessment[]
+  elements         CompetencyElement[] // Legacy - elements should now be linked to levels
+
   @@unique([name, type, family])
+  @@map("competencies")
 }
 
 model CompetencyFamily {
-  id          String    @id @default(cuid())
-  name        String    // Family name (e.g., Finance, HR, Technical Services)
+  id          String          @id @default(cuid())
+  name        String // Family name (e.g., Finance, HR, Technical Services)
   type        CompetencyType? // Associated type (optional, for backward compatibility)
   description String?
-  isActive    Boolean   @default(true) @map("is_active")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
   // Relations
   competencies Competency[]
-  
+
   @@unique([name, type])
   @@map("competency_families")
 }
 
 model CompetencyLevel {
-  id                String    @id @default(cuid())
-  competencyId      String
-  level             CompetencyLevelType
-  title             String    // e.g., "Basic", "Intermediate", "Advanced", "Mastery"
-  description       String    // Detailed description/indicators for this level
-  indicators        String[]  // Array of specific indicators
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  id           String              @id @default(cuid())
+  competencyId String
+  level        CompetencyLevelType
+  title        String // e.g., "Basic", "Intermediate", "Advanced", "Mastery"
+  description  String // Detailed description/indicators for this level
+  indicators   String[] // Array of specific indicators
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
   // Relations
-  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-  assessments       CompetencyAssessment[]
-  questions         Question[]
-  assessments_new   Assessment[]
-  elements          CompetencyElement[]
-  
+  competency      Competency             @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  assessments     CompetencyAssessment[]
+  questions       Question[]
+  assessments_new Assessment[]
+  elements        CompetencyElement[]
+
   @@unique([competencyId, level])
   @@map("competency_levels")
 }
 
 model CompetencyElement {
-  id                String    @id @default(cuid()) @map("id")
-  competencyId      String?   @map("competency_id") // Optional for backward compatibility
-  competencyLevelId String    @map("competency_level_id") // Required - links to specific level
-  name              String    @map("name") // Element name/title
-  description       String?   @map("description") // Optional description
-  order             Int       @default(0) @map("order") // Order/sequence for display
-  isActive          Boolean   @default(true) @map("is_active")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  
+  id                String   @id @default(cuid()) @map("id")
+  competencyId      String?  @map("competency_id") // Optional for backward compatibility
+  competencyLevelId String   @map("competency_level_id") // Required - links to specific level
+  name              String   @map("name") // Element name/title
+  description       String?  @map("description") // Optional description
+  order             Int      @default(0) @map("order") // Order/sequence for display
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
   // Relations
-  competency        Competency? @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-  competencyLevel   CompetencyLevel @relation(fields: [competencyLevelId], references: [id], onDelete: Cascade)
+  competency            Competency?                      @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  competencyLevel       CompetencyLevel                  @relation(fields: [competencyLevelId], references: [id], onDelete: Cascade)
   performanceIndicators CompetencyPerformanceIndicator[] // Performance indicators for this element
-  
+
   @@map("competency_elements")
 }
 
 model CompetencyPerformanceIndicator {
-  id                String    @id @default(cuid()) @map("id")
-  elementId         String    @map("element_id") // Links to CompetencyElement
-  action            String    @map("action") // Action or task description
-  order             Int       @default(0) @map("order") // Order/sequence for display
-  isActive          Boolean   @default(true) @map("is_active")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  
+  id        String   @id @default(cuid()) @map("id")
+  elementId String   @map("element_id") // Links to CompetencyElement
+  action    String   @map("action") // Action or task description
+  order     Int      @default(0) @map("order") // Order/sequence for display
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Relations
-  element           CompetencyElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
-  
+  element CompetencyElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+
   @@map("competency_performance_indicators")
 }
 
 model CompetencyDocument {
-  id                String    @id @default(cuid())
-  competencyId      String
-  title             String
-  description       String?
-  fileName          String
-  originalFileName  String
-  filePath          String
-  fileSize          Int
-  mimeType          String
-  documentType      DocumentType
-  version           String?   @default("1.0")
-  isActive          Boolean   @default(true)
-  uploadedBy        String?   // User ID who uploaded
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  id               String       @id @default(cuid())
+  competencyId     String
+  title            String
+  description      String?
+  fileName         String
+  originalFileName String
+  filePath         String
+  fileSize         Int
+  mimeType         String
+  documentType     DocumentType
+  version          String?      @default("1.0")
+  isActive         Boolean      @default(true)
+  uploadedBy       String? // User ID who uploaded
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
   // Relations
-  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-  
+  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
   @@map("competency_documents")
 }
 
 model CompetencyAssessment {
-  id                String    @id @default(cuid())
-  employeeId        String
-  competencyId      String
-  levelId           String
-  assessedBy        String?   // User ID who assessed
-  assessmentDate    DateTime  @default(now())
-  status            AssessmentStatus @default(PENDING)
-  notes             String?
-  evidence          String?   // Evidence or proof of competency
-  validUntil        DateTime? // When this assessment expires
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  id             String           @id @default(cuid())
+  employeeId     String
+  competencyId   String
+  levelId        String
+  assessedBy     String? // User ID who assessed
+  assessmentDate DateTime         @default(now())
+  status         AssessmentStatus @default(PENDING)
+  notes          String?
+  evidence       String? // Evidence or proof of competency
+  validUntil     DateTime? // When this assessment expires
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
   // Relations
-  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-  level             CompetencyLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
-  
+  employee   Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  competency Competency      @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  level      CompetencyLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
   @@map("competency_assessments")
 }
 
@@ -279,13 +279,13 @@ enum CompetencyType {
   FUNCTIONAL
   CERTIFICATION_AND_COMPLIANCE @map("CERTIFICATION_&_COMPLIANCE")
   COMMERCIAL
-  FINANCE_AND_PROCUREMENT @map("FINANCE_&_PROCUREMENT")
+  FINANCE_AND_PROCUREMENT      @map("FINANCE_&_PROCUREMENT")
   FIRE
-  HR_AND_ADMIN @map("HR_&_ADMIN")
+  HR_AND_ADMIN                 @map("HR_&_ADMIN")
   HSE
   ICT
   INTERNAL_AUDIT
-  LEGAL_AND_REGULATORY @map("LEGAL_&_REGULATORY")
+  LEGAL_AND_REGULATORY         @map("LEGAL_&_REGULATORY")
   MAINTENANCE
   MEDIA
   OPERATIONS
@@ -344,15 +344,15 @@ model Job {
   updatedAt   DateTime @updatedAt
 
   // Job Description (JD) fields
-  budgetaryControl      Boolean? @map("budgetary_control")
-  externalInterfaces    String?  @map("external_interfaces") // JSON array or comma-separated
-  internalInterfaces    String?  @map("internal_interfaces")
-  jobScope              String?  @map("job_scope")
-  accountabilities      String?  @map("accountabilities")
-  qualificationsExperience String? @map("qualifications_experience")
-  restrictions          String?  @map("restrictions")
-  authority             String?  @map("authority")
-  demands               String?  @map("demands")
+  budgetaryControl         Boolean? @map("budgetary_control")
+  externalInterfaces       String?  @map("external_interfaces") // JSON array or comma-separated
+  internalInterfaces       String?  @map("internal_interfaces")
+  jobScope                 String?  @map("job_scope")
+  accountabilities         String?  @map("accountabilities")
+  qualificationsExperience String?  @map("qualifications_experience")
+  restrictions             String?  @map("restrictions")
+  authority                String?  @map("authority")
+  demands                  String?  @map("demands")
 
   // Relationship with competencies
   jobCompetencies JobCompetency[]
@@ -362,17 +362,17 @@ model Job {
 }
 
 model JobCompetency {
-  id            String           @id @default(cuid())
+  id            String              @id @default(cuid())
   jobId         String
   competencyId  String
   requiredLevel CompetencyLevelType
-  isRequired    Boolean          @default(true)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  isRequired    Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   // Relationships
-  job         Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  competency  Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  job        Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
 
   // Ensure unique job-competency combinations
   @@unique([jobId, competencyId])
@@ -380,35 +380,35 @@ model JobCompetency {
 }
 
 model JobCriticalityCriteria {
-  id          Int      @id @default(autoincrement())
-  name        String   @map("name")
-  definition  String   @default("") @map("definition")
-  weight      Int      @default(0) @map("weight")
-  icon        String   @map("icon")
-  color       String   @map("color")
-  min_rating  Int      @default(1) @map("min_rating")
-  max_rating  Int      @default(5) @map("max_rating")
-  is_active   Boolean  @default(true) @map("is_active")
-  created_at  DateTime @default(now()) @map("created_at")
-  updated_at  DateTime @updatedAt @map("updated_at")
+  id         Int      @id @default(autoincrement())
+  name       String   @map("name")
+  definition String   @default("") @map("definition")
+  weight     Int      @default(0) @map("weight")
+  icon       String   @map("icon")
+  color      String   @map("color")
+  min_rating Int      @default(1) @map("min_rating")
+  max_rating Int      @default(5) @map("max_rating")
+  is_active  Boolean  @default(true) @map("is_active")
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
 
   @@map("job_criticality_criteria")
 }
 
 model JobEvaluation {
-  id                      String   @id @default(cuid())
-  jobId                   String
-  evaluatorId             String
-  decisionMakingPower     Int      @map("decision_making_power")
-  riskOfAbsence           Int      @map("risk_of_absence")
-  regulatoryResponsibility Int     @map("regulatory_responsibility")
-  revenueBudgetImpact     Int      @map("revenue_budget_impact")
-  talentScarcity          Int      @map("talent_scarcity")
-  numberOfReportees       Int      @map("number_of_reportees")
-  weightedScore           Float    @map("weighted_score")
-  criticalityLevel        String   @map("criticality_level")
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                       String   @id @default(cuid())
+  jobId                    String
+  evaluatorId              String
+  decisionMakingPower      Int      @map("decision_making_power")
+  riskOfAbsence            Int      @map("risk_of_absence")
+  regulatoryResponsibility Int      @map("regulatory_responsibility")
+  revenueBudgetImpact      Int      @map("revenue_budget_impact")
+  talentScarcity           Int      @map("talent_scarcity")
+  numberOfReportees        Int      @map("number_of_reportees")
+  weightedScore            Float    @map("weighted_score")
+  criticalityLevel         String   @map("criticality_level")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
 
   // Relationships
   job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -421,126 +421,126 @@ model JobEvaluation {
 // Assessment System Models
 
 model Assessment {
-  id                String    @id @default(cuid())
+  id                String   @id @default(cuid())
   title             String
   description       String?
   competencyId      String
-  competencyLevelId String?   // Target level for this assessment
-  isActive          Boolean   @default(true)
-  timeLimit         Int?      // Time limit in minutes (optional)
-  passingScore      Float     @default(70.0) // Passing percentage
-  maxAttempts       Int?      // Maximum attempts allowed (null = unlimited)
-  createdBy         String?   // Employee SID who created
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  competencyLevelId String? // Target level for this assessment
+  isActive          Boolean  @default(true)
+  timeLimit         Int? // Time limit in minutes (optional)
+  passingScore      Float    @default(70.0) // Passing percentage
+  maxAttempts       Int? // Maximum attempts allowed (null = unlimited)
+  createdBy         String? // Employee SID who created
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
   // Relations
-  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-  competencyLevel   CompetencyLevel? @relation(fields: [competencyLevelId], references: [id], onDelete: SetNull)
-  questions         AssessmentQuestion[]
-  attempts          EmployeeAssessment[]
-  
+  competency      Competency           @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  competencyLevel CompetencyLevel?     @relation(fields: [competencyLevelId], references: [id], onDelete: SetNull)
+  questions       AssessmentQuestion[]
+  attempts        EmployeeAssessment[]
+
   @@map("assessments")
 }
 
 model Question {
-  id                String    @id @default(cuid())
-  text              String    // Question text
+  id                String       @id @default(cuid())
+  text              String // Question text
   type              QuestionType
   competencyId      String
-  competencyLevelId String?   // Difficulty level (linked to competency level)
-  points            Int       @default(1) // Points for correct answer
-  explanation       String?   // Explanation for the answer
-  isActive          Boolean   @default(true)
-  createdBy         String?   // Employee SID who created
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  competencyLevelId String? // Difficulty level (linked to competency level)
+  points            Int          @default(1) // Points for correct answer
+  explanation       String? // Explanation for the answer
+  isActive          Boolean      @default(true)
+  createdBy         String? // Employee SID who created
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
   // Relations
-  competency        Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-  competencyLevel   CompetencyLevel? @relation(fields: [competencyLevelId], references: [id], onDelete: SetNull)
-  options           QuestionOption[]
+  competency          Competency           @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  competencyLevel     CompetencyLevel?     @relation(fields: [competencyLevelId], references: [id], onDelete: SetNull)
+  options             QuestionOption[]
   assessmentQuestions AssessmentQuestion[]
-  responses         EmployeeResponse[]
-  
+  responses           EmployeeResponse[]
+
   @@map("questions")
 }
 
 model QuestionOption {
-  id          String    @id @default(cuid())
-  questionId  String
-  text        String    // Option text
-  isCorrect   Boolean   @default(false)
-  order       Int       @default(0) // Display order
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  id         String   @id @default(cuid())
+  questionId String
+  text       String // Option text
+  isCorrect  Boolean  @default(false)
+  order      Int      @default(0) // Display order
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
   // Relations
-  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  responses   EmployeeResponse[]
-  
+  question  Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  responses EmployeeResponse[]
+
   @@map("question_options")
 }
 
 model AssessmentQuestion {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   assessmentId String
   questionId   String
-  order        Int       @default(0) // Question order in assessment
-  points       Int       @default(1) // Points for this question in this assessment
-  createdAt    DateTime  @default(now())
-  
+  order        Int      @default(0) // Question order in assessment
+  points       Int      @default(1) // Points for this question in this assessment
+  createdAt    DateTime @default(now())
+
   // Relations
-  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  question     Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
   @@unique([assessmentId, questionId])
   @@map("assessment_questions")
 }
 
 model EmployeeAssessment {
-  id                String    @id @default(cuid())
-  employeeId        String
-  assessmentId      String
-  status            AssessmentAttemptStatus @default(NOT_STARTED)
-  score             Float?    // Final score percentage
-  maxScore          Float?    // Maximum possible score
-  timeSpent         Int?      // Time spent in seconds
-  startedAt         DateTime?
-  completedAt       DateTime?
-  evaluatedLevel    CompetencyLevelType? // System evaluated level
-  managerApproved   Boolean   @default(false)
-  assessorApproved  Boolean   @default(false)
-  managerNotes      String?
-  assessorNotes     String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  id               String                  @id @default(cuid())
+  employeeId       String
+  assessmentId     String
+  status           AssessmentAttemptStatus @default(NOT_STARTED)
+  score            Float? // Final score percentage
+  maxScore         Float? // Maximum possible score
+  timeSpent        Int? // Time spent in seconds
+  startedAt        DateTime?
+  completedAt      DateTime?
+  evaluatedLevel   CompetencyLevelType? // System evaluated level
+  managerApproved  Boolean                 @default(false)
+  assessorApproved Boolean                 @default(false)
+  managerNotes     String?
+  assessorNotes    String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
   // Relations
-  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  assessment        Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  responses         EmployeeResponse[]
-  
+  employee   Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assessment Assessment         @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  responses  EmployeeResponse[]
+
   @@unique([employeeId, assessmentId])
   @@map("employee_assessments")
 }
 
 model EmployeeResponse {
-  id                    String    @id @default(cuid())
-  employeeAssessmentId  String
-  questionId            String
-  selectedOptionId      String?   // For multiple choice questions
-  textResponse          String?   // For text-based questions
-  isCorrect             Boolean?  // Whether the response is correct
-  pointsEarned          Float     @default(0) // Points earned for this response
-  timeSpent             Int?      // Time spent on this question in seconds
-  createdAt             DateTime  @default(now())
-  
+  id                   String   @id @default(cuid())
+  employeeAssessmentId String
+  questionId           String
+  selectedOptionId     String? // For multiple choice questions
+  textResponse         String? // For text-based questions
+  isCorrect            Boolean? // Whether the response is correct
+  pointsEarned         Float    @default(0) // Points earned for this response
+  timeSpent            Int? // Time spent on this question in seconds
+  createdAt            DateTime @default(now())
+
   // Relations
-  employeeAssessment    EmployeeAssessment @relation(fields: [employeeAssessmentId], references: [id], onDelete: Cascade)
-  question              Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  selectedOption        QuestionOption? @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
-  
+  employeeAssessment EmployeeAssessment @relation(fields: [employeeAssessmentId], references: [id], onDelete: Cascade)
+  question           Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption     QuestionOption?    @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+
   @@unique([employeeAssessmentId, questionId])
   @@map("employee_responses")
 }
@@ -564,12 +564,50 @@ enum AssessmentAttemptStatus {
 model AppSetting {
   id          String   @id @default(cuid())
   key         String   @unique // Setting key (e.g., "assessment_cycle")
-  value       String   // JSON string containing the setting value
-  description String?  // Human-readable description
-  category    String?  // Category for grouping (e.g., "assessment", "system")
+  value       String // JSON string containing the setting value
+  description String? // Human-readable description
+  category    String? // Category for grouping (e.g., "assessment", "system")
   updatedBy   String?  @map("updated_by") // Employee SID who last updated
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-  
+
   @@map("app_settings")
+}
+
+model CompetencyEditRequest {
+  id              String             @id @default(cuid())
+  competencyId    String // The competency being edited
+  requestedBy     String // User SID who requested the edit
+  requestedByName String? // User name for display
+  editType        CompetencyEditType // Type of edit
+  status          EditRequestStatus  @default(PENDING)
+  reviewedBy      String? // Admin SID who reviewed
+  reviewedAt      DateTime?
+  reviewNotes     String? // Admin notes
+
+  // Edit data stored as JSON - contains old and new values
+  changes String // JSON string containing the changes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("competency_edit_requests")
+}
+
+enum CompetencyEditType {
+  DEFINITION
+  LEVEL_DESCRIPTION
+  LEVEL_INDICATORS
+  ELEMENT_ADD
+  ELEMENT_EDIT
+  ELEMENT_DELETE
+  INDICATOR_ADD
+  INDICATOR_EDIT
+  INDICATOR_DELETE
+}
+
+enum EditRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

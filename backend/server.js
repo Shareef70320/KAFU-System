@@ -28,6 +28,7 @@ const developmentPathRoutes = require('./routes/developmentPaths');
 const ldInterventionRoutes = require('./routes/ldInterventions');
 const idpRoutes = require('./routes/idp');
 const settingsRoutes = require('./routes/settings');
+const competencyEditRequestRoutes = require('./routes/competency-edit-requests');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -100,6 +101,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/competencies', competencyRoutes);
+app.use('/api/competency-edit-requests', competencyEditRequestRoutes);
 app.use('/api/competency-families', competencyFamilyRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/job-competencies', jobCompetencyRoutes);

@@ -24,7 +24,11 @@ import {
   MessageSquare,
   Calendar,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Info,
+  Stethoscope,
+  FileText,
+  Shield
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { useUser } from '../contexts/UserContext';
@@ -38,18 +42,35 @@ const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Check if current user has clinic access (must be defined before useEffect)
+  const hasClinicAccess = React.useMemo(() => {
+    if (!currentSid) return false;
+    try {
+      const saved = localStorage.getItem('kafuClinicAccessList');
+      const accessList = saved ? JSON.parse(saved) : [];
+      return accessList.some(access => access.userId === currentSid);
+    } catch (error) {
+      console.error('Error checking clinic access:', error);
+      return false;
+    }
+  }, [currentSid]);
+
   // Enforce role-safe routing on refresh and direct loads
   React.useEffect(() => {
     const path = location.pathname;
-    const isAdminPath = path.startsWith('/dashboard') || path.startsWith('/users') || path.startsWith('/groups') || path.startsWith('/employees') || path.startsWith('/competencies') || path.startsWith('/jobs') || path.startsWith('/job-competency-mapping') || path.startsWith('/job-criticality') || path.startsWith('/job-evaluation') || path.startsWith('/assessors') || path.startsWith('/assessments') || path.startsWith('/question-bank') || path.startsWith('/photo-upload');
+    const isAdminPath = path.startsWith('/dashboard') || path.startsWith('/users') || path.startsWith('/groups') || path.startsWith('/employees') || (path.startsWith('/competencies') && !path.startsWith('/competencies/view')) || path.startsWith('/jobs') || path.startsWith('/job-competency-mapping') || path.startsWith('/job-criticality') || path.startsWith('/job-evaluation') || path.startsWith('/assessors') || path.startsWith('/assessments') || path.startsWith('/question-bank') || path.startsWith('/photo-upload') || path.startsWith('/settings') || path.startsWith('/about');
     const isUserPath = path.startsWith('/user');
+    const isClinicPath = path.startsWith('/kafu-clinic');
 
-    if (currentRole === 'USER' && isAdminPath) {
+    if (currentRole === 'USER' && isAdminPath && !isClinicPath) {
+      navigate('/user', { replace: true });
+    } else if (currentRole === 'USER' && isClinicPath && !hasClinicAccess) {
+      // Redirect users without clinic access away from clinic page
       navigate('/user', { replace: true });
     } else if (currentRole === 'ADMIN' && isUserPath) {
       navigate('/dashboard', { replace: true });
     }
-  }, [currentRole, location.pathname, navigate]);
+  }, [currentRole, location.pathname, navigate, hasClinicAccess]);
 
   // Check if current user is a manager (has direct reports)
   const { data: isManager } = useQuery({
@@ -96,8 +117,8 @@ const Layout = () => {
     { name: 'Photo Upload', href: '/photo-upload', icon: Upload },
     { name: 'Development Paths', href: '/development-paths', icon: Layers },
     { name: 'L&D Interventions', href: '/ld-interventions', icon: BookOpen },
-    { 
-      name: 'Settings', 
+    {
+      name: 'Settings',
       href: '/settings', 
       icon: Settings,
       subMenu: [
@@ -105,6 +126,16 @@ const Layout = () => {
         { name: 'Assessment Cycle', href: '/settings/assessment-cycle', icon: Calendar }
       ]
     },
+    {
+      name: 'Kafu Clinic',
+      href: '/kafu-clinic',
+      icon: Stethoscope,
+      subMenu: [
+        { name: 'Edit Requests Review', href: '/kafu-clinic/edit-requests', icon: FileText },
+        { name: 'Clinic Access', href: '/kafu-clinic?tab=access', icon: Shield }
+      ]
+    },
+    { name: 'About', href: '/about', icon: Info },
   ];
   
   // Assessor navigation for admins (if admin is also an assessor)
@@ -121,6 +152,7 @@ const Layout = () => {
     { name: 'My IDP', href: '/user/my-idp', icon: Target },
     { name: 'Reviews', href: '/user/reviews', icon: MessageSquare },
     { name: 'My Development Paths', href: '/user/my-development-paths', icon: Layers },
+    { name: 'About', href: '/about', icon: Info },
   ];
   
   // Assessor-specific navigation (only for users who are assessors)
@@ -134,6 +166,11 @@ const Layout = () => {
     { name: 'Team Jobs', href: '/user/jobs', icon: Briefcase },
     { name: 'Team JCPs', href: '/user/jcps', icon: BookOpen },
     { name: 'Manager Assessments', href: '/user/manager-assessments', icon: BarChart3 },
+  ];
+
+  // Clinic-specific navigation (only for users with clinic access)
+  const clinicNavigation = [
+    { name: 'Kafu Clinic', href: '/kafu-clinic', icon: Stethoscope },
   ];
 
   const getNavigation = () => {
@@ -155,6 +192,10 @@ const Layout = () => {
         // Add assessor pages if user is an assessor
         if (isAssessor) {
           nav = [...nav, ...assessorNavigation];
+        }
+        // Add clinic pages if user has clinic access
+        if (hasClinicAccess) {
+          nav = [...nav, ...clinicNavigation];
         }
         return nav;
       default: 
