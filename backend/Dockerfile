@@ -7,20 +7,23 @@ RUN apk add --no-cache openssl curl
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files (from backend directory)
+COPY backend/package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy source code
-COPY . .
+# Copy Prisma schema first (from backend/prisma)
+COPY backend/prisma ./prisma
+
+# Generate Prisma client (must be done before copying all source)
+RUN npx prisma generate --schema=./prisma/schema.prisma
+
+# Copy rest of backend source code
+COPY backend/ .
 
 # Create uploads directory
 RUN mkdir -p uploads
-
-# Generate Prisma client
-RUN npx prisma generate
 
 # Expose port
 EXPOSE 5000
