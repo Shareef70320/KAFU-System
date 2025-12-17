@@ -64,6 +64,10 @@ const Jobs = () => {
   const [showCompetencyDetailsModal, setShowCompetencyDetailsModal] = useState(false);
   const [selectedCompetencyDetails, setSelectedCompetencyDetails] = useState(null);
   const [loadingCompetencyDetails, setLoadingCompetencyDetails] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importStats, setImportStats] = useState(null);
 
   // Fetch jobs from API - single call without search parameters
   const { data: jobsData, isLoading, isError, error } = useQuery({
@@ -220,6 +224,51 @@ const Jobs = () => {
   const handleDeleteJob = async (jobId) => {
     if (window.confirm('Are you sure you want to delete this job?')) {
       await deleteJobMutation.mutateAsync(jobId);
+    }
+  };
+
+  const handleImportJobs = async (e) => {
+    e.preventDefault();
+    if (!importFile) {
+      toast({
+        title: 'No file selected',
+        description: 'Please choose an Excel file first.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', importFile);
+
+    try {
+      setImporting(true);
+      setImportStats(null);
+
+      const response = await api.post('/jobs/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setImportStats(response.data.stats || null);
+
+      // Refresh jobs and stats
+      queryClient.invalidateQueries(['jobs']);
+      queryClient.invalidateQueries(['job-stats']);
+
+      toast({
+        title: 'Import Completed',
+        description: `New jobs inserted: ${response.data.stats?.newJobsInserted ?? 0}`,
+        variant: 'default'
+      });
+    } catch (error) {
+      console.error('Error importing jobs:', error);
+      toast({
+        title: 'Import Failed',
+        description: error.response?.data?.message || 'Failed to import jobs from Excel',
+        variant: 'destructive'
+      });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -425,9 +474,28 @@ const Jobs = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Jobs Management</h1>
-          <p className="text-gray-600 mt-2">Manage job positions and organizational structure</p>
+        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Jobs Management</h1>
+            <p className="text-gray-600 mt-2">Manage job positions and organizational structure</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => setShowAddJob(true)}
+              className="flex items-center space-x-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Job</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center space-x-2"
+            >
+              <FileText className="h-4 w-4" />
+              <span>Import Jobs</span>
+            </Button>
+          </div>
         </div>
 
         {/* Statistics Cards */}
@@ -531,7 +599,7 @@ const Jobs = () => {
                   ))}
                 </select>
               </div>
-              <div className="flex items-end">
+              <div className="flex items-end gap-2">
                 <Button 
                   onClick={() => setShowAddJob(true)}
                   className="w-full bg-blue-600 hover:bg-blue-700"
@@ -1682,6 +1750,79 @@ const Jobs = () => {
           </div>
         )}
       </div>
+
+      {/* Import Jobs Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900">Import Jobs from Excel</h2>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportStats(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleImportJobs}>
+              <div className="px-6 py-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="jobs-file">Excel File (.xlsx)</Label>
+                  <Input
+                    id="jobs-file"
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setImportFile(file);
+                      setImportStats(null);
+                    }}
+                  />
+                  <p className="text-xs text-gray-500">
+                    The file should contain a Job Code column (e.g. &quot;Job Code&quot; or &quot;code&quot;). Only new
+                    job codes will be added; existing ones are ignored.
+                  </p>
+                </div>
+
+                {importStats && (
+                  <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700 space-y-1">
+                    <p className="font-semibold">Import Summary</p>
+                    <p>Total rows: {importStats.totalRows}</p>
+                    <p>Rows with Job Code: {importStats.totalWithCode}</p>
+                    <p>Unique codes in file: {importStats.uniqueCodesInExcel}</p>
+                    <p>Existing in DB: {importStats.existingInDb}</p>
+                    <p>New jobs detected: {importStats.newJobsCount}</p>
+                    <p>New jobs inserted: {importStats.newJobsInserted}</p>
+                    {importStats.duplicateCodesInExcel?.length > 0 && (
+                      <p>Duplicate codes in file (ignored): {importStats.duplicateCodesInExcel.length}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="px-6 py-4 border-t flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setImportStats(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={importing || !importFile}>
+                  {importing ? 'Importing...' : 'Import Jobs'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

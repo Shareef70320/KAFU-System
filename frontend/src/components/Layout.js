@@ -29,7 +29,8 @@ import {
   Stethoscope,
   FileText,
   Shield,
-  Database
+  Database,
+  TrendingUp
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { useUser } from '../contexts/UserContext';
@@ -39,6 +40,7 @@ import api from '../lib/api';
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState({});
+  const [manuallyCollapsed, setManuallyCollapsed] = useState(new Set());
   const { currentRole, setCurrentRole, currentSid, setCurrentSid } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
@@ -59,7 +61,7 @@ const Layout = () => {
   // Enforce role-safe routing on refresh and direct loads
   React.useEffect(() => {
     const path = location.pathname;
-    const isAdminPath = path.startsWith('/dashboard') || path.startsWith('/users') || path.startsWith('/groups') || path.startsWith('/employees') || (path.startsWith('/competencies') && !path.startsWith('/competencies/view')) || path.startsWith('/jobs') || path.startsWith('/job-competency-mapping') || path.startsWith('/job-criticality') || path.startsWith('/job-evaluation') || path.startsWith('/assessors') || path.startsWith('/assessments') || path.startsWith('/question-bank') || path.startsWith('/photo-upload') || path.startsWith('/settings') || path.startsWith('/about');
+    const isAdminPath = path.startsWith('/dashboard') || path.startsWith('/users') || path.startsWith('/groups') || path.startsWith('/employees') || (path.startsWith('/competencies') && !path.startsWith('/competencies/view')) || path.startsWith('/jobs') || path.startsWith('/job-competency-mapping') || path.startsWith('/job-criticality') || path.startsWith('/job-evaluation') || path.startsWith('/successors') || path.startsWith('/assessors') || path.startsWith('/assessments') || path.startsWith('/question-bank') || path.startsWith('/photo-upload') || path.startsWith('/settings') || path.startsWith('/about');
     const isUserPath = path.startsWith('/user');
     const isClinicPath = path.startsWith('/kafu-clinic');
 
@@ -110,8 +112,16 @@ const Layout = () => {
     { name: 'Competencies', href: '/competencies', icon: BookOpen },
     { name: 'Jobs', href: '/jobs', icon: Briefcase },
     { name: 'Job-Competency Mapping', href: '/job-competency-mapping', icon: Link },
-    { name: 'Job Criticality', href: '/job-criticality', icon: Target },
-    { name: 'Job Evaluation', href: '/job-evaluation', icon: BarChart3 },
+    {
+      name: 'Succession Planning',
+      href: '/succession-planning',
+      icon: TrendingUp,
+      subMenu: [
+        { name: 'Job Criticality', href: '/job-criticality', icon: Target },
+        { name: 'Job Evaluation', href: '/job-evaluation', icon: BarChart3 },
+        { name: 'Successors', href: '/successors', icon: Users }
+      ]
+    },
     { name: 'Assessors', href: '/assessors', icon: UserCheck },
     { name: 'Assessments', href: '/assessments', icon: Target },
     { name: 'Question Bank', href: '/question-bank', icon: BookOpen },
@@ -255,10 +265,29 @@ const Layout = () => {
   };
 
   const toggleSubMenu = (menuName) => {
-    setExpandedMenus(prev => ({
-      ...prev,
-      [menuName]: !prev[menuName]
-    }));
+    setExpandedMenus(prev => {
+      const newState = {
+        ...prev,
+        [menuName]: !prev[menuName]
+      };
+      // Track manual collapse/expand
+      if (newState[menuName]) {
+        // Expanding - remove from manually collapsed set
+        setManuallyCollapsed(prevSet => {
+          const newSet = new Set(prevSet);
+          newSet.delete(menuName);
+          return newSet;
+        });
+      } else {
+        // Collapsing - add to manually collapsed set
+        setManuallyCollapsed(prevSet => {
+          const newSet = new Set(prevSet);
+          newSet.add(menuName);
+          return newSet;
+        });
+      }
+      return newState;
+    });
   };
 
   const hasActiveSubMenu = (item) => {
@@ -266,15 +295,15 @@ const Layout = () => {
     return item.subMenu.some(subItem => isActive(subItem.href));
   };
 
-  // Auto-expand menus with active sub-items
+  // Auto-expand menus with active sub-items (unless manually collapsed)
   React.useEffect(() => {
     const nav = getNavigation();
     nav.forEach(item => {
-      if (item.subMenu && hasActiveSubMenu(item)) {
+      if (item.subMenu && hasActiveSubMenu(item) && !manuallyCollapsed.has(item.name)) {
         setExpandedMenus(prev => ({ ...prev, [item.name]: true }));
       }
     });
-  }, [location.pathname, currentRole, isManager]);
+  }, [location.pathname, currentRole, isManager, manuallyCollapsed]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -350,7 +379,10 @@ const Layout = () => {
               {navigation.map((item) => {
                 const Icon = item.icon;
                 const hasSubMenu = item.subMenu && item.subMenu.length > 0;
-                const isExpanded = expandedMenus[item.name] || hasActiveSubMenu(item);
+                const isManuallyCollapsed = manuallyCollapsed.has(item.name);
+                const isExpanded = isManuallyCollapsed 
+                  ? expandedMenus[item.name] 
+                  : (expandedMenus[item.name] || hasActiveSubMenu(item));
                 const isItemActive = isActive(item.href) || hasActiveSubMenu(item);
 
                 return (
@@ -442,7 +474,10 @@ const Layout = () => {
             {navigation.map((item) => {
               const Icon = item.icon;
               const hasSubMenu = item.subMenu && item.subMenu.length > 0;
-              const isExpanded = expandedMenus[item.name] || hasActiveSubMenu(item);
+              const isManuallyCollapsed = manuallyCollapsed.has(item.name);
+              const isExpanded = isManuallyCollapsed 
+                ? expandedMenus[item.name] 
+                : (expandedMenus[item.name] || hasActiveSubMenu(item));
               const isItemActive = isActive(item.href) || hasActiveSubMenu(item);
 
               return (

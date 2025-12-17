@@ -25,6 +25,7 @@ import AddMapping from './pages/AddMapping';
 import EditMapping from './pages/EditMapping';
 import JobCriticality from './pages/JobCriticality';
 import JobEvaluation from './pages/JobEvaluation';
+import Successors from './pages/Successors';
 import DevelopmentPaths from './pages/DevelopmentPaths';
 import PathDetails from './pages/PathDetails';
 import LDInterventions from './pages/LDInterventions';
@@ -99,8 +100,10 @@ function App() {
                 <Route path="job-competency-mapping" element={<AdminRoute><JobCompetencyMapping /></AdminRoute>} />
                 <Route path="add-mapping" element={<AdminRoute><AddMapping /></AdminRoute>} />
                 <Route path="edit-mapping/:jobId" element={<AdminRoute><EditMapping /></AdminRoute>} />
+                <Route path="succession-planning" element={<AdminRoute><Navigate to="/job-criticality" replace /></AdminRoute>} />
                 <Route path="job-criticality" element={<AdminRoute><JobCriticality /></AdminRoute>} />
                 <Route path="job-evaluation" element={<AdminRoute><JobEvaluation /></AdminRoute>} />
+                <Route path="successors" element={<AdminRoute><Successors /></AdminRoute>} />
                 <Route path="assessors" element={<AdminRoute><Assessors /></AdminRoute>} />
                 <Route path="development-paths" element={<AdminRoute><DevelopmentPaths /></AdminRoute>} />
                 <Route path="development-paths/:id" element={<AdminRoute><PathDetails /></AdminRoute>} />

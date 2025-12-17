@@ -16,7 +16,11 @@ import {
   Shield,
   Zap,
   CheckCircle2,
-  Info
+  Info,
+  TrendingUp,
+  Stethoscope,
+  Upload,
+  UserPlus
 } from 'lucide-react';
 
 const About = () => {
@@ -46,7 +50,9 @@ const About = () => {
         "JCP code assignment and management",
         "Multi-job JCP grouping capability",
         "Job details view with full information",
-        "Statistics: Total Jobs, With JCP, Without JCP"
+        "Statistics: Total Jobs, With JCP, Without JCP",
+        "Excel import functionality for bulk job addition",
+        "Job code-based duplicate prevention"
       ]
     },
     {
@@ -79,7 +85,9 @@ const About = () => {
         "Create and edit job competency profiles",
         "Visual indicators for jobs with/without JCP",
         "Group apply JCP to multiple jobs",
-        "Profile validation and duplicate prevention"
+        "Profile validation and duplicate prevention",
+        "JCP edit by clinic users with admin approval",
+        "Full JCP view with job and competency details"
       ]
     },
     {
@@ -150,6 +158,40 @@ const About = () => {
       ]
     },
     {
+      category: "Succession Planning",
+      icon: TrendingUp,
+      color: "rose",
+      items: [
+        "Job Criticality evaluation with customizable criteria",
+        "Job Evaluation using weighted scoring system",
+        "Criticality levels: High, Medium, Low",
+        "Successor assignment to critical positions",
+        "Readiness levels: Ready Now, Ready in 1-2 years, Ready in 3+ years",
+        "Successor management with employee details",
+        "Successor notes and assignment tracking",
+        "Results & Successors dashboard",
+        "Filter by criticality level and readiness"
+      ]
+    },
+    {
+      category: "Kafu Clinic",
+      icon: Stethoscope,
+      color: "violet",
+      items: [
+        "Clinic Access management for non-admin users",
+        "Granular permissions: View and Edit on competencies and JCPs",
+        "Competency assignment with filters (Type, Family, Related Division)",
+        "JCP assignment with job filters",
+        "Access All Competencies (read-only) option",
+        "OA Competency Dictionary view for clinic users",
+        "Edit Requests Review for admin approval workflow",
+        "Competency editing by clinic users (definition, levels, elements, indicators)",
+        "JCP editing by clinic users (mapping changes)",
+        "Pending changes tracking and submission",
+        "Admin review and approval/rejection of clinic edits"
+      ]
+    },
+    {
       category: "Settings & Configuration",
       icon: Settings,
       color: "gray",
@@ -159,7 +201,9 @@ const About = () => {
         "Assessment cycle configuration",
         "Assessment components per cycle",
         "Cycle activation periods",
-        "Exception management"
+        "Exception management",
+        "Export Data functionality for all database tables",
+        "CSV export for any table in the system"
       ]
     },
     {
@@ -194,13 +238,16 @@ const About = () => {
         "Jobs Management",
         "Competency Framework",
         "Job-Competency Mapping",
+        "Succession Planning (Job Criticality, Job Evaluation, Successors)",
+        "Kafu Clinic (Access Management, Edit Requests Review)",
         "Assessment Configuration",
         "Assessor Management",
         "User Management",
         "Settings & Configuration",
         "Question Bank Management",
         "Development Paths",
-        "L&D Interventions"
+        "L&D Interventions",
+        "Export Data"
       ]
     },
     {
@@ -237,6 +284,18 @@ const About = () => {
         "Accept/Reject Reviews",
         "Schedule Review Sessions",
         "Complete Review Assessments"
+      ]
+    },
+    {
+      role: "Clinic User",
+      description: "Non-admin users with specific permissions for competency and JCP management",
+      access: [
+        "Kafu Clinic access (if granted)",
+        "Owned Competencies view and edit",
+        "Owned JCPs view and edit",
+        "OA Competency Dictionary (if granted read-only access)",
+        "Submit edit requests for admin review",
+        "View pending edit requests"
       ]
     }
   ];
@@ -290,6 +349,33 @@ const About = () => {
         "IDP is created and assigned to employee",
         "Employee can view and track their IDP progress"
       ]
+    },
+    {
+      name: "Succession Planning Process",
+      steps: [
+        "Admin defines job criticality criteria with weights",
+        "Admin evaluates jobs using the criteria",
+        "System calculates weighted scores and assigns criticality levels",
+        "Admin reviews results in Results & Successors tab",
+        "Admin assigns successors to critical positions",
+        "Successors are assigned with readiness levels and notes",
+        "Successors can be viewed and managed in Successors page",
+        "Future: IDPs and development plans for successors"
+      ]
+    },
+    {
+      name: "Kafu Clinic Workflow",
+      steps: [
+        "Admin grants clinic access to users with specific permissions",
+        "Admin assigns competencies/JCPs with View or Edit permissions",
+        "Clinic user accesses Kafu Clinic page",
+        "Clinic user views assigned competencies/JCPs",
+        "Clinic user makes edits (if Edit permission granted)",
+        "Changes are saved as pending edit requests",
+        "Admin reviews edit requests in Edit Requests Review",
+        "Admin approves or rejects changes",
+        "Approved changes are applied to the system"
+      ]
     }
   ];
 
@@ -314,7 +400,10 @@ const About = () => {
       "PostgreSQL database with migrations",
       "File upload support",
       "Excel import/export functionality",
-      "PDF generation capabilities"
+      "PDF generation capabilities",
+      "Job import from Excel",
+      "Database table export to CSV",
+      "HTML editor export for competencies"
     ],
     data: [
       "1,254+ employees",
@@ -322,7 +411,10 @@ const About = () => {
       "207+ competencies",
       "Multiple competency families",
       "Assessment cycles and history",
-      "Review requests and history"
+      "Review requests and history",
+      "Job evaluations and criticality assessments",
+      "Successor assignments and readiness tracking",
+      "Clinic access permissions and edit requests"
     ]
   };
 
@@ -404,7 +496,9 @@ const About = () => {
               amber: "bg-amber-50 border-amber-200 text-amber-700",
               gray: "bg-gray-50 border-gray-200 text-gray-700",
               cyan: "bg-cyan-50 border-cyan-200 text-cyan-700",
-              emerald: "bg-emerald-50 border-emerald-200 text-emerald-700"
+              emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+              rose: "bg-rose-50 border-rose-200 text-rose-700",
+              violet: "bg-violet-50 border-violet-200 text-violet-700"
             };
             return (
               <div 

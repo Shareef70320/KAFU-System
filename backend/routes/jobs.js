@@ -1,8 +1,18 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
+const multer = require('multer');
+const xlsx = require('xlsx');
 
 const prisma = new PrismaClient();
 const router = express.Router();
+
+// Configure multer for Excel upload (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10 MB
+  }
+});
 
 // Get all jobs with pagination and filtering
 router.get('/', async (req, res) => {
@@ -497,6 +507,154 @@ router.post('/set-jcp-code', async (req, res) => {
   } catch (error) {
     console.error('Error setting JCP code for jobs:', error);
     console.error('Error details:', { message: error.message, stack: error.stack });
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Import jobs from Excel file
+// POST /api/jobs/import (multipart/form-data, field name: file)
+router.post('/import', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded. Please upload an Excel file.' });
+    }
+
+    // Read workbook from buffer
+    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: null });
+
+    if (!rows.length) {
+      return res.status(400).json({ message: 'Uploaded Excel file is empty.' });
+    }
+
+    // Normalize headers
+    const normalizedRows = rows.map((row) => {
+      const normalized = {};
+      for (const key of Object.keys(row)) {
+        const normKey = String(key).trim().toLowerCase();
+        normalized[normKey] = row[key];
+      }
+      return normalized;
+    });
+
+    const sample = normalizedRows[0];
+    const possibleCodeKeys = ['job code', 'job_code', 'code', 'jobcode'];
+    const codeKey = possibleCodeKeys.find((k) =>
+      Object.prototype.hasOwnProperty.call(sample, k)
+    );
+
+    if (!codeKey) {
+      return res.status(400).json({
+        message: 'Could not detect Job Code column. Expected one of: Job Code, job_code, code, jobcode.'
+      });
+    }
+
+    // Map rows to job objects
+    const excelJobs = normalizedRows
+      .map((row) => {
+        const rawCode = row[codeKey];
+        if (!rawCode) return null;
+        const code = String(rawCode).trim();
+        if (!code) return null;
+
+        const title =
+          row['job title'] ||
+          row['title'] ||
+          row['job_title'] ||
+          row['job name'] ||
+          null;
+
+        const division = row['division'] || null;
+        const department = row['department'] || null;
+        const unit = row['unit'] || row['section'] || null;
+        const location = row['location'] || null;
+        const status = row['status'] || row['job status'] || null;
+
+        return {
+          code,
+          title,
+          division,
+          department,
+          unit,
+          location,
+          status,
+          _raw: row
+        };
+      })
+      .filter(Boolean);
+
+    const excelCodesSet = new Set(excelJobs.map((j) => j.code));
+
+    // Existing jobs
+    const existingJobs = await prisma.job.findMany({
+      select: { code: true }
+    });
+
+    const existingCodesSet = new Set(
+      existingJobs
+        .filter((j) => j.code)
+        .map((j) => String(j.code).trim())
+    );
+
+    let existingCount = 0;
+    let newCount = 0;
+    const newJobs = [];
+    const duplicatedInExcel = new Set();
+    const seenExcelCodes = new Set();
+
+    for (const job of excelJobs) {
+      if (seenExcelCodes.has(job.code)) {
+        duplicatedInExcel.add(job.code);
+        continue;
+      }
+      seenExcelCodes.add(job.code);
+
+      if (existingCodesSet.has(job.code)) {
+        existingCount += 1;
+      } else {
+        newCount += 1;
+        newJobs.push(job);
+      }
+    }
+
+    // Insert new jobs
+    const createdJobs = [];
+    for (const job of newJobs) {
+      try {
+        const created = await prisma.job.create({
+          data: {
+            code: job.code,
+            title: job.title || job.code,
+            division: job.division,
+            department: job.department,
+            unit: job.unit,
+            location: job.location
+            // Note: we intentionally do NOT map any "status" column here,
+            // as the Job model uses isActive with a default value.
+          }
+        });
+        createdJobs.push(created);
+      } catch (err) {
+        console.error(`Failed to create job ${job.code}:`, err);
+      }
+    }
+
+    return res.json({
+      message: 'Jobs import completed',
+      stats: {
+        totalRows: rows.length,
+        totalWithCode: excelJobs.length,
+        uniqueCodesInExcel: excelCodesSet.size,
+        existingInDb: existingCount,
+        newJobsDetected: newCount,
+        newJobsInserted: createdJobs.length,
+        duplicateCodesInExcel: Array.from(duplicatedInExcel)
+      }
+    });
+  } catch (error) {
+    console.error('Error importing jobs from Excel:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
