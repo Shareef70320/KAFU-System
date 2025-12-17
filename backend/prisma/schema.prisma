@@ -415,7 +415,6 @@ model JobEvaluation {
   // Relationships
   job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   evaluator Employee @relation(fields: [evaluatorId], references: [id], onDelete: Cascade)
-  successors JobSuccessor[]
 
   @@unique([jobId])
   @@map("job_evaluations")
