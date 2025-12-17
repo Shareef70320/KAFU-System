@@ -49,6 +49,23 @@ const EditCompetencyClinic = () => {
   const [indicatorForm, setIndicatorForm] = useState({ elementId: '', indicatorId: '', action: '' });
   const [newIndicatorText, setNewIndicatorText] = useState('');
   
+  // Pending changes state - store all changes locally before submitting
+  const [pendingChanges, setPendingChanges] = useState({
+    definition: null,
+    levelDescriptions: {}, // { levelId: { oldValue, newValue } }
+    levelIndicators: {}, // { levelId: { oldValue, newValue } }
+    elements: {
+      added: [], // { levelId, name, description, tempId }
+      edited: [], // { elementId, levelId, oldValue: { name, description }, newValue: { name, description } }
+      deleted: [] // { elementId, elementName }
+    },
+    indicators: {
+      added: [], // { elementId, action, tempId }
+      edited: [], // { indicatorId, elementId, oldValue, newValue }
+      deleted: [] // { indicatorId, indicatorAction }
+    }
+  });
+  
   // Fetch competency data
   const { data: competency, isLoading } = useQuery({
     queryKey: ['competency-full', id],
@@ -106,7 +123,7 @@ const EditCompetencyClinic = () => {
     }
   });
 
-  // Save definition edit
+  // Save definition edit (store locally)
   const handleSaveDefinition = () => {
     const currentDefinition = competency?.definition || competency?.description || '';
     if (!definitionForm.definition || definitionForm.definition === currentDefinition) {
@@ -118,16 +135,22 @@ const EditCompetencyClinic = () => {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'DEFINITION',
-      changes: {
+    setPendingChanges(prev => ({
+      ...prev,
+      definition: {
         oldValue: currentDefinition,
         newValue: definitionForm.definition
       }
+    }));
+    
+    toast({
+      title: 'Definition Updated',
+      description: 'Changes saved locally. Click "Submit Changes" when ready.',
+      variant: 'default'
     });
   };
 
-  // Save level description edit
+  // Save level description edit (store locally)
   const handleSaveLevelDescription = (level) => {
     if (!levelForm.description || levelForm.description === level.description) {
       toast({
@@ -138,19 +161,28 @@ const EditCompetencyClinic = () => {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'LEVEL_DESCRIPTION',
-      changes: {
-        levelId: level.id,
-        oldValue: level.description,
-        newValue: levelForm.description
+    setPendingChanges(prev => ({
+      ...prev,
+      levelDescriptions: {
+        ...prev.levelDescriptions,
+        [level.id]: {
+          oldValue: level.description,
+          newValue: levelForm.description
+        }
       }
-    });
+    }));
+    
     setEditingLevelId(null);
     setLevelForm({ levelId: '', description: '', indicators: [] });
+    
+    toast({
+      title: 'Level Description Updated',
+      description: 'Changes saved locally. Click "Submit Changes" when ready.',
+      variant: 'default'
+    });
   };
 
-  // Save level indicators edit
+  // Save level indicators edit (store locally)
   const handleSaveLevelIndicators = (level) => {
     const newIndicators = levelForm.indicators;
     const oldIndicators = Array.isArray(level.indicators) ? level.indicators : [];
@@ -164,19 +196,28 @@ const EditCompetencyClinic = () => {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'LEVEL_INDICATORS',
-      changes: {
-        levelId: level.id,
-        oldValue: oldIndicators,
-        newValue: newIndicators
+    setPendingChanges(prev => ({
+      ...prev,
+      levelIndicators: {
+        ...prev.levelIndicators,
+        [level.id]: {
+          oldValue: oldIndicators,
+          newValue: newIndicators
+        }
       }
-    });
+    }));
+    
     setEditingLevelId(null);
     setLevelForm({ levelId: '', description: '', indicators: [] });
+    
+    toast({
+      title: 'Level Indicators Updated',
+      description: 'Changes saved locally. Click "Submit Changes" when ready.',
+      variant: 'default'
+    });
   };
 
-  // Add new element
+  // Add new element (store locally)
   const handleAddElement = () => {
     if (!elementForm.levelId || !elementForm.name) {
       toast({
@@ -187,19 +228,30 @@ const EditCompetencyClinic = () => {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'ELEMENT_ADD',
-      changes: {
-        levelId: elementForm.levelId,
-        name: elementForm.name,
-        description: elementForm.description || '',
-        order: 0
+    const tempId = `temp-element-${Date.now()}-${Math.random()}`;
+    setPendingChanges(prev => ({
+      ...prev,
+      elements: {
+        ...prev.elements,
+        added: [...prev.elements.added, {
+          levelId: elementForm.levelId,
+          name: elementForm.name,
+          description: elementForm.description || '',
+          tempId
+        }]
       }
-    });
+    }));
+    
     setElementForm({ levelId: '', elementId: '', name: '', description: '' });
+    
+    toast({
+      title: 'Element Added',
+      description: 'Element added to list. Click "Submit Changes" when ready.',
+      variant: 'default'
+    });
   };
 
-  // Edit existing element
+  // Edit existing element (store locally)
   const handleEditElement = (element, levelId) => {
     if (!elementForm.name || elementForm.name === element.name) {
       toast({
@@ -210,35 +262,74 @@ const EditCompetencyClinic = () => {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'ELEMENT_EDIT',
-      changes: {
-        elementId: element.id,
-        levelId,
-        oldValue: { name: element.name, description: element.description },
-        newValue: { name: elementForm.name, description: elementForm.description || '' }
+    // Check if already in edited list
+    const existingIndex = pendingChanges.elements.edited.findIndex(e => e.elementId === element.id);
+    const editedElement = {
+      elementId: element.id,
+      levelId,
+      oldValue: { name: element.name, description: element.description || '' },
+      newValue: { name: elementForm.name, description: elementForm.description || '' }
+    };
+
+    setPendingChanges(prev => ({
+      ...prev,
+      elements: {
+        ...prev.elements,
+        edited: existingIndex >= 0
+          ? prev.elements.edited.map((e, idx) => idx === existingIndex ? editedElement : e)
+          : [...prev.elements.edited, editedElement]
       }
-    });
+    }));
+    
     setEditingElementId(null);
     setElementForm({ levelId: '', elementId: '', name: '', description: '' });
+    
+    toast({
+      title: 'Element Updated',
+      description: 'Changes saved locally. Click "Submit Changes" when ready.',
+      variant: 'default'
+    });
   };
 
-  // Delete element
+  // Delete element (store locally)
   const handleDeleteElement = (element) => {
     if (!window.confirm(`Are you sure you want to delete element "${element.name}"?`)) {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'ELEMENT_DELETE',
-      changes: {
-        elementId: element.id,
-        elementName: element.name
-      }
+    // Remove from added list if it's a new element
+    const isNewElement = element.id?.startsWith('temp-element-');
+    if (isNewElement) {
+      setPendingChanges(prev => ({
+        ...prev,
+        elements: {
+          ...prev.elements,
+          added: prev.elements.added.filter(e => e.tempId !== element.id)
+        }
+      }));
+    } else {
+      // Remove from edited list if it was edited
+      setPendingChanges(prev => ({
+        ...prev,
+        elements: {
+          ...prev.elements,
+          edited: prev.elements.edited.filter(e => e.elementId !== element.id),
+          deleted: [...prev.elements.deleted.filter(e => e.elementId !== element.id), {
+            elementId: element.id,
+            elementName: element.name
+          }]
+        }
+      }));
+    }
+    
+    toast({
+      title: 'Element Deleted',
+      description: 'Element marked for deletion. Click "Submit Changes" when ready.',
+      variant: 'default'
     });
   };
 
-  // Add new indicator
+  // Add new indicator (store locally)
   const handleAddIndicator = (elementId) => {
     if (!indicatorForm.action || !indicatorForm.action.trim()) {
       toast({
@@ -249,18 +340,29 @@ const EditCompetencyClinic = () => {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'INDICATOR_ADD',
-      changes: {
-        elementId,
-        action: indicatorForm.action,
-        order: 0
+    const tempId = `temp-indicator-${Date.now()}-${Math.random()}`;
+    setPendingChanges(prev => ({
+      ...prev,
+      indicators: {
+        ...prev.indicators,
+        added: [...prev.indicators.added, {
+          elementId,
+          action: indicatorForm.action.trim(),
+          tempId
+        }]
       }
-    });
+    }));
+    
     setIndicatorForm({ elementId: '', indicatorId: '', action: '' });
+    
+    toast({
+      title: 'Indicator Added',
+      description: 'Indicator added to list. Click "Submit Changes" when ready.',
+      variant: 'default'
+    });
   };
 
-  // Edit existing indicator
+  // Edit existing indicator (store locally)
   const handleEditIndicator = (indicator, elementId) => {
     if (!indicatorForm.action || indicatorForm.action === indicator.action) {
       toast({
@@ -271,31 +373,70 @@ const EditCompetencyClinic = () => {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'INDICATOR_EDIT',
-      changes: {
-        indicatorId: indicator.id,
-        elementId,
-        oldValue: indicator.action,
-        newValue: indicatorForm.action
+    // Check if already in edited list
+    const existingIndex = pendingChanges.indicators.edited.findIndex(i => i.indicatorId === indicator.id);
+    const editedIndicator = {
+      indicatorId: indicator.id,
+      elementId,
+      oldValue: indicator.action || indicator,
+      newValue: indicatorForm.action
+    };
+
+    setPendingChanges(prev => ({
+      ...prev,
+      indicators: {
+        ...prev.indicators,
+        edited: existingIndex >= 0
+          ? prev.indicators.edited.map((i, idx) => idx === existingIndex ? editedIndicator : i)
+          : [...prev.indicators.edited, editedIndicator]
       }
-    });
+    }));
+    
     setEditingIndicatorId(null);
     setIndicatorForm({ elementId: '', indicatorId: '', action: '' });
+    
+    toast({
+      title: 'Indicator Updated',
+      description: 'Changes saved locally. Click "Submit Changes" when ready.',
+      variant: 'default'
+    });
   };
 
-  // Delete indicator
+  // Delete indicator (store locally)
   const handleDeleteIndicator = (indicator) => {
     if (!window.confirm(`Are you sure you want to delete this indicator?`)) {
       return;
     }
 
-    createEditRequestMutation.mutate({
-      editType: 'INDICATOR_DELETE',
-      changes: {
-        indicatorId: indicator.id,
-        indicatorAction: indicator.action
-      }
+    // Remove from added list if it's a new indicator
+    const isNewIndicator = indicator.id?.startsWith('temp-indicator-');
+    if (isNewIndicator) {
+      setPendingChanges(prev => ({
+        ...prev,
+        indicators: {
+          ...prev.indicators,
+          added: prev.indicators.added.filter(i => i.tempId !== indicator.id)
+        }
+      }));
+    } else {
+      // Remove from edited list if it was edited
+      setPendingChanges(prev => ({
+        ...prev,
+        indicators: {
+          ...prev.indicators,
+          edited: prev.indicators.edited.filter(i => i.indicatorId !== indicator.id),
+          deleted: [...prev.indicators.deleted.filter(i => i.indicatorId !== indicator.id), {
+            indicatorId: indicator.id,
+            indicatorAction: indicator.action || indicator
+          }]
+        }
+      }));
+    }
+    
+    toast({
+      title: 'Indicator Deleted',
+      description: 'Indicator marked for deletion. Click "Submit Changes" when ready.',
+      variant: 'default'
     });
   };
 
@@ -541,15 +682,95 @@ const EditCompetencyClinic = () => {
                               </div>
                             )}
 
-                            {/* Existing Elements */}
-                            {elements.length === 0 ? (
-                              <p className="text-sm text-gray-500 italic">No elements defined for this level</p>
-                            ) : (
-                              <div className="space-y-4">
-                                {elements.map((element) => {
-                                  const isEditingElement = editingElementId === element.id;
-                                  const indicators = Array.isArray(element.performanceIndicators) ? element.performanceIndicators : [];
-                                  const isAddingIndicator = indicatorForm.elementId === element.id && !indicatorForm.indicatorId;
+                            {/* Existing Elements + Newly Added Elements */}
+                            {(() => {
+                              // Get existing elements (not deleted)
+                              const existingElements = elements.filter(e => {
+                                const isDeleted = pendingChanges.elements.deleted.some(d => d.elementId === e.id);
+                                return !isDeleted && !e.id?.startsWith('temp-element-');
+                              });
+                              
+                              // Get newly added elements for this level
+                              const newElements = pendingChanges.elements.added.filter(e => e.levelId === level.id);
+                              
+                              // Get edited elements (to show updated values)
+                              const editedElementsMap = {};
+                              pendingChanges.elements.edited.forEach(edit => {
+                                if (edit.levelId === level.id) {
+                                  editedElementsMap[edit.elementId] = edit.newValue;
+                                }
+                              });
+                              
+                              // Combine existing and new elements
+                              const allElements = [
+                                ...existingElements,
+                                ...newElements.map(e => ({
+                                  id: e.tempId,
+                                  name: e.name,
+                                  description: e.description,
+                                  isNew: true,
+                                  performanceIndicators: []
+                                }))
+                              ];
+                              
+                              if (allElements.length === 0 && elementForm.levelId !== level.id) {
+                                return <p className="text-sm text-gray-500 italic">No elements defined for this level</p>;
+                              }
+                              
+                              return (
+                                <div className="space-y-4">
+                                  {allElements.map((element) => {
+                                    const isNewElement = element.isNew || element.id?.startsWith('temp-element-');
+                                    const isEditingElement = editingElementId === element.id;
+                                    
+                                    // Get indicators: existing + newly added
+                                    const existingIndicators = Array.isArray(element.performanceIndicators) 
+                                      ? element.performanceIndicators.filter(i => !i.id?.startsWith('temp-indicator-'))
+                                      : [];
+                                    
+                                    const deletedIndicatorIds = new Set(
+                                      pendingChanges.indicators.deleted
+                                        .filter(d => {
+                                          const existingInd = existingIndicators.find(ind => ind.id === d.indicatorId);
+                                          return existingInd;
+                                        })
+                                        .map(d => d.indicatorId)
+                                    );
+                                    
+                                    const editedIndicatorsMap = {};
+                                    pendingChanges.indicators.edited.forEach(edit => {
+                                      if (edit.elementId === element.id || edit.elementId === element.tempId) {
+                                        editedIndicatorsMap[edit.indicatorId] = edit.newValue;
+                                      }
+                                    });
+                                    
+                                    // Get newly added indicators for this element (match by element.id or element.tempId)
+                                    const elementIdentifier = element.id || element.tempId;
+                                    const newIndicators = pendingChanges.indicators.added
+                                      .filter(i => {
+                                        // Match if the indicator's elementId matches this element's id or tempId
+                                        // Check both element.id and element.tempId to handle all cases
+                                        if (element.id && i.elementId === element.id) return true;
+                                        if (element.tempId && i.elementId === element.tempId) return true;
+                                        return false;
+                                      })
+                                      .map(i => ({
+                                        id: i.tempId,
+                                        action: i.action,
+                                        isNew: true
+                                      }));
+                                    
+                                    const allIndicators = [
+                                      ...existingIndicators
+                                        .filter(i => !deletedIndicatorIds.has(i.id))
+                                        .map(i => ({
+                                          ...i,
+                                          action: editedIndicatorsMap[i.id] || i.action || i
+                                        })),
+                                      ...newIndicators
+                                    ];
+                                    
+                                    const isAddingIndicator = indicatorForm.elementId === element.id || (isNewElement && indicatorForm.elementId === element.tempId);
                                   
                                   return (
                                     <div key={element.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
@@ -622,7 +843,8 @@ const EditCompetencyClinic = () => {
                                               variant="outline"
                                               size="sm"
                                               onClick={() => {
-                                                setIndicatorForm({ elementId: element.id, indicatorId: '', action: '' });
+                                                const elementId = element.id || element.tempId;
+                                                setIndicatorForm({ elementId, indicatorId: '', action: '' });
                                               }}
                                             >
                                               <Plus className="h-3 w-3 mr-1" />
@@ -641,7 +863,7 @@ const EditCompetencyClinic = () => {
                                                   placeholder="Enter indicator action"
                                                   className="flex-1"
                                                 />
-                                                <Button size="sm" onClick={() => handleAddIndicator(element.id)}>
+                                                <Button size="sm" onClick={() => handleAddIndicator(element.id || element.tempId)}>
                                                   <Save className="h-3 w-3 mr-1" />
                                                   Add
                                                 </Button>
@@ -652,76 +874,81 @@ const EditCompetencyClinic = () => {
                                             </div>
                                           )}
 
-                                          {/* Existing Indicators */}
-                                          {indicators.length > 0 && (
+                                          {/* Existing + New Indicators */}
+                                          {allIndicators.length > 0 ? (
                                             <div className="space-y-2">
-                                              <Label className="text-xs font-semibold text-gray-700 block mb-2">
-                                                Performance Indicators ({indicators.length})
-                                              </Label>
-                                              {indicators.map((indicator) => {
-                                              const isEditingIndicator = editingIndicatorId === indicator.id;
-                                              
-                                              return (
-                                                <div key={indicator.id} className="flex items-center gap-2 p-2 bg-white rounded border">
-                                                  {isEditingIndicator ? (
-                                                    <>
-                                                      <Input
-                                                        value={indicatorForm.action}
-                                                        onChange={(e) => setIndicatorForm(prev => ({ ...prev, action: e.target.value }))}
-                                                        className="flex-1"
-                                                      />
-                                                      <Button size="sm" onClick={() => handleEditIndicator(indicator, element.id)}>
-                                                        <Save className="h-3 w-3" />
-                                                      </Button>
-                                                      <Button size="sm" variant="outline" onClick={() => {
-                                                        setEditingIndicatorId(null);
-                                                        setIndicatorForm({ elementId: '', indicatorId: '', action: '' });
-                                                      }}>
-                                                        Cancel
-                                                      </Button>
-                                                    </>
-                                                  ) : (
-                                                    <>
-                                                      <span className="text-orange-500">▸</span>
-                                                      <span className="flex-1 text-sm text-gray-700">{indicator.action || indicator}</span>
-                                                      <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                          setEditingIndicatorId(indicator.id);
-                                                          setIndicatorForm({
-                                                            elementId: element.id,
-                                                            indicatorId: indicator.id,
-                                                            action: indicator.action || indicator
-                                                          });
-                                                        }}
-                                                      >
-                                                        <Edit className="h-3 w-3" />
-                                                      </Button>
-                                                      <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleDeleteIndicator(indicator)}
-                                                      >
-                                                        <Trash2 className="h-3 w-3 text-red-600" />
-                                                      </Button>
-                                                    </>
-                                                  )}
-                                                </div>
-                                              );
-                                            })}
+                                              {allIndicators.map((indicator) => {
+                                                const isNewIndicator = indicator.isNew || indicator.id?.startsWith('temp-indicator-');
+                                                const isEditingIndicator = editingIndicatorId === indicator.id;
+                                                
+                                                return (
+                                                  <div key={indicator.id} className="flex items-center gap-2 p-2 bg-white rounded border">
+                                                    {isEditingIndicator ? (
+                                                      <>
+                                                        <Input
+                                                          value={indicatorForm.action}
+                                                          onChange={(e) => setIndicatorForm(prev => ({ ...prev, action: e.target.value }))}
+                                                          className="flex-1"
+                                                        />
+                                                        <Button size="sm" onClick={() => handleEditIndicator(indicator, element.id || element.tempId)}>
+                                                          <Save className="h-3 w-3" />
+                                                        </Button>
+                                                        <Button size="sm" variant="outline" onClick={() => {
+                                                          setEditingIndicatorId(null);
+                                                          setIndicatorForm({ elementId: '', indicatorId: '', action: '' });
+                                                        }}>
+                                                          Cancel
+                                                        </Button>
+                                                      </>
+                                                    ) : (
+                                                      <>
+                                                        <span className="text-orange-500">▸</span>
+                                                        <span className="flex-1 text-sm text-gray-700">{indicator.action || indicator}</span>
+                                                        {isNewIndicator && (
+                                                          <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-300">
+                                                            Added by you
+                                                          </Badge>
+                                                        )}
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="sm"
+                                                          onClick={() => {
+                                                            setEditingIndicatorId(indicator.id);
+                                                            setIndicatorForm({
+                                                              elementId: element.id || element.tempId,
+                                                              indicatorId: indicator.id,
+                                                              action: indicator.action || indicator
+                                                            });
+                                                          }}
+                                                        >
+                                                          <Edit className="h-3 w-3" />
+                                                        </Button>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="sm"
+                                                          onClick={() => handleDeleteIndicator(indicator)}
+                                                        >
+                                                          <Trash2 className="h-3 w-3 text-red-600" />
+                                                        </Button>
+                                                      </>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
                                             </div>
-                                          )}
-                                          {indicators.length === 0 && !isAddingIndicator && (
-                                            <p className="text-xs text-gray-500 italic">No indicators defined</p>
+                                          ) : (
+                                            !isAddingIndicator && (
+                                              <p className="text-xs text-gray-500 italic">No indicators defined</p>
+                                            )
                                           )}
                                         </div>
                                       )}
                                     </div>
                                   );
                                 })}
-                              </div>
-                            )}
+                                </div>
+                              );
+                            })()}
                           </div>
                           {/* Level Indicators */}
                           <div className="border-t pt-4 mt-4">
@@ -762,7 +989,7 @@ const EditCompetencyClinic = () => {
                                 <div className="flex gap-2 mt-2">
                                   <Button size="sm" onClick={() => handleSaveLevelIndicators(level)}>
                                     <Save className="h-3 w-3 mr-1" />
-                                    Submit
+                                    Save
                                   </Button>
                                   <Button size="sm" variant="outline" onClick={() => {
                                     setEditingLevelId(null);
@@ -812,6 +1039,203 @@ const EditCompetencyClinic = () => {
             )}
           </div>
         </div>
+
+        {/* Submit All Changes Button */}
+        {(() => {
+          const hasChanges = 
+            pendingChanges.definition !== null ||
+            Object.keys(pendingChanges.levelDescriptions).length > 0 ||
+            Object.keys(pendingChanges.levelIndicators).length > 0 ||
+            pendingChanges.elements.added.length > 0 ||
+            pendingChanges.elements.edited.length > 0 ||
+            pendingChanges.elements.deleted.length > 0 ||
+            pendingChanges.indicators.added.length > 0 ||
+            pendingChanges.indicators.edited.length > 0 ||
+            pendingChanges.indicators.deleted.length > 0;
+          
+          if (!hasChanges) return null;
+          
+          const totalChanges = 
+            (pendingChanges.definition ? 1 : 0) +
+            Object.keys(pendingChanges.levelDescriptions).length +
+            Object.keys(pendingChanges.levelIndicators).length +
+            pendingChanges.elements.added.length +
+            pendingChanges.elements.edited.length +
+            pendingChanges.elements.deleted.length +
+            pendingChanges.indicators.added.length +
+            pendingChanges.indicators.edited.length +
+            pendingChanges.indicators.deleted.length;
+          
+          return (
+            <div className="fixed bottom-6 right-6 z-50">
+              <Card className="shadow-lg border-2 border-blue-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Pending Changes</p>
+                      <p className="text-xs text-gray-600">{totalChanges} change{totalChanges !== 1 ? 's' : ''} ready to submit</p>
+                    </div>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          // Submit all changes
+                          const promises = [];
+                          
+                          // Submit definition
+                          if (pendingChanges.definition) {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'DEFINITION',
+                                changes: pendingChanges.definition
+                              })
+                            );
+                          }
+                          
+                          // Submit level descriptions
+                          Object.entries(pendingChanges.levelDescriptions).forEach(([levelId, changes]) => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'LEVEL_DESCRIPTION',
+                                changes: { levelId, ...changes }
+                              })
+                            );
+                          });
+                          
+                          // Submit level indicators
+                          Object.entries(pendingChanges.levelIndicators).forEach(([levelId, changes]) => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'LEVEL_INDICATORS',
+                                changes: { levelId, ...changes }
+                              })
+                            );
+                          });
+                          
+                          // Submit element additions
+                          pendingChanges.elements.added.forEach(element => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'ELEMENT_ADD',
+                                changes: {
+                                  levelId: element.levelId,
+                                  name: element.name,
+                                  description: element.description || '',
+                                  order: 0
+                                }
+                              })
+                            );
+                          });
+                          
+                          // Submit element edits
+                          pendingChanges.elements.edited.forEach(edit => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'ELEMENT_EDIT',
+                                changes: {
+                                  elementId: edit.elementId,
+                                  levelId: edit.levelId,
+                                  oldValue: edit.oldValue,
+                                  newValue: edit.newValue
+                                }
+                              })
+                            );
+                          });
+                          
+                          // Submit element deletions
+                          pendingChanges.elements.deleted.forEach(del => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'ELEMENT_DELETE',
+                                changes: {
+                                  elementId: del.elementId,
+                                  elementName: del.elementName
+                                }
+                              })
+                            );
+                          });
+                          
+                          // Submit indicator additions
+                          pendingChanges.indicators.added.forEach(indicator => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'INDICATOR_ADD',
+                                changes: {
+                                  elementId: indicator.elementId,
+                                  action: indicator.action,
+                                  order: 0
+                                }
+                              })
+                            );
+                          });
+                          
+                          // Submit indicator edits
+                          pendingChanges.indicators.edited.forEach(edit => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'INDICATOR_EDIT',
+                                changes: {
+                                  indicatorId: edit.indicatorId,
+                                  elementId: edit.elementId,
+                                  oldValue: edit.oldValue,
+                                  newValue: edit.newValue
+                                }
+                              })
+                            );
+                          });
+                          
+                          // Submit indicator deletions
+                          pendingChanges.indicators.deleted.forEach(del => {
+                            promises.push(
+                              createEditRequestMutation.mutateAsync({
+                                editType: 'INDICATOR_DELETE',
+                                changes: {
+                                  indicatorId: del.indicatorId,
+                                  indicatorAction: del.indicatorAction
+                                }
+                              })
+                            );
+                          });
+                          
+                          await Promise.all(promises);
+                          
+                          // Clear pending changes
+                          setPendingChanges({
+                            definition: null,
+                            levelDescriptions: {},
+                            levelIndicators: {},
+                            elements: { added: [], edited: [], deleted: [] },
+                            indicators: { added: [], edited: [], deleted: [] }
+                          });
+                          
+                          toast({
+                            title: 'All Changes Submitted',
+                            description: 'All your changes have been submitted for admin review.',
+                            variant: 'default'
+                          });
+                          
+                          // Refresh competency data
+                          queryClient.invalidateQueries(['competency-full', id]);
+                        } catch (error) {
+                          toast({
+                            title: 'Error',
+                            description: error.response?.data?.message || 'Some changes could not be submitted. Please try again.',
+                            variant: 'destructive'
+                          });
+                        }
+                      }}
+                      disabled={createEditRequestMutation.isPending}
+                      className="bg-blue-600 hover:bg-blue-700"
+                      size="lg"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      {createEditRequestMutation.isPending ? 'Submitting...' : 'Submit Changes'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

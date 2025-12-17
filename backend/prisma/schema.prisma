@@ -611,3 +611,30 @@ enum EditRequestStatus {
   APPROVED
   REJECTED
 }
+
+model JCPEditRequest {
+  id              String             @id @default(cuid())
+  jcpCode         String // The JCP code being edited
+  requestedBy      String // User SID who requested the edit
+  requestedByName String? // User name for display
+  editType        JCPEditType // Type of edit
+  status          EditRequestStatus  @default(PENDING)
+  reviewedBy      String? // Admin SID who reviewed
+  reviewedAt      DateTime?
+  reviewNotes     String? // Admin notes
+
+  // Edit data stored as JSON - contains old and new mappings
+  changes String // JSON string containing the changes (old and new competency mappings)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("jcp_edit_requests")
+}
+
+enum JCPEditType {
+  MAPPING_ADD // Add new competency to JCP
+  MAPPING_UPDATE // Update required level for existing competency
+  MAPPING_REMOVE // Remove competency from JCP
+  MAPPING_BULK // Bulk changes (multiple add/update/remove operations)
+}

@@ -58,6 +58,9 @@ import About from './pages/About';
 import KafuClinic from './pages/KafuClinic';
 import EditCompetencyClinic from './pages/EditCompetencyClinic';
 import EditRequestReview from './pages/EditRequestReview';
+import ViewJCP from './pages/ViewJCP';
+import EditJCPClinic from './pages/EditJCPClinic';
+import ExportData from './pages/ExportData';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -109,9 +112,12 @@ function App() {
                 <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="settings/level-terminology" element={<AdminRoute><Settings /></AdminRoute>} />
                 <Route path="settings/assessment-cycle" element={<AdminRoute><Settings /></AdminRoute>} />
+                <Route path="settings/export-data" element={<AdminRoute><ExportData /></AdminRoute>} />
                 <Route path="about" element={<About />} />
                 <Route path="kafu-clinic" element={<ClinicRoute><KafuClinic /></ClinicRoute>} />
                 <Route path="kafu-clinic/competency/edit/:id" element={<ClinicRoute><EditCompetencyClinic /></ClinicRoute>} />
+                <Route path="kafu-clinic/jcp/view/:jcpCode" element={<ClinicRoute><ViewJCP /></ClinicRoute>} />
+                <Route path="kafu-clinic/jcp/edit/:jcpCode" element={<ClinicRoute><EditJCPClinic /></ClinicRoute>} />
                 <Route path="kafu-clinic/edit-requests" element={<AdminRoute><EditRequestReview /></AdminRoute>} />
                 <Route path="test" element={<Test />} />
                 {/* User Login */}

@@ -116,6 +116,7 @@ const KafuClinic = () => {
   
   // JCP state
   const [jcpSearch, setJcpSearch] = useState('');
+  const [userJcpSearch, setUserJcpSearch] = useState(''); // Search for user's owned JCPs
   const [showJcpModal, setShowJcpModal] = useState(false);
   const [editingJcp, setEditingJcp] = useState(null);
   const [jcpForm, setJcpForm] = useState({
@@ -146,10 +147,19 @@ const KafuClinic = () => {
   const [selectedCompetencyIds, setSelectedCompetencyIds] = useState([]);
   const [jcpSearchInModal, setJcpSearchInModal] = useState('');
   const [selectedJcpCodes, setSelectedJcpCodes] = useState([]);
+  const [jcpJobFilterDivision, setJcpJobFilterDivision] = useState('all');
+  const [jcpJobFilterLocation, setJcpJobFilterLocation] = useState('all');
+  const [jcpJobFilterUnit, setJcpJobFilterUnit] = useState('all');
   const [allSelectedView, setAllSelectedView] = useState(true);
   const [allSelectedEdit, setAllSelectedEdit] = useState(false);
   const [allSelectedJcpView, setAllSelectedJcpView] = useState(true);
   const [allSelectedJcpEdit, setAllSelectedJcpEdit] = useState(false);
+  
+  // State for collapsed sections in access cards
+  const [expandedSections, setExpandedSections] = useState({});
+  
+  // State for collapsed competencies in user JCP cards
+  const [expandedJcpCompetencies, setExpandedJcpCompetencies] = useState({});
   
   // Fetch competencies
   const { data: competenciesData, isLoading: competenciesLoading } = useQuery({
@@ -325,9 +335,9 @@ const KafuClinic = () => {
     });
   }, [competenciesData, competencySearch, competencyTypeFilter, competencyFamilyFilter]);
   
-  // Get unique JCP codes from mappings
+  // Get unique JCP codes from mappings with full competency details
   const uniqueJcps = React.useMemo(() => {
-    if (!jcpsData?.mappings || !jobsData?.jobs) return [];
+    if (!jcpsData?.mappings || !jobsData?.jobs || !competenciesData?.competencies) return [];
     
     const jcpMap = new Map();
     
@@ -338,24 +348,32 @@ const KafuClinic = () => {
           jcpMap.set(job.jcp_code, {
             jcpCode: job.jcp_code,
             jobs: [],
-            competencies: new Set()
+            competencies: new Map() // Use Map to store competency details with required level
           });
         }
         const jcp = jcpMap.get(job.jcp_code);
         if (!jcp.jobs.find(j => j.id === job.id)) {
           jcp.jobs.push(job);
         }
-        jcp.competencies.add(mapping.competencyId);
+        // Store competency with required level
+        const competency = competenciesData.competencies.find(c => c.id === mapping.competencyId);
+        if (competency) {
+          jcp.competencies.set(mapping.competencyId, {
+            ...competency,
+            requiredLevel: mapping.requiredLevel || mapping.required_level,
+            mappingId: mapping.id
+          });
+        }
       }
     });
     
     return Array.from(jcpMap.values()).map(jcp => ({
       ...jcp,
-      competencies: Array.from(jcp.competencies),
+      competencies: Array.from(jcp.competencies.values()),
       jobCount: jcp.jobs.length,
       competencyCount: jcp.competencies.size
     }));
-  }, [jcpsData, jobsData]);
+  }, [jcpsData, jobsData, competenciesData]);
   
   // Filter JCPs
   const filteredJcps = React.useMemo(() => {
@@ -368,6 +386,27 @@ const KafuClinic = () => {
                            job.title?.toLowerCase().includes(jcpSearch.toLowerCase()));
     });
   }, [uniqueJcps, jcpSearch]);
+
+  // Filter JCPs for modal selection (with job filters)
+  const filteredJcpsForModal = React.useMemo(() => {
+    if (!uniqueJcps) return [];
+    
+    return uniqueJcps.filter(jcp => {
+      const matchesSearch = !jcpSearchInModal || 
+        jcp.jcpCode.toLowerCase().includes(jcpSearchInModal.toLowerCase()) ||
+        jcp.jobs.some(job => 
+          job.code?.toLowerCase().includes(jcpSearchInModal.toLowerCase()) ||
+          job.title?.toLowerCase().includes(jcpSearchInModal.toLowerCase())
+        );
+      const matchesDivision = jcpJobFilterDivision === 'all' || 
+        jcp.jobs.some(job => job.division === jcpJobFilterDivision);
+      const matchesLocation = jcpJobFilterLocation === 'all' || 
+        jcp.jobs.some(job => job.location === jcpJobFilterLocation);
+      const matchesUnit = jcpJobFilterUnit === 'all' || 
+        jcp.jobs.some(job => job.unit === jcpJobFilterUnit);
+      return matchesSearch && matchesDivision && matchesLocation && matchesUnit;
+    });
+  }, [uniqueJcps, jcpSearchInModal, jcpJobFilterDivision, jcpJobFilterLocation, jcpJobFilterUnit]);
   
   // Edit history state
   const [editHistory, setEditHistory] = useState(() => {
@@ -430,6 +469,25 @@ const KafuClinic = () => {
       };
     });
   }, [userClinicAccess, uniqueJcps]);
+
+  // Filter user JCPs by search
+  const filteredUserJcps = React.useMemo(() => {
+    if (!userJcps) return [];
+    if (!userJcpSearch.trim()) return userJcps;
+    
+    const searchLower = userJcpSearch.toLowerCase();
+    return userJcps.filter(jcp => 
+      jcp.jcpCode.toLowerCase().includes(searchLower) ||
+      jcp.jobs.some(job => 
+        job.code?.toLowerCase().includes(searchLower) ||
+        job.title?.toLowerCase().includes(searchLower)
+      ) ||
+      jcp.competencies.some(comp => 
+        comp.name?.toLowerCase().includes(searchLower) ||
+        comp.code?.toLowerCase().includes(searchLower)
+      )
+    );
+  }, [userJcps, userJcpSearch]);
 
   // Get unique types, families, and divisions for OA Dictionary filters
   const oaDictionaryUniqueTypes = React.useMemo(() => {
@@ -1744,13 +1802,16 @@ const KafuClinic = () => {
               setCompetencyFilterFamily('all');
               setCompetencyFilterDivision('all');
               setCompetencySearchInModal('');
-              setJcpSearchInModal('');
-              setAccessUserSearch('');
-              setAllSelectedView(true);
-              setAllSelectedEdit(false);
-              setAllSelectedJcpView(true);
-              setAllSelectedJcpEdit(false);
-              setShowAccessModal(true);
+                  setJcpSearchInModal('');
+                  setJcpJobFilterDivision('all');
+                  setJcpJobFilterLocation('all');
+                  setJcpJobFilterUnit('all');
+                  setAccessUserSearch('');
+                  setAllSelectedView(true);
+                  setAllSelectedEdit(false);
+                  setAllSelectedJcpView(true);
+                  setAllSelectedJcpEdit(false);
+                  setShowAccessModal(true);
             }} className="flex items-center gap-2">
               <UserPlus className="h-4 w-4" />
               Assign Access
@@ -1863,51 +1924,91 @@ const KafuClinic = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           {/* Competencies Permissions */}
                           <div>
-                            <h4 className="font-semibold text-sm text-gray-700 mb-3 flex items-center gap-2">
-                              <BookOpen className="h-4 w-4" />
-                              Competencies ({access.competencyPermissions?.length || 0})
-                            </h4>
-                            {access.competencyPermissions && access.competencyPermissions.length > 0 ? (
-                              <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {access.competencyPermissions.map((perm, idx) => {
-                                  const comp = competenciesData?.competencies?.find(c => c.id === perm.competencyId);
-                                  if (!comp) return null;
-                                  return (
-                                    <div key={idx} className="p-2 bg-gray-50 rounded text-xs">
-                                      <div className="font-medium text-gray-700">{comp.name}</div>
-                                      <div className="flex gap-3 mt-1 text-gray-600">
-                                        {perm.view && <span className="text-green-600">View</span>}
-                                      {perm.edit && <span className="text-purple-600">Edit</span>}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                            <button
+                              onClick={() => {
+                                const key = `${access.userId}-competencies`;
+                                setExpandedSections(prev => ({
+                                  ...prev,
+                                  [key]: !prev[key]
+                                }));
+                              }}
+                              className="w-full font-semibold text-sm text-gray-700 mb-3 flex items-center justify-between gap-2 hover:text-gray-900 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <BookOpen className="h-4 w-4" />
+                                Competencies ({access.competencyPermissions?.length || 0})
                               </div>
-                            ) : (
-                              <p className="text-xs text-gray-400">No competencies assigned</p>
+                              {expandedSections[`${access.userId}-competencies`] ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                            {expandedSections[`${access.userId}-competencies`] && (
+                              <>
+                                {access.competencyPermissions && access.competencyPermissions.length > 0 ? (
+                                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {access.competencyPermissions.map((perm, idx) => {
+                                      const comp = competenciesData?.competencies?.find(c => c.id === perm.competencyId);
+                                      if (!comp) return null;
+                                      return (
+                                        <div key={idx} className="p-2 bg-gray-50 rounded text-xs">
+                                          <div className="font-medium text-gray-700">{comp.name}</div>
+                                          <div className="flex gap-3 mt-1 text-gray-600">
+                                            {perm.view && <span className="text-green-600">View</span>}
+                                            {perm.edit && <span className="text-purple-600">Edit</span>}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-400">No competencies assigned</p>
+                                )}
+                              </>
                             )}
                           </div>
                           
                           {/* JCPs Permissions */}
                           <div>
-                            <h4 className="font-semibold text-sm text-gray-700 mb-3 flex items-center gap-2">
-                              <Briefcase className="h-4 w-4" />
-                              JCPs ({access.jcpPermissions?.length || 0})
-                            </h4>
-                            {access.jcpPermissions && access.jcpPermissions.length > 0 ? (
-                              <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {access.jcpPermissions.map((perm, idx) => (
-                                  <div key={idx} className="p-2 bg-gray-50 rounded text-xs">
-                                    <div className="font-medium text-gray-700">{perm.jcpCode}</div>
-                                    <div className="flex gap-3 mt-1 text-gray-600">
-                                      {perm.view && <span className="text-green-600">View</span>}
-                                      {perm.edit && <span className="text-purple-600">Edit</span>}
-                                    </div>
-                                  </div>
-                                ))}
+                            <button
+                              onClick={() => {
+                                const key = `${access.userId}-jcps`;
+                                setExpandedSections(prev => ({
+                                  ...prev,
+                                  [key]: !prev[key]
+                                }));
+                              }}
+                              className="w-full font-semibold text-sm text-gray-700 mb-3 flex items-center justify-between gap-2 hover:text-gray-900 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Briefcase className="h-4 w-4" />
+                                JCPs ({access.jcpPermissions?.length || 0})
                               </div>
-                            ) : (
-                              <p className="text-xs text-gray-400">No JCPs assigned</p>
+                              {expandedSections[`${access.userId}-jcps`] ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </button>
+                            {expandedSections[`${access.userId}-jcps`] && (
+                              <>
+                                {access.jcpPermissions && access.jcpPermissions.length > 0 ? (
+                                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {access.jcpPermissions.map((perm, idx) => (
+                                      <div key={idx} className="p-2 bg-gray-50 rounded text-xs">
+                                        <div className="font-medium text-gray-700">{perm.jcpCode}</div>
+                                        <div className="flex gap-3 mt-1 text-gray-600">
+                                          {perm.view && <span className="text-green-600">View</span>}
+                                          {perm.edit && <span className="text-purple-600">Edit</span>}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-400">No JCPs assigned</p>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -2021,93 +2122,190 @@ const KafuClinic = () => {
             <div className="flex items-start gap-2">
               <Info className="h-5 w-5 text-blue-600 mt-0.5" />
               <div className="text-sm text-blue-800">
-                <p className="font-semibold mb-1">Your Assigned JCPs</p>
-                <p>You can view and edit the Job Competency Profiles assigned to you. All edits will be recorded for admin review.</p>
+                <p className="font-semibold mb-1">Your Assigned JCPs ({userJcps.length})</p>
+                <p>You can view and edit the Job Competency Profiles assigned to you based on your permissions. All edits will be submitted for admin review.</p>
+                {userJcps.length > 0 && (
+                  <div className="mt-2 text-xs">
+                    <span className="font-medium">Permissions: </span>
+                    {userJcps.filter(j => j.canView).length} with View access, {userJcps.filter(j => j.canEdit).length} with Edit access
+                  </div>
+                )}
               </div>
             </div>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {userJcps.length === 0 ? (
-              <div className="col-span-full text-center py-8 text-gray-500">
-                No JCPs assigned to you
+
+          {/* Search Bar */}
+          <Card className="mb-6">
+            <CardContent className="p-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search JCPs by code, job title, job code, or competency name..."
+                  value={userJcpSearch}
+                  onChange={(e) => setUserJcpSearch(e.target.value)}
+                  className="pl-10"
+                />
               </div>
+              {filteredUserJcps.length !== userJcps.length && (
+                <p className="text-sm text-gray-600 mt-2">
+                  Showing {filteredUserJcps.length} of {userJcps.length} JCP(s)
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          
+          <div className="space-y-6">
+            {filteredUserJcps.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Briefcase className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">
+                    {userJcpSearch ? 'No JCPs found matching your search' : 'No JCPs assigned to you'}
+                  </p>
+                </CardContent>
+              </Card>
             ) : (
-              userJcps.map((jcp, idx) => (
-                <Card key={idx} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg">JCP: {jcp.jcpCode}</CardTitle>
-                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-                          <div className="flex items-center gap-1">
-                            <Briefcase className="h-3 w-3" />
-                            {jcp.jobCount} Job(s)
+              filteredUserJcps.map((jcp, idx) => {
+                const firstJob = jcp.jobs[0];
+                const isExpanded = expandedJcpCompetencies[jcp.jcpCode] || false;
+                
+                return (
+                  <Card key={idx} className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                    {/* Job Header */}
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <Building2 className="h-6 w-6 text-blue-600" />
+                            {firstJob?.title && (
+                              <CardTitle className="text-xl font-semibold text-gray-900">{firstJob.title}</CardTitle>
+                            )}
+                            <Badge variant="outline" className="text-xs">
+                              {firstJob?.code || 'N/A'}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+                              JCP: {jcp.jcpCode}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {jcp.jobCount} Job{jcp.jobCount !== 1 ? 's' : ''}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+                              {jcp.competencyCount} Competenc{jcp.competencyCount !== 1 ? 'ies' : 'y'}
+                            </Badge>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Target className="h-3 w-3" />
-                            {jcp.competencyCount} Competency(ies)
-                          </div>
+                          {jcp.jobs.length > 1 && (
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mt-2">
+                              {jcp.jobs.slice(1, 6).map(job => (
+                                <div key={job.id} className="flex flex-col">
+                                  <span className="text-xs bg-gray-100 px-2 py-1 rounded font-medium">
+                                    {job.code}
+                                  </span>
+                                  {job.title && (
+                                    <span className="text-xs text-gray-500 mt-0.5">
+                                      {job.title}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                              {jcp.jobs.length > 6 && (
+                                <span className="text-xs text-gray-500">+{jcp.jobs.length - 6} more jobs</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {jcp.canView && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigate(`/kafu-clinic/jcp/view/${jcp.jcpCode}`);
+                              }}
+                              className="flex items-center gap-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View
+                            </Button>
+                          )}
+                          {jcp.canEdit && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigate(`/kafu-clinic/jcp/edit/${jcp.jcpCode}`);
+                              }}
+                              className="flex items-center gap-2"
+                              title="Edit JCP (changes will be submitted for review)"
+                            >
+                              <Edit className="h-4 w-4" />
+                              Edit
+                            </Button>
+                          )}
+                          {!jcp.canView && !jcp.canEdit && (
+                            <Badge variant="outline" className="text-xs text-gray-500 bg-gray-100">
+                              No permissions
+                            </Badge>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="mb-4">
-                      <p className="text-xs text-gray-500 mb-2">Jobs:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {jcp.jobs.slice(0, 3).map(job => (
-                          <Badge key={job.id} variant="outline" className="text-xs">
-                            {job.code}
-                          </Badge>
-                        ))}
-                        {jcp.jobs.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{jcp.jobs.length - 3} more
-                          </Badge>
+                    </CardHeader>
+
+                    {/* Competencies List - Collapsible */}
+                    <CardContent>
+                      <div className="border-t pt-4">
+                        <button
+                          onClick={() => {
+                            setExpandedJcpCompetencies(prev => ({
+                              ...prev,
+                              [jcp.jcpCode]: !prev[jcp.jcpCode]
+                            }));
+                          }}
+                          className="w-full flex items-center justify-between mb-3 hover:text-gray-900 transition-colors"
+                        >
+                          <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                            <BookOpen className="h-4 w-4 text-green-600" />
+                            Required Competencies ({jcp.competencies.length})
+                          </h4>
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-gray-500" />
+                          )}
+                        </button>
+                        
+                        {isExpanded && (
+                          <>
+                            {jcp.competencies.length === 0 ? (
+                              <p className="text-gray-500 text-sm italic">No competencies assigned to this JCP</p>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {jcp.competencies.map((comp) => (
+                                  <div
+                                    key={comp.id || comp.mappingId}
+                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border hover:bg-gray-100 hover:border-gray-300 transition-all duration-200"
+                                  >
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <BookOpen className="h-4 w-4 text-green-600" />
+                                        <span className="font-medium text-sm text-gray-900">
+                                          {comp.name}
+                                        </span>
+                                      </div>
+                                      <Badge className={`text-xs ${getLevelColor(comp.requiredLevel)}`}>
+                                        {getLevelDisplayName(comp.requiredLevel)}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          // View JCP details
-                          const jobId = jcp.jobs[0]?.id;
-                          if (jobId) {
-                            navigate(`/jobs/view/${jobId}`);
-                          }
-                        }}
-                        className="flex-1"
-                        disabled={!jcp.canView}
-                      >
-                        <Eye className="h-3 w-3 mr-1" />
-                        View
-                      </Button>
-                      {jcp.canEdit && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingJcp(jcp);
-                            setJcpForm({
-                              jcpCode: jcp.jcpCode,
-                              jobIds: jcp.jobs.map(j => j.id),
-                              competencies: jcp.competencies
-                            });
-                            setSelectedJcpJobs(jcp.jobs);
-                            setShowJcpModal(true);
-                          }}
-                          title="Edit"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
         </div>
@@ -2640,8 +2838,11 @@ const KafuClinic = () => {
                     </div>
                   )}
                   
-                  {/* Filtered Competencies List */}
-                  <div className="border border-gray-200 rounded-md max-h-64 overflow-y-auto p-3 space-y-2">
+                  {/* Filtered Competencies List - Memoized to prevent full re-render */}
+                  <div 
+                    key={`competencies-list-${competencyFilterType}-${competencyFilterFamily}-${competencyFilterDivision}-${competencySearchInModal}`}
+                    className="border border-gray-200 rounded-md max-h-64 overflow-y-auto p-3 space-y-2"
+                  >
                     {filteredCompetenciesForSelection.length === 0 ? (
                       <p className="text-sm text-gray-500 text-center py-4">No competencies found</p>
                     ) : (
@@ -2707,122 +2908,244 @@ const KafuClinic = () => {
                     <Briefcase className="h-5 w-5 text-green-600" />
                     Select JCPs and Set Permissions
                   </h3>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Assign specific Job Competency Profiles with view/edit permissions. These will appear in the "Owned JCPs" tab for the user.
+                  </p>
                   
-                  {/* JCP Search and Permissions */}
-                  <div className="mb-4 space-y-3">
-                    <Input
-                      placeholder="Search JCPs by code..."
-                      value={jcpSearchInModal}
-                      onChange={(e) => setJcpSearchInModal(e.target.value)}
-                      className="mb-2"
-                    />
-                    
-                    {selectedJcpCodes.length > 0 && (
-                      <div className="p-3 bg-gray-50 rounded border border-gray-200">
-                        <div className="text-xs font-semibold text-gray-600 mb-2">
-                          Set Permissions for All Selected JCPs ({selectedJcpCodes.length}):
-                        </div>
-                        <div className="flex gap-4">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={allSelectedJcpView}
-                              onChange={(e) => {
-                                setAllSelectedJcpView(e.target.checked);
-                                // Apply immediately to all selected
-                                setAccessForm(prev => ({
-                                  ...prev,
-                                  jcpPermissions: prev.jcpPermissions.map(p => ({
-                                    ...p,
-                                    view: e.target.checked
-                                  }))
-                                }));
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-sm text-gray-700">View</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={allSelectedJcpEdit}
-                              onChange={(e) => {
-                                setAllSelectedJcpEdit(e.target.checked);
-                                // Apply immediately to all selected
-                                setAccessForm(prev => ({
-                                  ...prev,
-                                  jcpPermissions: prev.jcpPermissions.map(p => ({
-                                    ...p,
-                                    edit: e.target.checked
-                                  }))
-                                }));
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-sm text-gray-700">Edit</span>
-                          </label>
-                        </div>
+                  {/* Job Filters for JCPs */}
+                  <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="Search JCPs by code or job..."
+                        value={jcpSearchInModal}
+                        onChange={(e) => setJcpSearchInModal(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    <Select value={jcpJobFilterDivision} onValueChange={setJcpJobFilterDivision}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Divisions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Divisions</SelectItem>
+                        {[...new Set(jobsData?.jobs?.map(j => j.division).filter(Boolean))].sort().map(div => (
+                          <SelectItem key={div} value={div}>{div}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={jcpJobFilterLocation} onValueChange={setJcpJobFilterLocation}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Locations" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Locations</SelectItem>
+                        {[...new Set(jobsData?.jobs?.map(j => j.location).filter(Boolean))].sort().map(loc => (
+                          <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={jcpJobFilterUnit} onValueChange={setJcpJobFilterUnit}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Units" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Units</SelectItem>
+                        {[...new Set(jobsData?.jobs?.map(j => j.unit).filter(Boolean))].sort().map(unit => (
+                          <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Select All & Permissions */}
+                  <div className="mb-4 p-3 bg-gray-50 rounded-md border flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="selectAllJcps"
+                        checked={selectedJcpCodes.length === filteredJcpsForModal.length && filteredJcpsForModal.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            const newSelectedCodes = filteredJcpsForModal.map(jcp => jcp.jcpCode);
+                            setSelectedJcpCodes(newSelectedCodes);
+                            setAccessForm(prev => ({
+                              ...prev,
+                              jcpPermissions: newSelectedCodes.map(code => ({ jcpCode: code, view: allSelectedJcpView, edit: allSelectedJcpEdit }))
+                            }));
+                          } else {
+                            setSelectedJcpCodes([]);
+                            setAccessForm(prev => ({
+                              ...prev,
+                              jcpPermissions: []
+                            }));
+                          }
+                        }}
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                      />
+                      <Label htmlFor="selectAllJcps" className="text-sm font-medium text-gray-700 cursor-pointer">
+                        Select All ({filteredJcpsForModal.length})
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="allViewJcp"
+                          checked={allSelectedJcpView}
+                          onChange={(e) => {
+                            setAllSelectedJcpView(e.target.checked);
+                            setAccessForm(prev => ({
+                              ...prev,
+                              jcpPermissions: prev.jcpPermissions.map(p => ({ ...p, view: e.target.checked }))
+                            }));
+                          }}
+                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                        />
+                        <Label htmlFor="allViewJcp" className="text-sm text-gray-700 cursor-pointer">View</Label>
                       </div>
-                    )}
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="allEditJcp"
+                          checked={allSelectedJcpEdit}
+                          onChange={(e) => {
+                            setAllSelectedJcpEdit(e.target.checked);
+                            setAccessForm(prev => ({
+                              ...prev,
+                              jcpPermissions: prev.jcpPermissions.map(p => ({ ...p, edit: e.target.checked }))
+                            }));
+                          }}
+                          className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                        />
+                        <Label htmlFor="allEditJcp" className="text-sm text-gray-700 cursor-pointer">Edit</Label>
+                      </div>
+                    </div>
                   </div>
                   
-                  {/* JCPs List */}
-                  <div className="border border-gray-200 rounded-md max-h-64 overflow-y-auto p-3 space-y-2">
-                    {(() => {
-                      const filtered = uniqueJcps.filter(jcp => 
-                        !jcpSearchInModal || 
-                        jcp.jcpCode.toLowerCase().includes(jcpSearchInModal.toLowerCase())
-                      );
-                      
-                      return filtered.length === 0 ? (
-                        <p className="text-sm text-gray-500 text-center py-4">No JCPs found</p>
+                  {/* JCPs Cards List - Memoized to prevent full re-render */}
+                  <div 
+                    key={`jcps-list-${jcpJobFilterDivision}-${jcpJobFilterLocation}-${jcpJobFilterUnit}-${jcpSearchInModal}`}
+                    className="space-y-4 max-h-[600px] overflow-y-auto"
+                  >
+                    {filteredJcpsForModal.length === 0 ? (
+                        <Card>
+                          <CardContent className="py-12 text-center">
+                            <Briefcase className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                            <p className="text-gray-500">No JCPs found</p>
+                          </CardContent>
+                        </Card>
                       ) : (
-                        filtered.map((jcp, idx) => {
+                        filteredJcpsForModal.map((jcp, idx) => {
                           const isSelected = selectedJcpCodes.includes(jcp.jcpCode);
                           const existingPerm = accessForm.jcpPermissions.find(p => p.jcpCode === jcp.jcpCode);
                           return (
-                            <div
+                            <Card
                               key={idx}
-                              className={`p-3 rounded border ${
-                                isSelected ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:bg-gray-50'
+                              className={`border-2 transition-all ${
+                                isSelected ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:shadow-md'
                               }`}
                             >
-                              <div className="flex items-start gap-3">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedJcpCodes([...selectedJcpCodes, jcp.jcpCode]);
-                                      setAccessForm(prev => ({
-                                        ...prev,
-                                        jcpPermissions: [
-                                          ...prev.jcpPermissions,
-                                          { jcpCode: jcp.jcpCode, view: allSelectedJcpView, edit: allSelectedJcpEdit }
-                                        ]
-                                      }));
-                                    } else {
-                                      setSelectedJcpCodes(selectedJcpCodes.filter(code => code !== jcp.jcpCode));
-                                      setAccessForm(prev => ({
-                                        ...prev,
-                                        jcpPermissions: prev.jcpPermissions.filter(p => p.jcpCode !== jcp.jcpCode)
-                                      }));
-                                    }
-                                  }}
-                                  className="mt-1 rounded"
-                                />
-                                <div className="flex-1">
-                                  <div className="font-medium text-sm">JCP: {jcp.jcpCode}</div>
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    {jcp.jobCount} Job(s) • {jcp.competencyCount} Competency(ies)
+                              <CardHeader className="pb-3">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-start gap-3 flex-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedJcpCodes([...selectedJcpCodes, jcp.jcpCode]);
+                                          setAccessForm(prev => ({
+                                            ...prev,
+                                            jcpPermissions: [
+                                              ...prev.jcpPermissions,
+                                              { jcpCode: jcp.jcpCode, view: allSelectedJcpView, edit: allSelectedJcpEdit }
+                                            ]
+                                          }));
+                                        } else {
+                                          setSelectedJcpCodes(selectedJcpCodes.filter(code => code !== jcp.jcpCode));
+                                          setAccessForm(prev => ({
+                                            ...prev,
+                                            jcpPermissions: prev.jcpPermissions.filter(p => p.jcpCode !== jcp.jcpCode)
+                                          }));
+                                        }
+                                      }}
+                                      className="mt-1 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-3 mb-2">
+                                        <Building2 className="h-5 w-5 text-blue-600" />
+                                        <CardTitle className="text-lg">JCP: {jcp.jcpCode}</CardTitle>
+                                        <Badge variant="outline" className="text-xs">
+                                          {jcp.jobCount} Job{jcp.jobCount !== 1 ? 's' : ''}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+                                          {jcp.competencyCount} Competenc{jcp.competencyCount !== 1 ? 'ies' : 'y'}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                                        {jcp.jobs.slice(0, 3).map(job => (
+                                          <div key={job.id} className="flex flex-col">
+                                            <span className="text-xs bg-gray-100 px-2 py-1 rounded font-medium">
+                                              {job.code}
+                                            </span>
+                                            {job.title && (
+                                              <span className="text-xs text-gray-500 mt-0.5">
+                                                {job.title}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ))}
+                                        {jcp.jobs.length > 3 && (
+                                          <span className="text-xs text-gray-500">+{jcp.jobs.length - 3} more</span>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
+                                  {isSelected && (
+                                    <div className="flex items-center space-x-3">
+                                      <div className="flex items-center space-x-1">
+                                        <input
+                                          type="checkbox"
+                                          id={`jcp-view-${jcp.jcpCode}`}
+                                          checked={existingPerm?.view || false}
+                                          onChange={(e) => {
+                                            setAccessForm(prev => ({
+                                              ...prev,
+                                              jcpPermissions: prev.jcpPermissions.map(p => 
+                                                p.jcpCode === jcp.jcpCode ? { ...p, view: e.target.checked } : p
+                                              )
+                                            }));
+                                          }}
+                                          className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                        />
+                                        <Label htmlFor={`jcp-view-${jcp.jcpCode}`} className="text-xs text-gray-700 cursor-pointer">View</Label>
+                                      </div>
+                                      <div className="flex items-center space-x-1">
+                                        <input
+                                          type="checkbox"
+                                          id={`jcp-edit-${jcp.jcpCode}`}
+                                          checked={existingPerm?.edit || false}
+                                          onChange={(e) => {
+                                            setAccessForm(prev => ({
+                                              ...prev,
+                                              jcpPermissions: prev.jcpPermissions.map(p => 
+                                                p.jcpCode === jcp.jcpCode ? { ...p, edit: e.target.checked } : p
+                                              )
+                                            }));
+                                          }}
+                                          className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                        />
+                                        <Label htmlFor={`jcp-edit-${jcp.jcpCode}`} className="text-xs text-gray-700 cursor-pointer">Edit</Label>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                            </div>
+                              </CardHeader>
+                            </Card>
                           );
                         })
-                      );
-                    })()}
+                      )}
                   </div>
                   
                   {selectedJcpCodes.length > 0 && (
@@ -2870,6 +3193,10 @@ const KafuClinic = () => {
                     setEditingAccess(null);
                     setSelectedCompetencyIds([]);
                     setSelectedJcpCodes([]);
+                    setJcpSearchInModal('');
+                    setJcpJobFilterDivision('all');
+                    setJcpJobFilterLocation('all');
+                    setJcpJobFilterUnit('all');
                     toast({
                       title: 'Success',
                       description: editingAccess ? 'Access updated successfully!' : 'Access assigned successfully!',

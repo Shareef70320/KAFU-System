@@ -28,7 +28,8 @@ import {
   Info,
   Stethoscope,
   FileText,
-  Shield
+  Shield,
+  Database
 } from 'lucide-react';
 import { Input } from './ui/input';
 import { useUser } from '../contexts/UserContext';
@@ -123,7 +124,8 @@ const Layout = () => {
       icon: Settings,
       subMenu: [
         { name: 'Competency Levels', href: '/settings/level-terminology', icon: Target },
-        { name: 'Assessment Cycle', href: '/settings/assessment-cycle', icon: Calendar }
+        { name: 'Assessment Cycle', href: '/settings/assessment-cycle', icon: Calendar },
+        { name: 'Export Data', href: '/settings/export-data', icon: Database }
       ]
     },
     {
