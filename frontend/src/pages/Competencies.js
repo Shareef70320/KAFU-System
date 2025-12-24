@@ -2137,22 +2137,26 @@ const getTotalElementsCount = (competency) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-red-600">Competency Framework</h1>
-          <p className="text-gray-600">Manage your organization's competency dictionary and skill development</p>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-red-600 break-words">
+            Competency Framework
+          </h1>
+          <p className="text-gray-600 text-sm md:text-base">
+            Manage your organization's competency dictionary and skill development
+          </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex space-x-3">
+        <div className="flex flex-wrap gap-2 justify-start lg:justify-end">
           <Button
             onClick={() => setShowUploadModal(true)}
-            className="loyverse-button-secondary"
+            className="loyverse-button-secondary whitespace-nowrap text-xs sm:text-sm"
           >
             <Upload className="h-4 w-4 mr-2" />
             Import Dictionary
           </Button>
           <Button
             onClick={() => navigate('/competency-families')}
-            className="loyverse-button-secondary"
+            className="loyverse-button-secondary whitespace-nowrap text-xs sm:text-sm"
           >
             <Building2 className="h-4 w-4 mr-2" />
             Add Family
@@ -2168,7 +2172,7 @@ const getTotalElementsCount = (competency) => {
               setExportFormat('csv');
               setShowExportModal(true);
             }}
-            className="loyverse-button-secondary"
+            className="loyverse-button-secondary whitespace-nowrap text-xs sm:text-sm"
             title="Export competencies"
           >
             <Download className="h-4 w-4 mr-2" />
@@ -2176,7 +2180,7 @@ const getTotalElementsCount = (competency) => {
           </Button>
           <Button
             onClick={() => navigate('/competencies/add')}
-            className="loyverse-button"
+            className="loyverse-button whitespace-nowrap text-xs sm:text-sm"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Competency
@@ -2320,56 +2324,78 @@ const getTotalElementsCount = (competency) => {
         {filteredCompetencies.map((competency) => {
           const totalElements = getTotalElementsCount(competency);
           return (
-            <Card key={competency.id} className="hover:shadow-lg transition-shadow duration-200">
+            <Card
+              key={competency.id}
+              className="hover:shadow-lg transition-shadow duration-200 overflow-hidden"
+            >
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="p-3 bg-green-100 rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="flex items-start space-x-3 sm:space-x-4 min-w-0">
+                  <div className="p-3 bg-green-100 rounded-lg flex-shrink-0">
                     <BookOpen className="h-6 w-6 text-green-600" />
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{competency.name}</h3>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeColor(competency.type)}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 break-words">
+                        {competency.name}
+                      </h3>
+                      <span
+                        className={`inline-flex px-2 py-1 text-[10px] sm:text-xs font-semibold rounded-full ${getTypeColor(
+                          competency.type
+                        )}`}
+                      >
                         {competency.type.replace('_', ' ')}
                       </span>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getFamilyColor(competency.family)}`}>
+                      <span
+                        className={`inline-flex px-2 py-1 text-[10px] sm:text-xs font-semibold rounded-full ${getFamilyColor(
+                          competency.family
+                        )}`}
+                      >
                         {competency.family}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">{competency.definition}</p>
+                    <p className="text-sm text-gray-600 mb-2 break-words">
+                      {competency.definition}
+                    </p>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       {competency.relatedDivision && (
                         <span className="inline-flex px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-700">
                           Division: {competency.relatedDivision}
                         </span>
                       )}
-                      {Array.isArray(competency.relatedDocuments) && competency.relatedDocuments.length > 0 && (
-                        <span className="inline-flex px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-700">
-                          Related Docs: {competency.relatedDocuments.length}
-                        </span>
-                      )}
+                      {Array.isArray(competency.relatedDocuments) &&
+                        competency.relatedDocuments.length > 0 && (
+                          <span className="inline-flex px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-700">
+                            Related Docs: {competency.relatedDocuments.length}
+                          </span>
+                        )}
                     </div>
-                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span 
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                      <button
+                        type="button"
                         className="flex items-center cursor-pointer hover:text-blue-600"
-                        onClick={() => setExpandedCompetency(expandedCompetency === competency.id ? null : competency.id)}
+                        onClick={() =>
+                          setExpandedCompetency(
+                            expandedCompetency === competency.id ? null : competency.id
+                          )
+                        }
                       >
                         <Target className="h-3 w-3 mr-1" />
                         {competency.levels.length} Levels
-                      </span>
+                      </button>
                       <span className="flex items-center">
                         <Document className="h-3 w-3 mr-1" />
                         {competency.documents.length} Documents
                       </span>
-                      <span 
+                      <button
+                        type="button"
                         className="flex items-center cursor-pointer hover:text-orange-600"
                         onClick={() => openElementsModal(competency)}
                         title="View Elements"
                       >
                         <List className="h-3 w-3 mr-1" />
                         {totalElements} Elements
-                      </span>
+                      </button>
                       <span className="flex items-center">
                         <Users className="h-3 w-3 mr-1" />
                         {competency.assessmentCount} Assessments
@@ -2377,7 +2403,7 @@ const getTotalElementsCount = (competency) => {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center justify-end gap-2 flex-shrink-0">
                   <button 
                     onClick={() => openAssessorModal(competency)}
                     className={`${hasAssessors(competency.id) ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-green-600'}`}

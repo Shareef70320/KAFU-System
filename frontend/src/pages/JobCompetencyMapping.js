@@ -676,37 +676,39 @@ const JobCompetencyMapping = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate('/')}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 self-start sm:self-auto"
               >
                 <ArrowLeft className="h-4 w-4" />
-                <span>Back</span>
+                <span className="whitespace-nowrap">Back</span>
               </Button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Job Competency Profiles</h1>
-                <p className="text-gray-600 mt-1">Manage job profiles with their required competencies and levels</p>
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">Job Competency Profiles</h1>
+                <p className="text-sm sm:text-base text-gray-600 mt-1 break-words">Manage job profiles with their required competencies and levels</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 onClick={() => setShowGroupApplyModal(true)}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 text-xs sm:text-sm whitespace-nowrap"
               >
                 <Users className="h-4 w-4" />
-                <span>Group Apply JCP</span>
+                <span className="hidden sm:inline">Group Apply JCP</span>
+                <span className="sm:hidden">Group Apply</span>
               </Button>
               <Button
                 onClick={() => navigate('/add-mapping')}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 text-xs sm:text-sm whitespace-nowrap"
               >
                 <Plus className="h-4 w-4" />
-                <span>Add Job Profile</span>
+                <span className="hidden sm:inline">Add Job Profile</span>
+                <span className="sm:hidden">Add Profile</span>
               </Button>
             </div>
           </div>
@@ -895,34 +897,43 @@ const JobCompetencyMapping = () => {
                     className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
                   >
                     {/* Job Header */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <Building2 className="h-6 w-6 text-blue-600" />
-                          <h3 className="text-xl font-semibold text-gray-900">{profile.job.title}</h3>
-                          <Badge variant="outline" className="text-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 flex-shrink-0" />
+                          <h3 className="text-lg sm:text-xl font-semibold text-gray-900 break-words">{profile.job.title}</h3>
+                          <Badge variant="outline" className="text-xs flex-shrink-0">
                             {profile.job.code}
                           </Badge>
                         </div>
-                        <p className="text-gray-600 mb-2">{profile.job.description}</p>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
-                          <span className="flex items-center">
-                            <Building2 className="h-4 w-4 mr-1" />
-                            {profile.job.unit}
-                          </span>
-                          <span>{profile.job.division}</span>
-                          <span>{profile.job.department}</span>
+                        {profile.job.description && (
+                          <p className="text-sm sm:text-base text-gray-600 mb-2 break-words">{profile.job.description}</p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
+                          {profile.job.unit && (
+                            <span className="flex items-center">
+                              <Building2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex-shrink-0" />
+                              <span className="break-words">{profile.job.unit}</span>
+                            </span>
+                          )}
+                          {profile.job.division && (
+                            <span className="break-words">{profile.job.division}</span>
+                          )}
+                          {profile.job.department && (
+                            <span className="break-words">{profile.job.department}</span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEditJobProfile(profile)}
-                          className="flex items-center space-x-1"
+                          className="flex items-center space-x-1 text-xs sm:text-sm whitespace-nowrap"
                         >
                           <Edit className="h-4 w-4" />
-                          <span>Edit Profile</span>
+                          <span className="hidden sm:inline">Edit Profile</span>
+                          <span className="sm:hidden">Edit</span>
                         </Button>
                       </div>
                     </div>
@@ -938,28 +949,30 @@ const JobCompetencyMapping = () => {
                       {profile.competencies.length === 0 ? (
                         <p className="text-gray-500 text-sm italic">No competencies assigned to this job</p>
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {profile.competencies.map((comp) => (
                             <div
                               key={comp.id}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border hover:bg-gray-100 hover:border-gray-300 transition-all duration-200 group"
+                              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-gray-50 rounded-lg border hover:bg-gray-100 hover:border-gray-300 transition-all duration-200 group overflow-hidden"
                             >
                               <div 
-                                className="flex-1 cursor-pointer"
+                                className="flex-1 min-w-0 cursor-pointer"
                                 onClick={() => handleCompetencyClick(comp.competency, comp.requiredLevel)}
                               >
-                                <div className="flex items-center space-x-2 mb-1">
-                                  <BookOpen className="h-4 w-4 text-green-600" />
-                                  <span className="font-medium text-sm text-gray-900 group-hover:text-blue-600">
-                                    {comp.competency.name}
-                                  </span>
-                                  <Info className="h-3 w-3 text-gray-400 group-hover:text-blue-500" />
+                                <div className="flex items-start gap-2 mb-1">
+                                  <BookOpen className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="font-medium text-sm text-gray-900 group-hover:text-blue-600 break-words block">
+                                      {comp.competency.name}
+                                    </span>
+                                    <Badge className={`text-xs mt-1 inline-block ${getLevelColor(comp.requiredLevel)}`}>
+                                      {getLevelDisplayName(comp.requiredLevel)}
+                                    </Badge>
+                                  </div>
+                                  <Info className="h-3 w-3 text-gray-400 group-hover:text-blue-500 flex-shrink-0 mt-0.5" />
                                 </div>
-                                <Badge className={`text-xs ${getLevelColor(comp.requiredLevel)}`}>
-                                  {getLevelDisplayName(comp.requiredLevel)}
-                                </Badge>
                               </div>
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center gap-2 flex-shrink-0 self-start sm:self-auto">
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -968,15 +981,18 @@ const JobCompetencyMapping = () => {
                                     handleEditMapping(comp);
                                   }}
                                   className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600"
+                                  title="Edit"
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <div 
-                                  className="text-gray-400 group-hover:text-blue-500 cursor-pointer"
+                                <button
+                                  type="button"
+                                  className="text-gray-400 group-hover:text-blue-500 cursor-pointer h-8 w-8 flex items-center justify-center"
                                   onClick={() => handleCompetencyClick(comp.competency, comp.requiredLevel)}
+                                  title="View Details"
                                 >
                                   <Eye className="h-4 w-4" />
-                                </div>
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -994,25 +1010,25 @@ const JobCompetencyMapping = () => {
         {showCompetencyModal && selectedCompetency && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 {/* Modal Header */}
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <BookOpen className="h-6 w-6 text-green-600" />
+                <div className="flex items-start sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+                  <div className="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                    <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
+                      <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
                     </div>
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg sm:text-xl font-semibold text-gray-900 break-words">
                         {selectedCompetency.name}
                       </h3>
-                      <p className="text-sm text-gray-600">{selectedCompetency.family}</p>
+                      <p className="text-xs sm:text-sm text-gray-600 break-words">{selectedCompetency.family}</p>
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowCompetencyModal(false)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                   >
                     <X className="h-5 w-5" />
                   </Button>
@@ -1153,10 +1169,10 @@ const JobCompetencyMapping = () => {
         {showGroupApplyModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-semibold">Group Apply JCP</h3>
-                  <Button variant="ghost" size="sm" onClick={() => setShowGroupApplyModal(false)}>
+              <div className="p-4 sm:p-6">
+                <div className="flex items-start sm:items-center justify-between gap-3 mb-4">
+                  <h3 className="text-lg sm:text-xl font-semibold break-words">Group Apply JCP</h3>
+                  <Button variant="ghost" size="sm" onClick={() => setShowGroupApplyModal(false)} className="flex-shrink-0">
                     <X className="h-5 w-5" />
                   </Button>
                 </div>
@@ -1179,14 +1195,14 @@ const JobCompetencyMapping = () => {
                       {filteredJobsBySearch(jobSearchSource).map(job => (
                         <div
                           key={job.id}
-                          className={`px-3 py-2 cursor-pointer flex items-center justify-between ${sourceJobId === job.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                          className={`px-2 sm:px-3 py-2 cursor-pointer flex items-center justify-between gap-2 ${sourceJobId === job.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                           onClick={() => setSourceJobId(job.id)}
                         >
-                          <div className="flex items-center space-x-2">
-                            <Briefcase className="h-4 w-4 text-blue-600" />
-                            <span className="text-sm">{job.title}</span>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Briefcase className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                            <span className="text-xs sm:text-sm break-words truncate">{job.title}</span>
                           </div>
-                          <Badge variant="outline" className="text-xs">{job.code}</Badge>
+                          <Badge variant="outline" className="text-xs flex-shrink-0">{job.code}</Badge>
                         </div>
                       ))}
                     </div>
@@ -1216,14 +1232,14 @@ const JobCompetencyMapping = () => {
                           return (
                             <div
                               key={job.id}
-                              className={`px-3 py-2 cursor-pointer flex items-center justify-between ${selected ? 'bg-green-50' : 'hover:bg-gray-50'}`}
+                              className={`px-2 sm:px-3 py-2 cursor-pointer flex items-center justify-between gap-2 ${selected ? 'bg-green-50' : 'hover:bg-gray-50'}`}
                               onClick={() => toggleTargetJob(job.id)}
                             >
-                              <div className="flex items-center space-x-2">
-                                <input type="checkbox" readOnly checked={selected} className="rounded border-gray-300" />
-                                <span className="text-sm">{job.title}</span>
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <input type="checkbox" readOnly checked={selected} className="rounded border-gray-300 flex-shrink-0" />
+                                <span className="text-xs sm:text-sm break-words truncate">{job.title}</span>
                               </div>
-                              <Badge variant="outline" className="text-xs">{job.code}</Badge>
+                              <Badge variant="outline" className="text-xs flex-shrink-0">{job.code}</Badge>
                             </div>
                           );
                         })}
@@ -1247,8 +1263,8 @@ const JobCompetencyMapping = () => {
                     </label>
                   </div>
 
-                  <div className="flex justify-end space-x-3">
-                    <Button variant="outline" onClick={() => setShowGroupApplyModal(false)}>Cancel</Button>
+                  <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+                    <Button variant="outline" onClick={() => setShowGroupApplyModal(false)} className="w-full sm:w-auto text-xs sm:text-sm">Cancel</Button>
                     <Button
                       onClick={() => {
                         if (!sourceJobId) {
@@ -1264,6 +1280,7 @@ const JobCompetencyMapping = () => {
                         groupApplyMutation.mutate({ sourceJobId, targetJobIds, replace: replaceTargets });
                       }}
                       disabled={groupApplyMutation.isPending}
+                      className="w-full sm:w-auto text-xs sm:text-sm whitespace-normal sm:whitespace-nowrap"
                     >
                       {groupApplyMutation.isPending ? 'Applying...' : 'Apply JCP to Selected Jobs'}
                     </Button>
@@ -1375,12 +1392,12 @@ const JobCompetencyMapping = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
               {/* Header */}
-              <div className="flex items-center justify-between p-6 border-b">
-                <div className="flex items-center space-x-3">
-                  <Building2 className="h-6 w-6 text-blue-600" />
-                  <div>
-                    <h2 className="text-xl font-semibold">Edit Job Competency Profile</h2>
-                    <p className="text-sm text-gray-600">Update job profile with competencies and levels</p>
+              <div className="flex items-start sm:items-center justify-between gap-3 p-4 sm:p-6 border-b">
+                <div className="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 flex-shrink-0 mt-1 sm:mt-0" />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-lg sm:text-xl font-semibold break-words">Edit Job Competency Profile</h2>
+                    <p className="text-xs sm:text-sm text-gray-600 break-words">Update job profile with competencies and levels</p>
                   </div>
                 </div>
                 <Button
@@ -1398,14 +1415,15 @@ const JobCompetencyMapping = () => {
                     setEditSelectedCompetencyType('');
                     setEditSelectedCompetencyFamily('');
                   }}
+                  className="flex-shrink-0"
                 >
-                  <X className="h-6 w-6" />
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
                 </Button>
               </div>
               
               {/* Content - Three Column Layout */}
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                   {/* Left Column - Job Selection */}
                   <div>
                     <Card className="loyverse-card">
@@ -1472,34 +1490,42 @@ const JobCompetencyMapping = () => {
                             <div
                               key={job.id}
                               onClick={() => handleEditJobSelection(job)}
-                              className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                              className={`p-3 sm:p-4 border rounded-lg cursor-pointer transition-all overflow-hidden ${
                                 editSelectedJobs.some(j => j.id === job.id)
                                   ? 'border-blue-500 bg-blue-50'
                                   : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                               }`}
                             >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center space-x-2">
-                                    <h3 className="font-semibold text-gray-900">{job.title}</h3>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="font-semibold text-sm sm:text-base text-gray-900 break-words">{job.title}</h3>
                                     {job.code && (
-                                      <Badge variant="outline" className="text-xs">{job.code}</Badge>
+                                      <Badge variant="outline" className="text-xs flex-shrink-0">{job.code}</Badge>
                                     )}
                                   </div>
-                                  <p className="text-sm text-gray-600 mt-1">{job.description}</p>
-                                  <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                                    <span className="flex items-center">
-                                      <Building2 className="h-3 w-3 mr-1" />
-                                      {job.unit}
-                                    </span>
-                                    <span>{job.division}</span>
-                                    <span>{job.department}</span>
+                                  {job.description && (
+                                    <p className="text-xs sm:text-sm text-gray-600 mt-1 break-words">{job.description}</p>
+                                  )}
+                                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs text-gray-500">
+                                    {job.unit && (
+                                      <span className="flex items-center">
+                                        <Building2 className="h-3 w-3 mr-1 flex-shrink-0" />
+                                        <span className="break-words">{job.unit}</span>
+                                      </span>
+                                    )}
+                                    {job.division && (
+                                      <span className="break-words">{job.division}</span>
+                                    )}
+                                    {job.department && (
+                                      <span className="break-words">{job.department}</span>
+                                    )}
                                   </div>
                                 </div>
                                 {editSelectedJobs.some(j => j.id === job.id) && (
-                                  <div className="ml-2">
-                                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                                      <Check className="h-4 w-4 text-white" />
+                                  <div className="flex-shrink-0">
+                                    <div className="w-5 h-5 sm:w-6 sm:h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                      <Check className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                                     </div>
                                   </div>
                                 )}
@@ -1589,23 +1615,25 @@ const JobCompetencyMapping = () => {
                             return (
                               <div
                                 key={competency.id}
-                                className={`p-4 border rounded-lg ${
+                                className={`p-3 sm:p-4 border rounded-lg overflow-hidden ${
                                   isLinked 
                                     ? 'border-gray-300 bg-gray-100 opacity-75' 
                                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                                 }`}
                               >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center space-x-2 mb-2">
-                                      <h3 className="font-semibold text-gray-900">{competency.name}</h3>
-                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getFamilyColor(competency.family)}`}>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                      <h3 className="font-semibold text-sm sm:text-base text-gray-900 break-words">{competency.name}</h3>
+                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0 ${getFamilyColor(competency.family)}`}>
                                         {competency.family}
                                       </span>
                                     </div>
-                                    <p className="text-sm text-gray-600 mb-2">{competency.definition}</p>
-                                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                    {competency.definition && (
+                                      <p className="text-xs sm:text-sm text-gray-600 mb-2 break-words">{competency.definition}</p>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500">
+                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full flex-shrink-0 ${
                                         competency.type === 'TECHNICAL' 
                                           ? 'bg-blue-100 text-blue-800' 
                                           : 'bg-purple-100 text-purple-800'
@@ -1613,7 +1641,7 @@ const JobCompetencyMapping = () => {
                                         {competency.type === 'TECHNICAL' ? 'Technical' : 'Non-Technical'}
                                       </span>
                                       <span className="flex items-center">
-                                        <Target className="h-3 w-3 mr-1" />
+                                        <Target className="h-3 w-3 mr-1 flex-shrink-0" />
                                         {competency.levels?.length || 0} Levels
                                       </span>
                                     </div>
@@ -1623,17 +1651,17 @@ const JobCompetencyMapping = () => {
                                 {/* Level Selection and Add Button */}
                                 <div className="mt-3 pt-3 border-t border-gray-200">
                                   {isLinked ? (
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center space-x-2">
-                                        <Check className="h-4 w-4 text-green-600" />
-                                        <span className="text-sm text-gray-600">Already linked to this job</span>
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
+                                        <span className="text-xs sm:text-sm text-gray-600 break-words">Already linked to this job</span>
                                       </div>
-                                      <Badge className="bg-green-100 text-green-800 text-xs">
+                                      <Badge className="bg-green-100 text-green-800 text-xs flex-shrink-0 self-start sm:self-auto">
                                         Linked
                                       </Badge>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center space-x-2">
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                       <select
                                         onChange={(e) => {
                                           if (e.target.value) {
@@ -1641,7 +1669,7 @@ const JobCompetencyMapping = () => {
                                             e.target.value = ''; // Reset selection
                                           }
                                         }}
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="flex-1 px-2 sm:px-3 py-2 border border-gray-300 rounded-md text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0"
                                       >
                                         <option value="">Select Level</option>
                                         <option value="BASIC">{getLevelDisplayName('BASIC')}</option>
@@ -1658,6 +1686,7 @@ const JobCompetencyMapping = () => {
                                             handleAddCompetencyToEditProfile(competency, level.toUpperCase());
                                           }
                                         }}
+                                        className="flex-shrink-0"
                                       >
                                         <Plus className="h-4 w-4" />
                                       </Button>
@@ -1822,7 +1851,7 @@ const JobCompetencyMapping = () => {
                             <Button
                               onClick={handleSaveEditProfile}
                               disabled={editSelectedJobs.length === 0}
-                              className="w-full bg-blue-600 hover:bg-blue-700"
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm whitespace-normal sm:whitespace-nowrap"
                             >
                               {editJobCompetencies.length > 0
                                 ? `Save ${editJobCompetencies.length} New Competencies to ${editSelectedJobs.length} Job(s)`

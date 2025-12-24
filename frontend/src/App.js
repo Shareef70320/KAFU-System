@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from './components/ui/toaster';
 import { UserProvider } from './contexts/UserContext';
 import Layout from './components/Layout';
+import OfflineIndicator from './components/OfflineIndicator';
 import RoleBasedRedirect from './components/RoleBasedRedirect';
 import AdminRoute from './components/AdminRoute';
 import UserRoute from './components/UserRoute';
@@ -66,8 +67,15 @@ import ExportData from './pages/ExportData';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: (failureCount, error) => {
+        // Don't retry if offline
+        if (!navigator.onLine) return false;
+        // Retry up to 2 times if online
+        return failureCount < 2;
+      },
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 min
+      cacheTime: 30 * 60 * 1000, // 30 minutes - keep in cache for 30 min
     },
   },
 });
@@ -78,6 +86,7 @@ function App() {
       <UserProvider>
         <Router>
           <div className="min-h-screen bg-gray-50">
+            <OfflineIndicator />
             <Routes>
               <Route
                 path="/"

@@ -36,6 +36,7 @@ import { Input } from './ui/input';
 import { useUser } from '../contexts/UserContext';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
+import MobileBottomNav from './MobileBottomNav';
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -555,10 +556,13 @@ const Layout = () => {
 
       {/* Main content area */}
       <div className="lg:pl-64">
-        <div className="min-h-screen px-4 py-8">
+        <div className="min-h-screen px-4 py-8 pb-20 lg:pb-8">
           <Outlet />
         </div>
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav />
     </div>
   );
 };

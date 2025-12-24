@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/api';
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { useToast } from '../components/ui/use-toast';
 import { getLevelDisplayName } from '../utils/competencyLevels';
+import { useUser } from '../contexts/UserContext';
 import {
   ArrowLeft,
   BookOpen,
@@ -25,14 +26,46 @@ import {
   Info,
   Download,
   File,
+  Edit,
 } from 'lucide-react';
 
 const ViewCompetency = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { currentRole, currentSid } = useUser();
   const [expandedElements, setExpandedElements] = useState({});
   const [expandedLevelElements, setExpandedLevelElements] = useState({});
+
+  // Check if user has clinic access and edit permissions for this competency
+  const hasEditAccess = useMemo(() => {
+    if (currentRole === 'ADMIN') {
+      return true; // Admins always have edit access
+    }
+    
+    if (currentRole === 'USER' && currentSid) {
+      try {
+        const saved = localStorage.getItem('kafuClinicAccessList');
+        const accessList = saved ? JSON.parse(saved) : [];
+        const userAccess = accessList.find(access => access.userId === currentSid);
+        
+        if (!userAccess) return false;
+        
+        // Check if user has edit permission for this specific competency
+        if (userAccess.competencyPermissions) {
+          const perm = userAccess.competencyPermissions.find(p => p.competencyId === id);
+          return perm?.edit || false;
+        }
+        
+        return false;
+      } catch (error) {
+        console.error('Error checking edit access:', error);
+        return false;
+      }
+    }
+    
+    return false;
+  }, [currentRole, currentSid, id]);
 
   const {
     data: competency,
@@ -190,12 +223,32 @@ const ViewCompetency = () => {
                 <div className="p-3 bg-blue-100 rounded-lg">
                   <BookOpen className="h-8 w-8 text-blue-600" />
                 </div>
-                <div>
-                  <h1 className="text-4xl font-bold text-gray-900 mb-2">
-                    {competency.name}
-                  </h1>
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-4xl font-bold text-gray-900">
+                      {competency.name}
+                    </h1>
+                    {hasEditAccess && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (currentRole === 'ADMIN') {
+                            navigate(`/competencies/edit/${id}`);
+                          } else {
+                            navigate(`/kafu-clinic/edit-competency/${id}`);
+                          }
+                        }}
+                        className="flex items-center gap-2"
+                        title="Edit Competency"
+                      >
+                        <Edit className="h-4 w-4" />
+                        Edit
+                      </Button>
+                    )}
+                  </div>
                   {competency.code && (
-                    <p className="text-sm text-gray-500 font-mono">
+                    <p className="text-sm text-gray-500 font-mono mt-2">
                       Code: {competency.code}
                     </p>
                   )}

@@ -1,6 +1,7 @@
 {
   "short_name": "KAFU",
-  "name": "KAFU System",
+  "name": "KAFU System - Knowledge, Assessment, Framework & Understanding",
+  "description": "Comprehensive competency management platform for Oman Airports",
   "icons": [
     {
       "src": "favicon.ico",
@@ -10,18 +11,39 @@
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "theme_color": "#10b981",
   "background_color": "#ffffff",
-  "description": "KAFU System - Competency Framework Management"
+  "categories": ["business", "productivity", "education"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View system dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Competencies",
+      "short_name": "Competencies",
+      "description": "View my competencies",
+      "url": "/user/competencies",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    }
+  ]
 }
 
